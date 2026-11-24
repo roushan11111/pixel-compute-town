@@ -1,0 +1,22 @@
+# Git & VCS
+.git
+.gitignore
+
+# Environment secrets & local state
+.env
+.env.*
+!.env.example
+data/
+*.log
+
+# Node & OS artifacts
+node_modules/
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Tests & IDE folders
+tests/
+.vscode/
+.idea/
+coverage/

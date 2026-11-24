@@ -1,13 +1,19 @@
 {
   "name": "pixel-compute-town",
-  "version": "0.1.0",
-  "description": "像素算力鎮 (PixelCompute Town) — 閒置 API 與月/週 AI 額度雙軌協作像素風打工與項目孵化平臺 MVP 原型",
+  "version": "0.2.0",
+  "description": "像素算力鎮 (PixelCompute Town) — 閒置 API 與月/週 AI 額度雙軌協作像素風打工與項目孵化平臺 Public Alpha",
   "type": "module",
+  "bin": {
+    "pixel-worker": "./bin/pixel-worker.mjs"
+  },
   "scripts": {
     "dev": "node server.mjs",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "worker:demo": "node bin/pixel-worker.mjs --demo",
+    "test": "node --test tests/api.test.mjs",
+    "smoke": "node tests/smoke.mjs"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>像素算力鎮 PixelCompute Town — 閒置算力雙軌打工與開源孵化平臺</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-theme="night">
+  <!-- 頂部 HUD 狀態列 -->
+  <header class="hud-bar">
+    <div class="hud-brand">
+      <div class="brand-logo-box" aria-hidden="true">👾</div>
+      <div class="brand-titles">
+        <div class="brand-name">
+          像素算力鎮
+          <span class="alpha-pill">ALPHA v1.0</span>
+        </div>
+        <div class="brand-sub">PixelCompute Town · BYOK + BYOT 雙軌孵化</div>
+      </div>
+    </div>
+
+    <div class="hud-metrics">
+      <div class="hud-pill gold" title="小鎮金幣餘額（可用於商店裝扮與小人咖啡）">
+        <span>🪙</span>
+        <span id="hud-gold">0 G</span>
+      </div>
+      <div class="hud-pill usd" title="累計懸賞實得與項目分紅收益（USD）">
+        <span>💵</span>
+        <span id="hud-usd">$0.00</span>
+      </div>
+      <div class="hud-pill rep" title="驗收信譽分（防刷單 Proof of Accepted Work）">
+        <span>🛡️</span>
+        <span>信譽 <strong id="hud-rep">100</strong></span>
+      </div>
+      <button type="button" class="hud-pill byok-pill" id="btn-byok-pill" title="點擊設定瀏覽器端 BYOK 金鑰（絕不傳給伺服器）">
+        <span class="status-dot" id="hud-byok-dot"></span>
+        <span id="hud-byok-label">BYOK：擬真體驗</span>
+      </button>
+    </div>
+
+    <div class="hud-actions">
+      <div class="user-badge" id="hud-user-badge">
+        <span class="user-avatar-dot" id="hud-user-avatar">🧑‍💻</span>
+        <span id="hud-user-name">創始開發者</span>
+      </div>
+      <a class="btn btn-sm btn-primary" id="btn-github-login" href="/api/auth/github" style="display: none;">GitHub 登入</a>
+      <button type="button" class="btn btn-sm" id="btn-logout" style="display: none;">登出</button>
+      <button type="button" class="btn btn-icon" id="btn-day-night" title="切換賽博暖夜 / 清晨白天模式">🌙</button>
+      <button type="button" class="btn btn-icon" id="btn-sound-toggle" title="切換 8-bit 復古音效">🔇</button>
+      <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" title="預覽並下載像素風算力打工證 PNG">🪪 打工證</button>
+      <button type="button" class="btn btn-sm" id="btn-open-settings" title="BYOK API Key 與本機 CLI 設定">⚙️ 設定</button>
+    </div>
+  </header>
+
+  <!-- 主工作區：左側像素舞台 + 右側五大控制台 -->
+  <main class="workspace">
+    <!-- 左欄：像素小鎮 Canvas + 即時終端日誌 -->
+    <section class="stage-column">
+      <div class="panel-frame">
+        <div class="stage-header">
+          <div class="marquee-box">
+            <span class="marquee-tag">LIVE</span>
+            <span class="marquee-text" id="stage-marquee">像素算力鎮連線中... 歡迎把閒置算力派上場！</span>
+          </div>
+          <div class="sse-badge" title="Server-Sent Events 即時事件通道">
+            <span class="status-dot" id="sse-dot"></span>
+            <span id="sse-label">SSE 連線中</span>
+          </div>
+        </div>
+
+        <div class="quick-nav-bar">
+          <span class="mono" style="font-size: 11px; color: var(--text-muted);">快捷視角：</span>
+          <button type="button" class="quick-chip active" data-building="factory">🏭 自動工坊</button>
+          <button type="button" class="quick-chip" data-building="guild">⚔️ 懸賞工會</button>
+          <button type="button" class="quick-chip" data-building="launchpad">🚀 孵化廣場</button>
+          <button type="button" class="quick-chip" data-building="lounge">☕ 算力宿舍</button>
+        </div>
+
+        <div class="canvas-stage" id="canvas-stage">
+          <canvas id="town-canvas" width="540" height="340"></canvas>
+          <div class="stage-overlay-hint" id="stage-overlay-hint">點擊建築或像素小人可快速切換對應控制台</div>
+        </div>
+
+        <div class="stage-worker-strip" id="stage-worker-strip">
+          <span>正在同步算力小人狀態...</span>
+        </div>
+      </div>
+
+      <!-- 即時小鎮動態日誌 Terminal Feed -->
+      <div class="panel-frame terminal-panel">
+        <div class="terminal-header">
+          <div class="terminal-title">
+            <span>&gt;_</span>
+            <span>小鎮即時動態終端（含 AI 交付與本機 CLI 心跳）</span>
+          </div>
+          <div class="feed-filters">
+            <button type="button" class="feed-filter-btn active" data-feed-filter="all">全部</button>
+            <button type="button" class="feed-filter-btn" data-feed-filter="deliverable">交付</button>
+            <button type="button" class="feed-filter-btn" data-feed-filter="revenue">分紅</button>
+            <button type="button" class="feed-filter-btn" data-feed-filter="cli">CLI</button>
+          </div>
+        </div>
+        <div class="terminal-feed" id="activity-feed">
+          <div class="empty-state">等待小鎮事件寫入...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右欄：5 大核心控制台 -->
+    <section class="panel-frame console-column">
+      <nav class="tab-bar" role="tablist">
+        <button type="button" class="tab-btn active" data-tab="factory" role="tab" aria-selected="true">
+          <span class="tab-icon">🏭</span>
+          <span>自動工坊</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="guild" role="tab" aria-selected="false">
+          <span class="tab-icon">⚔️</span>
+          <span>懸賞工會</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="incubator" role="tab" aria-selected="false">
+          <span class="tab-icon">🚀</span>
+          <span>孵化廣場</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="workers" role="tab" aria-selected="false">
+          <span class="tab-icon">👾</span>
+          <span>小人商店</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="revenue" role="tab" aria-selected="false">
+          <span class="tab-icon">💰</span>
+          <span>創作者收益</span>
+        </button>
+      </nav>
+
+      <!-- Tab 1: 自動工坊 (API 任務) -->
+      <div class="tab-pane active" id="tab-factory" data-pane="factory">
+        <div class="info-banner">
+          <span>⚡ <strong>API 軌道（BYOK 零信任）</strong>：支援瀏覽器直連 Gemini API / OpenAI 相容端點，未填 Key 亦可免門檻擬真體驗！</span>
+          <button type="button" class="btn btn-sm btn-primary" id="btn-factory-byok">🔑 設定 API Key</button>
+        </div>
+
+        <div class="section-toolbar">
+          <div class="toolbar-group">
+            <select class="select select-inline" id="factory-project-filter" aria-label="篩選項目">
+              <option value="all">全部項目</option>
+            </select>
+            <select class="select select-inline" id="factory-status-filter" aria-label="篩選狀態">
+              <option value="all">全部狀態</option>
+              <option value="open">可接單</option>
+              <option value="completed">已驗收</option>
+            </select>
+          </div>
+          <div class="toolbar-group">
+            <select class="select select-inline" id="factory-worker-select" aria-label="選擇 API 小人"></select>
+            <label class="autopilot-toggle" id="autopilot-label" title="每 6 秒自動為閒置 API 小人接單並執行驗收">
+              <input type="checkbox" id="toggle-autopilot" />
+              <span>🤖 自動掛機</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card-list" id="factory-task-list">
+          <div class="empty-state">載入工坊任務中...</div>
+        </div>
+      </div>
+
+      <!-- Tab 2: 懸賞工會 (月/週額度 BYOT) -->
+      <div class="tab-pane" id="tab-guild" data-pane="guild">
+        <div class="info-banner amber">
+          <span>⚔️ <strong>月／週訂閱額度軌道（BYOT 合規）</strong>：接單後複製標準化 Context Pack 給本機 Gemini CLI / Claude Code / Codex，或跑 <code class="mono">pixel-worker</code> 即時直播小人幹活！</span>
+        </div>
+
+        <div class="section-toolbar">
+          <div class="toolbar-group">
+            <select class="select select-inline" id="guild-project-filter" aria-label="篩選工會項目">
+              <option value="all">全部項目</option>
+            </select>
+          </div>
+          <div class="toolbar-group">
+            <span class="mono" style="font-size: 11px; color: var(--text-muted);">派駐工會小人：</span>
+            <select class="select select-inline" id="guild-worker-select" aria-label="選擇工會小人"></select>
+          </div>
+        </div>
+
+        <div class="card-list" id="guild-task-list">
+          <div class="empty-state">載入工會懸賞中...</div>
+        </div>
+      </div>
+
+      <!-- Tab 3: 孵化廣場 -->
+      <div class="tab-pane" id="tab-incubator" data-pane="incubator">
+        <div class="section-toolbar">
+          <div class="mono" style="font-size: 12px; color: var(--text-sub);" id="incubator-summary">
+            投票立項 → 雙軌共建 → 上線透明分紅（30% 發起人 / 60% 貢獻者 / 10% 平臺）
+          </div>
+          <button type="button" class="btn btn-pink" id="btn-open-propose">＋ 我要提案新項目</button>
+        </div>
+
+        <div class="card-list" id="project-list">
+          <div class="empty-state">載入孵化項目中...</div>
+        </div>
+      </div>
+
+      <!-- Tab 4: 小人與商店 -->
+      <div class="tab-pane" id="tab-workers" data-pane="workers">
+        <div class="subsection-title">
+          <span>🤖 我的算力小人（管理體力上限與裝扮）</span>
+        </div>
+        <div class="card-list" id="worker-list">
+          <div class="empty-state">載入算力小人中...</div>
+        </div>
+
+        <div class="subsection-title">
+          <span>✨ 招募新算力小人（4 大職業任選）</span>
+        </div>
+        <form class="recruit-box" id="recruit-form">
+          <div class="form-grid">
+            <div class="form-field">
+              <label class="form-label" for="recruit-name">小人代號 / 名稱</label>
+              <input class="input" id="recruit-name" type="text" placeholder="例如：霓虹畫師阿咪" required maxlength="28" />
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="recruit-role">職業與軌道</label>
+              <select class="select" id="recruit-role">
+                <option value="flash_worker">⚡ 閃電工程師（API 軌道）</option>
+                <option value="pixel_artist">🎨 像素美術師（API 軌道）</option>
+                <option value="pro_architect">🧠 首席架構師（月/週額度工會）</option>
+                <option value="guild_artisan">🔨 工會匠人（月/週額度工會）</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="recruit-provider">算力來源標籤</label>
+              <input class="input" id="recruit-provider" type="text" value="Gemini 2.5 Flash" maxlength="40" />
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="recruit-cap">每日體力上限（Token / 次數）</label>
+              <input class="input" id="recruit-cap" type="number" min="10" max="5000000" value="300000" />
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn btn-primary">＋ 招募並進駐小鎮</button>
+          </div>
+        </form>
+
+        <div class="subsection-title">
+          <span>🛍️ 像素外觀、機房裝潢與 Pro 會員商店</span>
+        </div>
+        <div class="two-col-grid" id="shop-list">
+          <div class="empty-state">載入商店品項中...</div>
+        </div>
+
+        <div class="subsection-title">
+          <span>🪪 像素風《算力打工證 PNG》分享卡</span>
+        </div>
+        <div class="pixel-card">
+          <div class="card-subtitle">一鍵生成專屬復古像素證件，展示你的信譽分、完工數與項目持倉分紅，發推炫耀超吸睛！</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-amber" id="btn-workers-preview-cert">👁️ 預覽打工證 PNG</button>
+            <button type="button" class="btn btn-green" id="btn-workers-download-cert">⬇️ 直接下載 PNG</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 5: 創作者收益與排行榜 -->
+      <div class="tab-pane" id="tab-revenue" data-pane="revenue">
+        <div class="revenue-hero">
+          <div>
+            <div style="font-size: 12px; color: var(--text-sub);">創作者平臺累計總變現（USD）</div>
+            <div class="revenue-hero-amount" id="rev-total-usd">$0.00</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+            <span class="badge green">透明帳本即時結算</span>
+            <button type="button" class="btn btn-sm btn-danger" id="btn-reset-world" title="重置測試世界資料">🔄 重置示範世界</button>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">⚔️ 現金懸賞 10% 託管抽成</div>
+            <div class="kpi-value" id="rev-bounty-fees">$0.00</div>
+            <div class="kpi-sub">每筆現金懸賞驗收自動結算</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">🚀 孵化分紅池 10% Carry</div>
+            <div class="kpi-value" id="rev-incubation-carry">$0.00</div>
+            <div class="kpi-sub">項目上線與後續營收自動入帳</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">📺 像素廣場霓虹廣告位</div>
+            <div class="kpi-value" id="rev-billboard-ads">$0.00</div>
+            <div class="kpi-sub">$29/位 · 同步點亮小鎮霓虹招牌</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">✨ 像素皮膚與 Pro 會員</div>
+            <div class="kpi-value" id="rev-pro-skins">$0.00</div>
+            <div class="kpi-sub">純外觀與效率加成，絕不賣戰力</div>
+          </div>
+        </div>
+
+        <div class="subsection-title">
+          <span>📒 平臺營收流水紀錄</span>
+        </div>
+        <div class="ledger-list" id="rev-history-list">
+          <div class="empty-state">尚無營收流水，快去驗收懸賞、租用廣告位或發布項目吧！</div>
+        </div>
+
+        <div class="subsection-title">
+          <span>🏆 全鎮創世貢獻排行榜</span>
+        </div>
+        <div class="ledger-list" id="leaderboard-list">
+          <div class="empty-state">載入排行榜中...</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal 1: BYOK 金鑰與本機 CLI 設定 -->
+  <div class="modal-backdrop" id="modal-settings" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="settings-modal-title">⚙️ BYOK 零信任金鑰與本機 CLI 設定</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-settings">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <div class="zero-trust-callout">
+          🔒 <strong>零信任安全承諾</strong>：你的 API Key <strong>只儲存在你本機瀏覽器的 localStorage</strong>，並由瀏覽器直接呼叫 Gemini / OpenAI 相容端點，<strong>絕不傳送到像素算力鎮伺服器</strong>。未填 Key 時可免門檻使用高品質擬真體驗模式。
+        </div>
+
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label" for="byok-provider">模型介面協議</label>
+            <select class="select" id="byok-provider">
+              <option value="gemini">Google Gemini API（一等公民 · 瀏覽器直連）</option>
+              <option value="openai_compat">OpenAI 相容 Endpoint（OpenRouter / DeepSeek / Ollama）</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="byok-model-presets">快速選擇預設模型</label>
+            <select class="select" id="byok-model-presets"></select>
+          </div>
+          <div class="form-field full">
+            <label class="form-label" for="byok-model">模型名稱（可自訂輸入）</label>
+            <input class="input mono" id="byok-model" type="text" placeholder="gemini-2.5-flash" />
+          </div>
+          <div class="form-field full" id="byok-baseurl-wrap" style="display: none;">
+            <label class="form-label" for="byok-base-url">OpenAI 相容 Base URL</label>
+            <input class="input mono" id="byok-base-url" type="url" placeholder="https://openrouter.ai/api/v1 或 http://localhost:11434/v1" />
+          </div>
+          <div class="form-field full">
+            <label class="form-label" for="byok-api-key">API Key（留空即使用免金鑰擬真體驗模式）</label>
+            <div style="display: flex; gap: 6px;">
+              <input class="input mono" id="byok-api-key" type="password" placeholder="AIzaSy... 或 sk-..." autocomplete="off" />
+              <button type="button" class="btn" id="btn-toggle-key-vis">👁️</button>
+            </div>
+          </div>
+          <div class="form-field full">
+            <label class="form-label" for="byok-max-tokens">單次任務最大輸出 Token 上限（成本保護防爆倉）</label>
+            <input class="input mono" id="byok-max-tokens" type="number" min="256" max="16384" step="256" value="2048" />
+          </div>
+        </div>
+
+        <div id="byok-test-result" class="code-box" style="display: none;"></div>
+
+        <div class="subsection-title">
+          <span>🖥️ 本機月／週額度 CLI 橋接器（BYOT）</span>
+        </div>
+        <div class="card-subtitle">
+          擁有 Gemini CLI / Claude Code / Codex 訂閱？在終端機執行下方指令即可把本機真實幹活進度直播同步到像素小鎮：
+        </div>
+        <div style="display: flex; gap: 6px; align-items: stretch;">
+          <div class="code-box" id="cli-quick-cmd" style="flex: 1; padding: 8px;">node bin/pixel-worker.mjs --demo</div>
+          <button type="button" class="btn btn-sm" id="btn-copy-quick-cli">📋 複製</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-danger" id="btn-clear-byok">🗑️ 清除金鑰</button>
+        <button type="button" class="btn" id="btn-test-byok">🔌 測試連線</button>
+        <button type="button" class="btn btn-green" id="btn-save-byok">💾 儲存於瀏覽器</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: 懸賞工會接單工作台 -->
+  <div class="modal-backdrop" id="modal-guild" role="dialog" aria-modal="true" aria-labelledby="guild-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="guild-modal-title">⚔️ 工會懸賞接單工作台（BYOT）</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-guild">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <div class="badge-row" id="guild-modal-meta"></div>
+        <div class="info-banner amber" id="guild-modal-criteria"></div>
+
+        <div class="form-field">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label class="form-label" for="guild-context-pack">步驟 1：複製標準化 CLI / Prompt Context Pack</label>
+            <button type="button" class="btn btn-sm btn-primary" id="btn-copy-context-pack">📋 一鍵複製 Context Pack</button>
+          </div>
+          <textarea class="textarea" id="guild-context-pack" readonly rows="5"></textarea>
+        </div>
+
+        <div class="form-field">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label class="form-label">步驟 2（可選）：在本機執行 pixel-worker 即時同步動畫</label>
+            <button type="button" class="btn btn-sm" id="btn-copy-cli-cmd">📋 複製指令</button>
+          </div>
+          <div class="code-box" id="guild-cli-cmd" style="padding: 8px;"></div>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label" for="guild-submit-pr-url">步驟 3（可選）：貼上 GitHub PR 連結並驗證</label>
+          <div style="display: flex; gap: 6px;">
+            <input class="input mono" id="guild-submit-pr-url" type="url" placeholder="https://github.com/owner/repo/pull/123" />
+            <button type="button" class="btn btn-sm" id="btn-verify-pr">🔍 驗證 PR</button>
+          </div>
+          <div id="guild-pr-verify-result" class="mono" style="font-size: 11px; color: var(--accent-cyan);"></div>
+        </div>
+
+        <div class="form-field">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <label class="form-label" for="guild-submit-content">步驟 4：貼上本機 AI 產出成果送交 Proof of Accepted Work 驗收</label>
+            <button type="button" class="btn btn-sm btn-amber" id="btn-guild-sim-cli">⚡ 模擬本機 CLI 交付（一鍵體驗）</button>
+          </div>
+          <textarea class="textarea" id="guild-submit-content" rows="6" placeholder="貼上程式碼、Diff 說明、測試輸出或結構化交付報告（空白或灌水將被防作弊系統攔截並扣信譽分）..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-close-modal="modal-guild">稍後提交</button>
+        <button type="button" class="btn btn-green" id="btn-guild-submit">📤 提交成果並驗收結算</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: 提案新項目 -->
+  <div class="modal-backdrop" id="modal-propose" role="dialog" aria-modal="true" aria-labelledby="propose-modal-title">
+    <div class="modal-dialog" style="max-width: 540px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="propose-modal-title">🚀 提案新孵化項目</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-propose">✕ 關閉</button>
+      </div>
+      <form id="propose-form">
+        <div class="modal-body">
+          <div class="info-banner pink">
+            <span>提案上牆後由社群投票，達標後將<strong>自動破土動工並生成雙軌任務</strong>！上線後收益按 30% 發起人 / 60% 貢獻者 / 10% 平臺透明分紅。</span>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="propose-name">項目名稱 *</label>
+            <input class="input" id="propose-name" type="text" required maxlength="48" placeholder="例如：PixelMetrics（開源輕量統計看板）" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="propose-desc">項目簡介與願景 *</label>
+            <textarea class="textarea" id="propose-desc" required rows="3" placeholder="用 1-2 句話說明這套產品要解決什麼痛點、目標用戶是誰..."></textarea>
+          </div>
+          <div class="form-grid">
+            <div class="form-field">
+              <label class="form-label" for="propose-category">產品類型</label>
+              <select class="select" id="propose-category">
+                <option value="devtools">開發者工具</option>
+                <option value="indie_saas">獨立 SaaS</option>
+                <option value="oss_plugin">開源插件</option>
+                <option value="pixel_game">像素互動工具</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="propose-bounty">初期現金懸賞預算（USD，可填 0）</label>
+              <input class="input mono" id="propose-bounty" type="number" min="0" max="10000" value="50" />
+            </div>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="propose-repo">GitHub 倉庫連結（選填）</label>
+            <input class="input mono" id="propose-repo" type="url" placeholder="https://github.com/your-org/your-repo" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" data-close-modal="modal-propose">取消</button>
+          <button type="submit" class="btn btn-pink">🚀 送出提案上牆投票</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 4: AI 交付物與驗收報告檢視 -->
+  <div class="modal-backdrop" id="modal-report" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="report-modal-title">📋 AI 交付物與 Proof of Accepted Work 驗收報告</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-report">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <div class="badge-row" id="report-summary-bar"></div>
+        <div class="subsection-title"><span>🔍 三層自動化防作弊驗收結果</span></div>
+        <div class="verifier-check-list" id="report-checks-list"></div>
+        <div class="subsection-title">
+          <span>📦 交付成果原文</span>
+          <button type="button" class="btn btn-sm" id="btn-copy-report">📋 複製成果</button>
+        </div>
+        <pre class="code-box" id="report-deliverable-code"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-close-modal="modal-report">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: 像素算力打工證 PNG 預覽 -->
+  <div class="modal-backdrop" id="modal-cert" role="dialog" aria-modal="true" aria-labelledby="cert-modal-title">
+    <div class="modal-dialog" style="max-width: 640px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="cert-modal-title">🪪 像素算力鎮 · 算力打工證與分紅結算單</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-cert">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <div class="cert-preview-wrap">
+          <img id="cert-preview-img" alt="算力打工證 PNG 預覽" />
+        </div>
+        <div class="card-subtitle" id="cert-preview-caption">點擊下方按鈕下載高清復古像素 PNG，附帶社群貼文文案直接發推炫耀！</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="btn-copy-share-text">📋 複製發推炫耀文案</button>
+        <button type="button" class="btn btn-green" id="btn-modal-download-cert">⬇️ 下載打工證 PNG</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 通知容器 -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
