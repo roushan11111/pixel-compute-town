@@ -11,6 +11,7 @@ import {
   REVENUE_SPLIT,
   SHOP_ITEMS,
   WORKER_TEMPLATES,
+  createInitialAchievements,
   generateTasksForProject,
   round2,
 } from './src/server/seed.mjs';
@@ -49,6 +50,174 @@ const MIME_TYPES = {
 
 function uid(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function sanitizeText(value, maxLen = 120, { multiline = false } = {}) {
+  if (typeof value !== 'string') return '';
+  // Strip C0/C1 control characters; collapse newlines/tabs to single spaces for single-line fields
+  let cleaned = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+  if (!multiline) {
+    cleaned = cleaned.replace(/[\r\n\t]+/g, ' ');
+  }
+  return cleaned.trim().slice(0, maxLen);
+}
+
+const GITHUB_REPO_REGEX = /^(?:https?:\/\/github\.com\/)?([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git|\/issues(?:\/.*)?|\/)?$/i;
+
+function parseGitHubRepoUrl(raw) {
+  const cleaned = sanitizeText(raw, 200);
+  const match = cleaned.match(GITHUB_REPO_REGEX);
+  if (!match) {
+    return {
+      valid: false,
+      error: '無效的 GitHub 倉庫格式，請輸入 owner/repo 或 https://github.com/owner/repo',
+    };
+  }
+  const owner = match[1];
+  const repo = match[2].replace(/\.git$/i, '');
+  return {
+    valid: true,
+    owner,
+    repo,
+    fullName: `${owner}/${repo}`,
+    url: `https://github.com/${owner}/${repo}`,
+  };
+}
+
+function inferIssueCategoryAndTrack(title = '', labels = [], requestedTrack = 'auto') {
+  const lower = `${title} ${labels.join(' ')}`.toLowerCase();
+  let category = 'feature_pr';
+  if (/i18n|l10n|translat|locale|多語|翻譯/.test(lower)) {
+    category = 'i18n';
+  } else if (/test|coverage|unit|spec|測試/.test(lower)) {
+    category = 'unit_test';
+  } else if (/doc|readme|guide|typo|文件/.test(lower)) {
+    category = 'docs';
+  } else if (/pixel|sprite|theme|palette|ui|css|design|視覺/.test(lower)) {
+    category = 'pixel_spec';
+  } else if (/bug|fix|error|crash|race|修復|異常/.test(lower)) {
+    category = 'bugfix';
+  }
+
+  let track = requestedTrack;
+  if (track !== 'api_auto' && track !== 'guild_bounty') {
+    track = (category === 'i18n' || category === 'unit_test' || category === 'docs' || category === 'pixel_spec')
+      ? 'api_auto'
+      : 'guild_bounty';
+  }
+  return { category, track };
+}
+
+function buildTaskFromGitHubIssue(issue, project, repoInfo, requestedTrack, { isFallback = false } = {}) {
+  const labels = Array.isArray(issue.labels)
+    ? issue.labels.map((l) => (typeof l === 'string' ? l : l?.name || '')).filter(Boolean)
+    : [];
+  const rawTitle = sanitizeText(issue.title || `Issue #${issue.number}`, 100);
+  const { category, track } = inferIssueCategoryAndTrack(rawTitle, labels, requestedTrack);
+  const isApi = track === 'api_auto';
+  const issueNum = Number(issue.number) || Math.floor(10 + Math.random() * 90);
+  const issueUrl = sanitizeText(issue.html_url || `${repoInfo.url}/issues/${issueNum}`, 220);
+  const bodySnippet = sanitizeText(issue.body || '', 600, { multiline: true });
+  const prefix = isFallback ? '[離線預覽] ' : `[GH #${issueNum}] `;
+
+  return {
+    id: uid('task-gh'),
+    projectId: project.id,
+    track,
+    category,
+    source: 'github_issue',
+    isOfflineFallback: isFallback,
+    issueNumber: issueNum,
+    issueUrl,
+    title: `${prefix}${rawTitle}`.slice(0, 120),
+    description: bodySnippet || `自 GitHub 倉庫 ${repoInfo.fullName} 匯入的開放 Issue #${issueNum}。`,
+    modelSuggestion: isApi ? 'gemini-2.5-flash' : 'Gemini CLI / Claude Code',
+    promptTemplate: isApi
+      ? `你是協助開源倉庫 ${repoInfo.fullName} 的 AI 工程師。請針對 Issue #${issueNum}「${rawTitle}」產出符合 ${category} 驗收標準的結構化交付成果。`
+      : `請在本機使用官方 CLI（Gemini CLI / Claude Code / Codex）處理 ${repoInfo.fullName} 的 Issue #${issueNum}「${rawTitle}」，提交完整程式碼實作或 GitHub PR 連結。`,
+    sampleInput: `Repository: ${repoInfo.url}\nIssue: ${issueUrl}\nLabels: ${labels.join(', ') || 'none'}\n${bodySnippet ? `\n摘要：\n${bodySnippet.slice(0, 320)}` : ''}`,
+    acceptanceCriteria: isApi
+      ? [
+        `符合 ${category} 類別的結構化輸出格式（如 JSON / Markdown / 單元測試）`,
+        `明確回應 ${repoInfo.fullName} Issue #${issueNum} 的需求重點`,
+      ]
+      : [
+        '提供可審查之核心程式碼實作或合法 GitHub PR 連結',
+        `解決 ${repoInfo.fullName} Issue #${issueNum} 描述的問題並附驗證說明`,
+      ],
+    cashBountyUsd: 0,
+    contributionPoints: isApi ? 30 : 60,
+    goldReward: isApi ? 125 : 240,
+    xpReward: isApi ? 40 : 80,
+    progressWeight: isApi ? 15 : 20,
+    tokenCostEst: isApi ? 18000 : 15,
+    staminaCost: isApi ? 14 : 22,
+    status: 'open',
+    assignedWorkerId: null,
+    claimedBy: null,
+    claimedAt: null,
+    submittedAt: null,
+    submission: null,
+    verification: null,
+  };
+}
+
+function generateFallbackIssues(repoInfo, maxIssues = 3) {
+  const templates = [
+    {
+      number: 101,
+      title: `為 ${repoInfo.repo} 補齊繁中／英文 README 與快速上手文件`,
+      labels: ['documentation', 'good first issue'],
+      body: `為開源倉庫 ${repoInfo.fullName} 整理安裝步驟、環境變數說明與常見問題 FAQ，降低新貢獻者門檻。`,
+    },
+    {
+      number: 102,
+      title: `為 ${repoInfo.repo} 補齊核心模組邊界條件單元測試`,
+      labels: ['testing', 'good first issue'],
+      body: `針對 ${repoInfo.fullName} 的核心邏輯補充 node:test 單元測試與異常輸入保護。`,
+    },
+    {
+      number: 103,
+      title: `修復 ${repoInfo.repo} 異常重試與設定檔解析邊界問題`,
+      labels: ['bug', 'help wanted'],
+      body: `檢視 ${repoInfo.fullName} 在缺少可選欄位或網路超時情境下的錯誤處理，提供可合併 PR 或修補程式碼。`,
+    },
+  ];
+  return templates.slice(0, Math.min(Math.max(1, maxIssues), 3));
+}
+
+function unlockAchievements(state, candidateIds) {
+  if (!Array.isArray(state.achievements) || state.achievements.length === 0) {
+    state.achievements = createInitialAchievements();
+  }
+  const now = new Date().toISOString();
+  const newlyUnlocked = [];
+
+  for (const id of candidateIds) {
+    const ach = state.achievements.find((a) => a.id === id);
+    if (!ach || ach.unlocked) continue;
+    ach.unlocked = true;
+    ach.unlockedAt = now;
+    if (ach.rewardGold > 0) {
+      state.player.gold += ach.rewardGold;
+    }
+    newlyUnlocked.push({ ...ach });
+    pushActivity(state, {
+      type: 'achievement',
+      icon: '🏆',
+      message: `解鎖創世成就【${ach.icon} ${ach.name}】！額外獲得 +${ach.rewardGold}G 獎勵！`,
+    });
+  }
+  return newlyUnlocked;
+}
+
+function broadcastAchievements(sseHub, newlyUnlocked, state) {
+  for (const achievement of newlyUnlocked) {
+    sseHub.broadcast('achievement_unlocked', {
+      achievement,
+      playerGold: state.player.gold,
+    });
+  }
 }
 
 class HttpError extends Error {
@@ -305,11 +474,69 @@ export function createAppServer(options = {}) {
   const sseHub = options.sseHub || createSseHub();
   const startedAt = Date.now();
 
+  const rawRateLimit = options.rateLimitMax !== undefined
+    ? Number(options.rateLimitMax)
+    : (process.env.RATE_LIMIT_MAX !== undefined ? Number(process.env.RATE_LIMIT_MAX) : 120);
+  const rateLimitMax = Number.isFinite(rawRateLimit) ? rawRateLimit : 120;
+  const rateLimitWindowMs = Number(options.rateLimitWindowMs) > 0
+    ? Number(options.rateLimitWindowMs)
+    : 60_000;
+  const rateBuckets = new Map();
+
+  function checkWriteRateLimit(req, res) {
+    if (rateLimitMax <= 0) return true;
+    const forwarded = typeof req.headers['x-forwarded-for'] === 'string'
+      ? req.headers['x-forwarded-for'].split(',')[0].trim()
+      : '';
+    const clientKey = forwarded || req.socket?.remoteAddress || 'local';
+    const now = Date.now();
+    let bucket = rateBuckets.get(clientKey);
+    if (!bucket || now >= bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + rateLimitWindowMs };
+      rateBuckets.set(clientKey, bucket);
+    }
+    bucket.count += 1;
+    const remaining = Math.max(0, rateLimitMax - bucket.count);
+    res.setHeader('X-RateLimit-Limit', String(rateLimitMax));
+    res.setHeader('X-RateLimit-Remaining', String(remaining));
+
+    if (bucket.count > rateLimitMax) {
+      const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSec));
+      sendJson(res, 429, {
+        ok: false,
+        error: `請求過於頻繁，已觸發每分鐘 ${rateLimitMax} 次寫入速率限制，請於 ${retryAfterSec} 秒後再試`,
+        retryAfterSec,
+      });
+      return false;
+    }
+
+    // Periodic lightweight cleanup to avoid unbounded map growth
+    if (rateBuckets.size > 500) {
+      for (const [k, b] of rateBuckets.entries()) {
+        if (now >= b.resetAt) rateBuckets.delete(k);
+      }
+    }
+    return true;
+  }
+
   const server = http.createServer(async (req, res) => {
+    // Production security headers applied to every response
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
     try {
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       const pathname = url.pathname;
       const method = req.method.toUpperCase();
+
+      // Apply lightweight rate limiting on API write operations
+      if (pathname.startsWith('/api/') && (method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE')) {
+        if (!checkWriteRateLimit(req, res)) {
+          return;
+        }
+      }
 
       // Health check
       if (pathname === '/api/health' && method === 'GET') {
@@ -364,6 +591,9 @@ export function createAppServer(options = {}) {
       }
       if (pathname === '/api/auth/demo' && method === 'POST') {
         const body = await parseJsonBody(req);
+        if (typeof body.displayName === 'string') {
+          body.displayName = sanitizeText(body.displayName, 32);
+        }
         return await handleDemoLogin(req, res, body, store);
       }
       if (pathname === '/api/auth/logout' && method === 'POST') {
@@ -387,9 +617,7 @@ export function createAppServer(options = {}) {
           s.player.gold -= cost;
 
           const idx = s.workers.length + 1;
-          const cleanName = (typeof body.name === 'string' && body.name.trim())
-            ? body.name.trim().slice(0, 32)
-            : `${template.label} #${idx}`;
+          const cleanName = sanitizeText(body.name, 32) || `${template.label} #${idx}`;
           const track = body.track === 'api' || body.track === 'quota' ? body.track : template.track;
           const dailyTokenCap = Number(body.dailyTokenCap) > 0
             ? Math.round(Number(body.dailyTokenCap))
@@ -400,12 +628,8 @@ export function createAppServer(options = {}) {
             name: cleanName,
             roleClass: template.roleClass,
             track,
-            providerLabel: (typeof body.providerLabel === 'string' && body.providerLabel.trim())
-              ? body.providerLabel.trim().slice(0, 48)
-              : template.defaultProvider,
-            modelHint: (typeof body.modelHint === 'string' && body.modelHint.trim())
-              ? body.modelHint.trim().slice(0, 48)
-              : template.defaultModelHint,
+            providerLabel: sanitizeText(body.providerLabel, 48) || template.defaultProvider,
+            modelHint: sanitizeText(body.modelHint, 48) || template.defaultModelHint,
             dailyTokenCap,
             usedTokensToday: 0,
             stamina: 100,
@@ -453,14 +677,17 @@ export function createAppServer(options = {}) {
             throw new HttpError(404, `找不到算力小人：${workerId}`);
           }
 
-          if (typeof body.name === 'string' && body.name.trim()) {
-            w.name = body.name.trim().slice(0, 32);
+          if (typeof body.name === 'string') {
+            const cleaned = sanitizeText(body.name, 32);
+            if (cleaned) w.name = cleaned;
           }
-          if (typeof body.providerLabel === 'string' && body.providerLabel.trim()) {
-            w.providerLabel = body.providerLabel.trim().slice(0, 48);
+          if (typeof body.providerLabel === 'string') {
+            const cleaned = sanitizeText(body.providerLabel, 48);
+            if (cleaned) w.providerLabel = cleaned;
           }
-          if (typeof body.modelHint === 'string' && body.modelHint.trim()) {
-            w.modelHint = body.modelHint.trim().slice(0, 48);
+          if (typeof body.modelHint === 'string') {
+            const cleaned = sanitizeText(body.modelHint, 48);
+            if (cleaned) w.modelHint = cleaned;
           }
           if (body.dailyTokenCap !== undefined) {
             const cap = Number(body.dailyTokenCap);
@@ -503,8 +730,8 @@ export function createAppServer(options = {}) {
       // Projects: POST /api/projects (propose new project)
       if (pathname === '/api/projects' && method === 'POST') {
         const body = await parseJsonBody(req);
-        const name = typeof body.name === 'string' ? body.name.trim() : '';
-        const tagline = typeof body.tagline === 'string' ? body.tagline.trim() : '';
+        const name = sanitizeText(body.name, 64);
+        const tagline = sanitizeText(body.tagline, 140);
         if (name.length < 2) {
           throw new HttpError(400, '請輸入至少 2 個字的項目名稱');
         }
@@ -518,21 +745,19 @@ export function createAppServer(options = {}) {
 
           const newProj = {
             id: uid('proj'),
-            name: name.slice(0, 64),
+            name,
             shortName,
-            tagline: (tagline || '社群共創獨立開源產品，共享 30/60/10 透明收益分紅！').slice(0, 140),
-            description: (typeof body.description === 'string' && body.description.trim())
-              ? body.description.trim().slice(0, 500)
-              : (tagline || '由鎮民發起的孵化提案，投票達標後將自動生成雙軌算力任務。'),
+            tagline: tagline || '社群共創獨立開源產品，共享 30/60/10 透明收益分紅！',
+            description: sanitizeText(body.description, 500, { multiline: true })
+              || tagline
+              || '由鎮民發起的孵化提案，投票達標後將自動生成雙軌算力任務。',
             status: 'voting',
             votes: 1,
             votesRequired,
             progressPct: 0,
             creatorId: s.player.id,
             creatorName: s.player.displayName,
-            repoUrl: (typeof body.repoUrl === 'string' && body.repoUrl.trim())
-              ? body.repoUrl.trim().slice(0, 200)
-              : '',
+            repoUrl: sanitizeText(body.repoUrl, 200),
             bountyPoolUsd,
             revenueSplit: { ...REVENUE_SPLIT },
             totalRevenueUsd: 0,
@@ -585,6 +810,7 @@ export function createAppServer(options = {}) {
 
           let unlocked = false;
           let generatedTasks = [];
+          let unlockedAchievements = [];
 
           if (proj.votes >= proj.votesRequired) {
             unlocked = true;
@@ -600,6 +826,7 @@ export function createAppServer(options = {}) {
               message: `《${proj.name}》投票達標（${proj.votes}/${proj.votesRequired}）正式破土立項！已自動生成 3 張自動工坊 + 2 張懸賞工會任務！`,
               projectId: proj.id,
             });
+            unlockedAchievements = unlockAchievements(s, ['community_builder']);
           } else {
             pushActivity(s, {
               type: 'vote',
@@ -609,7 +836,7 @@ export function createAppServer(options = {}) {
             });
           }
 
-          return { project: proj, unlocked, generatedTasks };
+          return { project: proj, unlocked, generatedTasks, unlockedAchievements };
         });
 
         sseHub.broadcast(result.unlocked ? 'project_unlocked' : 'project_updated', {
@@ -617,12 +844,14 @@ export function createAppServer(options = {}) {
           unlocked: result.unlocked,
           generatedTaskCount: result.generatedTasks.length,
         });
+        broadcastAchievements(sseHub, result.unlockedAchievements, state);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
           project: result.project,
           unlocked: result.unlocked,
           generatedTasks: result.generatedTasks,
+          unlockedAchievements: result.unlockedAchievements,
           state,
         });
       }
@@ -639,9 +868,8 @@ export function createAppServer(options = {}) {
             throw new HttpError(404, `找不到項目：${projectId}`);
           }
 
-          const customText = typeof body.text === 'string' && body.text.trim()
-            ? body.text.trim().slice(0, 64)
-            : `🔥 ${proj.shortName || proj.name} 像素廣場霓虹精選！`;
+          const customText = sanitizeText(body.text, 64)
+            || `🔥 ${proj.shortName || proj.name} 像素廣場霓虹精選！`;
 
           proj.sponsoredBillboard = true;
           proj.billboardText = customText;
@@ -709,19 +937,25 @@ export function createAppServer(options = {}) {
             projectId: proj.id,
           });
 
-          return { project: proj, dividend };
+          const achIds = ['launch_founder'];
+          if (dividend.playerShareUsd > 0) achIds.push('dividend_earner');
+          const unlockedAchievements = unlockAchievements(s, achIds);
+
+          return { project: proj, dividend, unlockedAchievements };
         });
 
         sseHub.broadcast('project_launched', {
           project: result.project,
           dividend: result.dividend,
         });
+        broadcastAchievements(sseHub, result.unlockedAchievements, state);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
           project: result.project,
           dividend: result.dividend,
           founderRevenue: state.founderRevenue,
+          unlockedAchievements: result.unlockedAchievements,
           state,
         });
       }
@@ -751,19 +985,25 @@ export function createAppServer(options = {}) {
             projectId: proj.id,
           });
 
-          return { project: proj, dividend };
+          const unlockedAchievements = dividend.playerShareUsd > 0
+            ? unlockAchievements(s, ['dividend_earner'])
+            : [];
+
+          return { project: proj, dividend, unlockedAchievements };
         });
 
         sseHub.broadcast('revenue_distributed', {
           project: result.project,
           dividend: result.dividend,
         });
+        broadcastAchievements(sseHub, result.unlockedAchievements, state);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
           project: result.project,
           dividend: result.dividend,
           founderRevenue: state.founderRevenue,
+          unlockedAchievements: result.unlockedAchievements,
           state,
         });
       }
@@ -876,9 +1116,7 @@ export function createAppServer(options = {}) {
           task.claimedBy = null;
           task.claimedAt = null;
 
-          const reasonText = typeof body.reason === 'string' && body.reason.trim()
-            ? body.reason.trim().slice(0, 120)
-            : '';
+          const reasonText = sanitizeText(body.reason, 120);
 
           if (worker && (worker.currentTaskId === task.id || body.workerId === worker.id)) {
             worker.status = 'idle';
@@ -1002,9 +1240,13 @@ export function createAppServer(options = {}) {
           const reputationDelta = verification.score >= 85 ? 2 : 1;
           const tokensUsed = Number(body.tokensUsed) > 0 ? Math.round(Number(body.tokensUsed)) : task.tokenCostEst;
 
-          const contentStr = typeof body.content === 'string'
-            ? body.content
-            : JSON.stringify(body.content ?? '', null, 2);
+          const contentStr = sanitizeText(
+            typeof body.content === 'string'
+              ? body.content
+              : JSON.stringify(body.content ?? '', null, 2),
+            50_000,
+            { multiline: true },
+          );
 
           task.status = 'completed';
           task.submittedAt = now;
@@ -1012,9 +1254,9 @@ export function createAppServer(options = {}) {
           task.verification = verification;
           task.submission = {
             content: contentStr,
-            prUrl: typeof body.prUrl === 'string' && body.prUrl.trim() ? body.prUrl.trim() : null,
-            notes: typeof body.notes === 'string' ? body.notes.trim() : '',
-            executionMode: body.executionMode || (task.track === 'api_auto' ? 'byok' : 'byot_cli'),
+            prUrl: sanitizeText(body.prUrl, 240) || null,
+            notes: sanitizeText(body.notes, 500, { multiline: true }),
+            executionMode: sanitizeText(body.executionMode, 32) || (task.track === 'api_auto' ? 'byok' : 'byot_cli'),
             tokensUsed,
             submittedBy: s.player.displayName,
             submittedAt: now,
@@ -1112,6 +1354,15 @@ export function createAppServer(options = {}) {
             preview,
           });
 
+          const achCandidates = ['first_blood'];
+          const completedTracks = new Set(
+            s.tasks.filter((t) => t.status === 'completed').map((t) => t.track),
+          );
+          if (completedTracks.has('api_auto') && completedTracks.has('guild_bounty')) {
+            achCandidates.push('dual_track_master');
+          }
+          const unlockedAchievements = unlockAchievements(s, achCandidates);
+
           return {
             passed: true,
             verification,
@@ -1128,6 +1379,7 @@ export function createAppServer(options = {}) {
             task,
             worker: worker || null,
             project: proj || null,
+            unlockedAchievements,
           };
         });
 
@@ -1138,6 +1390,7 @@ export function createAppServer(options = {}) {
           verification: result.verification,
           rewards: result.rewards,
         });
+        broadcastAchievements(sseHub, result.unlockedAchievements || [], state);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
 
         return sendJson(res, 200, {
@@ -1148,6 +1401,7 @@ export function createAppServer(options = {}) {
           task: result.task,
           worker: result.worker,
           project: result.project,
+          unlockedAchievements: result.unlockedAchievements || [],
           state,
         });
       }
@@ -1236,15 +1490,11 @@ export function createAppServer(options = {}) {
             ? s.workers.find((w) => w.id === body.workerId)
             : s.workers.find((w) => w.track === 'quota') || s.workers[0];
 
-          const message = (typeof body.message === 'string' && body.message.trim())
-            ? body.message.trim().slice(0, 120)
-            : '本機 CLI 同步運行中...';
+          const message = sanitizeText(body.message, 120) || '本機 CLI 同步運行中...';
           const progressPct = body.progressPct !== undefined
             ? Math.max(0, Math.min(100, Math.round(Number(body.progressPct) || 0)))
             : null;
-          const cliTool = typeof body.cliTool === 'string' && body.cliTool.trim()
-            ? body.cliTool.trim().slice(0, 40)
-            : 'pixel-worker';
+          const cliTool = sanitizeText(body.cliTool, 40) || 'pixel-worker';
 
           if (worker) {
             worker.lastMessage = message;
@@ -1280,15 +1530,175 @@ export function createAppServer(options = {}) {
             });
           }
 
-          return { heartbeat, worker: worker || null };
+          const unlockedAchievements = unlockAchievements(s, ['cli_pioneer']);
+          return { heartbeat, worker: worker || null, unlockedAchievements };
         });
 
         sseHub.broadcast('cli_heartbeat', result.heartbeat);
+        broadcastAchievements(sseHub, result.unlockedAchievements, state);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
           heartbeat: result.heartbeat,
           worker: result.worker,
+          unlockedAchievements: result.unlockedAchievements,
+          state,
+        });
+      }
+
+      // GitHub Public Issues Import: POST /api/github/import-issues
+      if (pathname === '/api/github/import-issues' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        const parsedRepo = parseGitHubRepoUrl(body.repoUrl);
+        if (!parsedRepo.valid) {
+          return sendJson(res, 400, {
+            ok: false,
+            error: parsedRepo.error,
+          });
+        }
+
+        const maxIssues = Math.max(1, Math.min(10, Math.round(Number(body.maxIssues) || 5)));
+        const requestedTrack = (body.track === 'api_auto' || body.track === 'guild_bounty')
+          ? body.track
+          : 'auto';
+
+        let rawIssues = [];
+        let fallbackUsed = false;
+        let fallbackReason = null;
+
+        if (body.skipRemote || process.env.DISABLE_REMOTE_GITHUB_CHECK === '1') {
+          fallbackUsed = true;
+          fallbackReason = '已啟用離線預覽模式';
+          rawIssues = generateFallbackIssues(parsedRepo, maxIssues);
+        } else {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4000);
+            const perPage = Math.min(maxIssues * 2, 20);
+            const ghRes = await fetch(
+              `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/issues?state=open&per_page=${perPage}`,
+              {
+                headers: {
+                  Accept: 'application/vnd.github+json',
+                  'User-Agent': 'PixelCompute-Town',
+                },
+                signal: controller.signal,
+              },
+            );
+            clearTimeout(timer);
+
+            if (ghRes.ok) {
+              const data = await ghRes.json();
+              const realIssues = Array.isArray(data)
+                ? data.filter((item) => item && !item.pull_request).slice(0, maxIssues)
+                : [];
+              if (realIssues.length > 0) {
+                rawIssues = realIssues;
+              } else {
+                fallbackUsed = true;
+                fallbackReason = '該倉庫目前無公開 Open Issues，已改用離線預覽範例';
+                rawIssues = generateFallbackIssues(parsedRepo, maxIssues);
+              }
+            } else {
+              fallbackUsed = true;
+              fallbackReason = ghRes.status === 403
+                ? 'GitHub API 匿名限流，已降級為離線預覽'
+                : `GitHub API 回應 HTTP ${ghRes.status}，已降級為離線預覽`;
+              rawIssues = generateFallbackIssues(parsedRepo, maxIssues);
+            }
+          } catch {
+            fallbackUsed = true;
+            fallbackReason = '無法連線 GitHub API（離線或逾時），已降級為離線預覽';
+            rawIssues = generateFallbackIssues(parsedRepo, maxIssues);
+          }
+        }
+
+        const { state, result } = await store.mutate((s) => {
+          let project = null;
+          let createdProject = false;
+
+          if (body.projectId) {
+            project = s.projects.find((p) => p.id === body.projectId);
+            if (!project) {
+              throw new HttpError(404, `找不到目標項目：${body.projectId}`);
+            }
+          } else {
+            const lowerUrl = parsedRepo.url.toLowerCase();
+            project = s.projects.find((p) => (p.repoUrl || '').toLowerCase().replace(/\/+$/, '') === lowerUrl);
+            if (!project) {
+              createdProject = true;
+              const shortName = parsedRepo.repo.slice(0, 22);
+              project = {
+                id: uid('proj-gh'),
+                name: `${parsedRepo.fullName}（GitHub 匯入）`.slice(0, 64),
+                shortName,
+                tagline: `自 GitHub 倉庫 ${parsedRepo.fullName} 匯入的開源協作項目，共享 30/60/10 分紅池！`,
+                description: `已連結公開倉庫 ${parsedRepo.url}，社群算力小人可直接領取匯入的 Issue 任務開工！`,
+                status: 'building',
+                votes: 10,
+                votesRequired: 10,
+                progressPct: 10,
+                creatorId: s.player.id,
+                creatorName: s.player.displayName,
+                repoUrl: parsedRepo.url,
+                bountyPoolUsd: 0,
+                revenueSplit: { ...REVENUE_SPLIT },
+                totalRevenueUsd: 0,
+                distributedRevenueUsd: 0,
+                sponsoredBillboard: false,
+                billboardText: '',
+                launchedAt: null,
+                createdAt: new Date().toISOString(),
+                contributions: {
+                  [s.player.id]: 15,
+                },
+                contributorNames: {
+                  [s.player.id]: s.player.displayName,
+                },
+              };
+              s.projects.push(project);
+            }
+          }
+
+          const importedTasks = rawIssues.map((issue) => buildTaskFromGitHubIssue(
+            issue,
+            project,
+            parsedRepo,
+            requestedTrack,
+            { isFallback: fallbackUsed },
+          ));
+
+          s.tasks.push(...importedTasks);
+
+          pushActivity(s, {
+            type: 'github_import',
+            icon: '🔗',
+            message: `自 GitHub 倉庫【${parsedRepo.fullName}】匯入 ${importedTasks.length} 張任務卡至《${project.shortName}》${fallbackUsed ? '（離線預覽）' : ''}`,
+            projectId: project.id,
+          });
+
+          return { project, createdProject, tasks: importedTasks };
+        });
+
+        sseHub.broadcast('tasks_imported', {
+          repo: parsedRepo,
+          project: result.project,
+          createdProject: result.createdProject,
+          tasks: result.tasks,
+          fallbackUsed,
+        });
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+
+        return sendJson(res, 200, {
+          ok: true,
+          repo: parsedRepo,
+          project: result.project,
+          createdProject: result.createdProject,
+          tasks: result.tasks,
+          importedCount: result.tasks.length,
+          fallbackUsed,
+          fallbackReason,
+          state,
         });
       }
 
@@ -1442,4 +1852,23 @@ if (isMainModule) {
   server.listen(PORT, HOST, () => {
     console.log(`🏮 PixelCompute Town v${VERSION} running at http://localhost:${PORT} (bind ${HOST})`);
   });
+
+  let shuttingDown = false;
+  const gracefulShutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n🏮 Received ${signal}, shutting down PixelCompute Town gracefully...`);
+    const forceTimer = setTimeout(() => {
+      process.exit(0);
+    }, 5000);
+    if (typeof forceTimer.unref === 'function') {
+      forceTimer.unref();
+    }
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }

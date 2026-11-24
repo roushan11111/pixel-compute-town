@@ -350,7 +350,12 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(passSubmit.json.task.status, 'completed');
     assert.equal(passSubmit.json.rewards.gold, 130);
     assert.equal(passSubmit.json.rewards.contributionPoints, 35);
-    assert.equal(passSubmit.json.state.player.gold, goldBefore + 130);
+    const achGold = (passSubmit.json.unlockedAchievements || []).reduce((s, a) => s + (a.rewardGold || 0), 0);
+    assert.ok(
+      (passSubmit.json.unlockedAchievements || []).some((a) => a.id === 'first_blood'),
+      'First accepted task should unlock first_blood achievement',
+    );
+    assert.equal(passSubmit.json.state.player.gold, goldBefore + 130 + achGold);
     assert.equal(passSubmit.json.state.player.totalContribution, contribBefore + 35);
     assert.ok(passSubmit.json.state.player.reputation > repBefore - 4);
   });
@@ -683,5 +688,133 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(restored.founderRevenue.billboardAdsUsd, snapshot.founderRevenue.billboardAdsUsd);
     assert.equal(restored.founderRevenue.proSkinsUsd, snapshot.founderRevenue.proSkinsUsd);
     assert.equal(restored.founderRevenue.totalUsd, snapshot.founderRevenue.totalUsd);
+  });
+
+  it('12. POST /api/github/import-issues validates repo format, auto-creates project, and handles offline fallback', async () => {
+    // Invalid repo URL rejected with 400
+    const badRepo = await apiJson(baseUrl, 'POST', '/api/github/import-issues', {
+      repoUrl: 'not-a-valid-repo',
+      skipRemote: true,
+    });
+    assert.equal(badRepo.status, 400);
+    assert.equal(badRepo.json.ok, false);
+
+    // Valid owner/repo with skipRemote: true -> auto-creates building project & 3 fallback tasks
+    const imp1 = await apiJson(baseUrl, 'POST', '/api/github/import-issues', {
+      repoUrl: 'pixel-compute-town/awesome-demo',
+      maxIssues: 3,
+      skipRemote: true,
+    });
+    assert.equal(imp1.status, 200);
+    assert.equal(imp1.json.ok, true);
+    assert.equal(imp1.json.createdProject, true);
+    assert.equal(imp1.json.fallbackUsed, true);
+    assert.equal(imp1.json.project.status, 'building');
+    assert.equal(imp1.json.importedCount, 3);
+    assert.equal(imp1.json.tasks.length, 3);
+    assert.ok(imp1.json.tasks.every((t) => t.title.includes('[離線預覽]')));
+    assert.ok(imp1.json.tasks.every((t) => t.projectId === imp1.json.project.id));
+
+    // Importing again for the same repo URL reuses the existing project instead of duplicating it
+    const imp2 = await apiJson(baseUrl, 'POST', '/api/github/import-issues', {
+      repoUrl: 'https://github.com/pixel-compute-town/awesome-demo',
+      maxIssues: 2,
+      skipRemote: true,
+    });
+    assert.equal(imp2.status, 200);
+    assert.equal(imp2.json.createdProject, false);
+    assert.equal(imp2.json.project.id, imp1.json.project.id);
+    assert.equal(imp2.json.importedCount, 2);
+  });
+
+  it('13. All 6 Genesis Achievements unlock across gameplay, broadcast via SSE, and reset cleanly', async () => {
+    const boot = await apiJson(baseUrl, 'GET', '/api/bootstrap');
+    const achievements = boot.json.state.achievements;
+    assert.ok(Array.isArray(achievements) && achievements.length >= 6);
+
+    const expectedIds = [
+      'first_blood',
+      'dual_track_master',
+      'community_builder',
+      'launch_founder',
+      'dividend_earner',
+      'cli_pioneer',
+    ];
+    for (const id of expectedIds) {
+      const ach = achievements.find((a) => a.id === id);
+      assert.ok(ach, `Achievement "${id}" must exist in state.achievements`);
+      assert.equal(ach.unlocked, true, `Achievement "${id}" should be unlocked after full lifecycle`);
+      assert.ok(ach.unlockedAt, `Achievement "${id}" should record unlockedAt timestamp`);
+    }
+
+    // Reset world -> all 6 achievements must reset back to locked
+    const resetRes = await apiJson(baseUrl, 'POST', '/api/reset', {});
+    assert.equal(resetRes.status, 200);
+    assert.ok(resetRes.json.state.achievements.every((a) => a.unlocked === false && a.unlockedAt === null));
+
+    // Verify achievement_unlocked SSE event fires on cli_pioneer unlock after reset
+    const sse = openSseClient(port);
+    try {
+      await sse.connectedPromise;
+      await sse.waitForEvent('connected');
+      await apiJson(baseUrl, 'POST', '/api/cli/heartbeat', {
+        workerId: 'w-pro-01',
+        message: 'Testing achievement SSE broadcast',
+      });
+      const achEvt = await sse.waitForEvent('achievement_unlocked');
+      assert.equal(achEvt.data.achievement.id, 'cli_pioneer');
+      assert.equal(achEvt.data.achievement.unlocked, true);
+    } finally {
+      sse.close();
+    }
+  });
+
+  it('14. Production security headers & HTTP 429 write rate limiting (reads remain unaffected)', async () => {
+    const rlTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-ratelimit-'));
+    const rlServer = createAppServer({ dataDir: rlTmpDir, rateLimitMax: 3 });
+    await new Promise((resolve) => rlServer.listen(0, '127.0.0.1', resolve));
+    const rlUrl = `http://127.0.0.1:${rlServer.address().port}`;
+
+    try {
+      // Check security headers on GET /api/health and GET /
+      const healthRes = await fetch(`${rlUrl}/api/health`);
+      assert.equal(healthRes.status, 200);
+      assert.equal(healthRes.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(healthRes.headers.get('x-frame-options'), 'SAMEORIGIN');
+      assert.equal(healthRes.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+
+      const htmlRes = await fetch(`${rlUrl}/`);
+      assert.equal(htmlRes.status, 200);
+      assert.equal(htmlRes.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(htmlRes.headers.get('x-frame-options'), 'SAMEORIGIN');
+
+      // Execute 3 allowed write requests (limit = 3)
+      for (let i = 1; i <= 3; i += 1) {
+        const res = await apiJson(rlUrl, 'POST', '/api/cli/heartbeat', {
+          workerId: 'w-pro-01',
+          message: `Write #${i}`,
+          logToFeed: false,
+        });
+        assert.equal(res.status, 200, `Write #${i} should succeed under limit`);
+        assert.equal(res.headers.get('x-ratelimit-limit'), '3');
+      }
+
+      // 4th write request within the same window must return HTTP 429 + Retry-After
+      const blocked = await apiJson(rlUrl, 'POST', '/api/cli/heartbeat', {
+        workerId: 'w-pro-01',
+        message: 'Write #4 should be rate-limited',
+        logToFeed: false,
+      });
+      assert.equal(blocked.status, 429);
+      assert.equal(blocked.json.ok, false);
+      assert.ok(blocked.headers.get('retry-after'), '429 response should include Retry-After header');
+
+      // Read endpoints (GET) must NOT be blocked by write rate limit
+      const readAfter429 = await apiJson(rlUrl, 'GET', '/api/health');
+      assert.equal(readAfter429.status, 200);
+    } finally {
+      await stopServer(rlServer);
+      await fs.rm(rlTmpDir, { recursive: true, force: true });
+    }
   });
 });

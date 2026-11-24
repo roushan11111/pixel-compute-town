@@ -8,8 +8,10 @@
 *Turn idle AI API credits & monthly CLI quotas into pixel workers that vote, build, ship, and share revenue together.*
 
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-34d399?style=for-the-badge)](./package.json)
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B%20%2F%2024-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![CI](https://img.shields.io/badge/GitHub%20Actions-CI%20Ready-2563eb?style=for-the-badge&logo=githubactions&logoColor=white)](./.github/workflows/ci.yml)
 [![Zero-Trust BYOK](https://img.shields.io/badge/Security-Zero--Trust%20BYOK%20%2F%20BYOT-22d3ee?style=for-the-badge)](#零信任與合規安全架構)
+[![i18n](https://img.shields.io/badge/i18n-繁中%20%7C%20简中%20%7C%20EN-f59e0b?style=for-the-badge)](#-核心特色一覽)
 [![Deploy to Render](https://img.shields.io/badge/Deploy-Render%20%2F%20Fly.io%20%2F%20Docker-a855f7?style=for-the-badge)](#一鍵公開上線部署)
 
 [🚀 3 秒快速啟動](#-3-秒快速啟動零依賴開箱即玩) ·
@@ -62,11 +64,13 @@ npm run worker:demo
 
 | 模組 | 亮點功能 |
 | :--- | :--- |
-| **🏙️ 互動像素小鎮畫布** | 手工繪製像素矩陣精靈、4 種職業小人與多款皮膚、日夜賽博霓虹切換、沿石板路尋路、4 座可點擊建築（🏭 自動工坊 / ⚔️ 懸賞工會 / 🚀 隨進度進化的孵化廣場 / ☕ 算力宿舍）、全屏上線煙火與 8-bit 音效 |
-| **⚡ 雙軌任務市場** | **自動工坊（`api_auto`）** 支援瀏覽器端真實 Gemini / OpenRouter / Ollama BYOK 執行與自動掛機；**懸賞工會（`guild_bounty`）** 支援一鍵複製 Context Pack、GitHub PR 連結驗證與本機 CLI 即時直播 |
-| **🛡️ Proof of Accepted Work** | 絕不按消耗 Token 灌水發獎！內建防作弊驗收引擎（JSON Schema 校驗、代碼/PR 特徵檢查、AI Slop 反廢話評分），不合格 0 貢獻且扣信譽分 |
+| **🏙️ 互動像素小鎮畫布** | 手工繪製像素矩陣精靈、4 種職業小人與多款皮膚、日夜賽博霓虹切換（夜晚閃爍星光＋偶發流星、白天漂浮像素白雲）、商店裝潢實景擺放、滑鼠懸停小人資訊卡、4 座可點擊建築與全屏上線煙火＋8-bit 音效 |
+| **⚡ 雙軌任務市場** | **自動工坊（`api_auto`）** 支援瀏覽器端真實 Gemini / OpenRouter / Ollama BYOK 執行與自動掛機；**懸賞工會（`guild_bounty`）** 支援一鍵複製 Context Pack、GitHub PR 連結驗證與本機 CLI `--demo` / `--watch` 即時直播 |
+| **🔗 GitHub Issue 一鍵匯入** | 直接貼上任意公開 GitHub Repo（`owner/repo` 或完整網址）自動匯入真實 Open Issues 成為小鎮懸賞任務，離線／限流時優雅降級生成預覽任務卡 |
+| **🌐 三語即時切換（繁中／简中／EN）** | 頂部 HUD 一鍵即時切換繁體中文、簡體中文與英文介面，並附 3 步互動新手導引條，一鍵向全球社群展示 |
+| **🏅 創世成就系統與打工證 PNG** | 6 枚自動解鎖創世成就（首單開張、雙軌大師、立項推手、上線創世者、首批分紅股東、本機 CLI 先鋒），自動贈送金幣並刻印在可一鍵匯出的《像素算力打工證 PNG》底部 |
+| **🛡️ Proof of Accepted Work & 生產加固** | 絕不按消耗 Token 灌水發獎！內建防作弊驗收引擎（JSON Schema、代碼/PR 特徵、AI Slop 攔截），並配備 HTTP 安全標頭、寫入速率限制（`RATE_LIMIT_MAX`）與優雅關機 |
 | **🗳️ 投票立項與 30/60/10 分紅** | 社群自由提案，投滿門檻自動從 `voting` 解鎖為 `building` 並自動生成雙軌任務；達 100% 發布上線並透明結算 **發起人 30% / 貢獻者 60% / 平臺 10%** |
-| **🏆 像素算力打工證 PNG** | 一鍵匯出復古像素風《算力打工證與分紅結算單》PNG 圖片，直接貼上 X / 即刻 / Discord 分享戰績 |
 | **💰 創作者收益看板** | 完整呈現 4 條平臺變現現金流：現金懸賞 10% 服務費、孵化分紅池 10% Carry、像素廣場霓虹廣告位、皮膚與 Pro 會員 |
 
 ---
@@ -108,6 +112,10 @@ node bin/pixel-worker.mjs --list
 
 # 執行完整模擬流程（接單 → 即時 SSE 心跳直播 → 驗收交卷）
 node bin/pixel-worker.mjs --demo --server http://localhost:3456
+
+# 啟動常駐 Watch 模式（定時輪詢該小人的待辦任務並穩定發送心跳，支援 --interval 與 --max-ticks）
+node bin/pixel-worker.mjs --watch --worker w-pro-01 --interval 5
+# 或直接執行：npm run worker:watch
 
 # 串接你本機的官方 CLI（如 Gemini CLI / Claude Code / Codex）
 node bin/pixel-worker.mjs \
@@ -157,10 +165,11 @@ docker run -d --name pixel-compute-town -p 3456:3456 -v $(pwd)/data:/app/data --
 
 ```text
 pixel-compute-town/
-├── server.mjs                  # 零依賴 HTTP 伺服器、REST API 與靜態資源服務
+├── .github/workflows/ci.yml    # GitHub Actions 自動化 CI（Node 24 零依賴自動執行 test + smoke）
+├── server.mjs                  # 零依賴 HTTP 伺服器、REST API、安全標頭、速率限制與 SSE
 ├── src/server/                 # 後端核心模組（種子世界、原子儲存、防作弊驗收、GitHub OAuth、SSE）
-├── public/                     # 前端 UI、互動像素小鎮引擎、精靈矩陣、8-bit 音效、BYOK 執行器與打工證 PNG
-├── bin/pixel-worker.mjs        # 本機 BYOT CLI 協作器（即時心跳同步 + 人工確認提交）
+├── public/                     # 前端 UI、三語 i18n、互動像素小鎮引擎、精靈矩陣、8-bit 音效、BYOK 與打工證
+├── bin/pixel-worker.mjs        # 本機 BYOT CLI 協作器（--demo / --watch 常駐監聽 / --cmd 本機整合）
 ├── tests/                      # Node.js 原生 node:test API 全鏈路測試與靜態煙霧測試
 ├── docs/
 │   ├── PRD.md                  # 產品規格書與經濟模型設計
@@ -168,28 +177,30 @@ pixel-compute-town/
 ├── Dockerfile                  # node:22-alpine 零依賴生產鏡像（含 /api/health 檢查）
 ├── render.yaml                 # Render Blueprint 一鍵部署設定
 ├── fly.toml                    # Fly.io 部署與持久 Volume 設定
-└── .env.example                # 環境變數範本（GitHub OAuth / Polar Webhook）
+└── .env.example                # 環境變數範本（GitHub OAuth / 速率限制 / Polar Webhook）
 ```
 
 ---
 
-## 🧪 執行測試
+## 🧪 執行測試與自動化 CI
+
+專案內建 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)，每次 `push` 與 `pull_request` 都會在 **Node.js 24** 環境下自動驗證零外部依賴並執行完整測試套件：
 
 ```bash
-# 執行後端 API 全鏈路測試（使用 Node.js 原生 node:test）
-node --test tests/api.test.mjs
+# 執行後端 API、防作弊、成就、速率限制與分紅帳本測試（Node.js 原生 node:test）
+npm test
 
-# 執行靜態一致性與 CLI 端對端煙霧測試
-node tests/smoke.mjs
+# 執行靜態一致性、三語 i18n、部署檔與 CLI (--help / --list / --demo / --watch) 煙霧測試
+npm run smoke
 ```
 
 ---
 
 ## 🗺️ Roadmap
 
-- [x] **Public Alpha v0.2**：互動賽博暖夜像素小鎮、雙軌任務市場、瀏覽器端 BYOK Gemini 執行器、本機 BYOT `pixel-worker` CLI、防作弊驗收引擎、30/60/10 分紅帳本、GitHub OAuth、一鍵部署設定
-- [ ] **Beta v0.3**：Polar.sh / Stripe Connect 真實現金懸賞託管結算與 Webhook 驗簽
-- [ ] **Beta v0.4**：GitHub App 雙向自動同步（Issue 自動轉懸賞、PR Merge 自動觸發分紅記功）
+- [x] **Alpha-Plus v0.3**：互動賽博暖夜像素小鎮（星空流星／白雲／商店裝潢實景／小人懸停卡）、三語即時切換（繁中／簡中／EN）、GitHub 公開倉庫 Issue 一鍵匯入、6 枚創世成就與打工證徽章、本機 BYOT `pixel-worker` `--demo` & `--watch` 常駐模式、生產安全標頭與速率限制、GitHub Actions CI、一鍵雲端部署
+- [ ] **Beta v0.4**：Polar.sh / Stripe Connect 真實現金懸賞託管結算與 Webhook 驗簽
+- [ ] **Beta v0.5**：GitHub App 雙向自動同步（PR Merge 自動觸發分紅記功與審核流）
 - [ ] **v1.0**：多小鎮聯邦（Multi-Town Federation）與開源孵化基金自動分配
 
 ---

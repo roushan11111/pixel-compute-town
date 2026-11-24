@@ -28,6 +28,14 @@
   --accent-red: #ff6b6b;
   --accent-gold: #ffd95a;
 
+  --bg-feed-item: rgba(35, 30, 66, 0.72);
+  --bg-feed-preview: rgba(7, 5, 17, 0.48);
+  --bg-code: #0b0917;
+  --text-code: #c5f7ff;
+  --bg-danger: #471d2a;
+  --bg-danger-hover: #632638;
+  --text-danger: #ffd5d5;
+
   --shadow-pixel: 3px 3px 0px #070511;
   --shadow-pixel-sm: 2px 2px 0px #070511;
 
@@ -41,24 +49,32 @@ body[data-theme='day'] {
   --bg-panel: #f5f2fc;
   --bg-card: #ffffff;
   --bg-card-hover: #f9f7ff;
-  --bg-input: #eeeaf8;
-  --border-pixel: #b8addb;
-  --border-bright: #7d6ec4;
+  --bg-input: #ece7f9;
+  --border-pixel: #a699cf;
+  --border-bright: #6d5bb8;
 
-  --text-main: #1f1938;
-  --text-sub: #4b436e;
-  --text-muted: #766e99;
+  --text-main: #1b1533;
+  --text-sub: #3e3561;
+  --text-muted: #5d5482;
 
-  --accent-amber: #d97706;
-  --accent-amber-glow: rgba(217, 119, 6, 0.16);
-  --accent-cyan: #0891b2;
-  --accent-cyan-glow: rgba(8, 145, 178, 0.15);
-  --accent-pink: #db2777;
-  --accent-pink-glow: rgba(219, 39, 119, 0.15);
-  --accent-green: #059669;
-  --accent-green-glow: rgba(5, 150, 105, 0.15);
-  --accent-red: #dc2626;
-  --accent-gold: #ca8a04;
+  --accent-amber: #b45309;
+  --accent-amber-glow: rgba(180, 83, 9, 0.16);
+  --accent-cyan: #0e7490;
+  --accent-cyan-glow: rgba(14, 116, 144, 0.15);
+  --accent-pink: #be185d;
+  --accent-pink-glow: rgba(190, 24, 93, 0.15);
+  --accent-green: #047857;
+  --accent-green-glow: rgba(4, 120, 87, 0.15);
+  --accent-red: #b91c1c;
+  --accent-gold: #a16207;
+
+  --bg-feed-item: #ffffff;
+  --bg-feed-preview: #f2eefc;
+  --bg-code: #f0ecfa;
+  --text-code: #1f1938;
+  --bg-danger: #fee2e2;
+  --bg-danger-hover: #fecaca;
+  --text-danger: #991b1b;
 
   --shadow-pixel: 3px 3px 0px rgba(45, 36, 86, 0.22);
   --shadow-pixel-sm: 2px 2px 0px rgba(45, 36, 86, 0.18);
@@ -354,9 +370,14 @@ body {
 }
 
 .btn-danger {
-  background: #471d2a;
+  background: var(--bg-danger);
   border-color: var(--accent-red);
-  color: #ffd5d5;
+  color: var(--text-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--bg-danger-hover);
+  border-color: var(--accent-red);
 }
 
 .btn-sm {
@@ -606,14 +627,18 @@ body {
   padding: 2px 7px;
   background: var(--bg-input);
   border: 1px solid var(--border-pixel);
-  color: var(--text-muted);
+  color: var(--text-sub);
   font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
 .feed-filter-btn.active {
   border-color: var(--accent-amber);
   color: var(--accent-amber);
+  background: var(--bg-card);
 }
 
 .terminal-feed {
@@ -630,7 +655,8 @@ body {
 
 .feed-item {
   padding: 6px 8px;
-  background: rgba(35, 30, 66, 0.55);
+  background: var(--bg-feed-item);
+  border: 1px solid var(--border-pixel);
   border-left: 3px solid var(--border-bright);
   display: flex;
   flex-direction: column;
@@ -677,7 +703,7 @@ body {
 .feed-preview {
   margin-top: 3px;
   padding: 4px 7px;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--bg-feed-preview);
   border: 1px dashed var(--border-pixel);
   color: var(--text-sub);
   font-size: 11px;
@@ -867,6 +893,11 @@ body {
   gap: 10px;
 }
 
+.card-head > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
 .card-title {
   font-size: 14px;
   font-weight: 800;
@@ -898,6 +929,8 @@ body {
   border: 1px solid var(--border-pixel);
   background: var(--bg-input);
   color: var(--text-sub);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .badge.cyan {
@@ -1224,11 +1257,11 @@ body {
 
 .code-box {
   padding: 10px;
-  background: #0b0917;
+  background: var(--bg-code);
   border: 2px solid var(--border-pixel);
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #c5f7ff;
+  color: var(--text-code);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 280px;
@@ -1306,6 +1339,201 @@ body {
 
 .toast.error {
   border-color: var(--accent-red);
+}
+
+.toast.achievement {
+  border-color: var(--accent-gold);
+  background: linear-gradient(135deg, rgba(255, 217, 90, 0.22), var(--bg-card));
+  box-shadow: var(--shadow-pixel), 0 0 18px rgba(255, 217, 90, 0.35);
+}
+
+/* ==========================================================================
+   Phase 2: Language Switcher, Onboarding Bar, GitHub Import & Achievements
+   ========================================================================== */
+.lang-switch {
+  display: inline-flex;
+  border: 2px solid var(--border-pixel);
+  background: var(--bg-input);
+  box-shadow: var(--shadow-pixel-sm);
+  overflow: hidden;
+}
+
+.lang-btn {
+  appearance: none;
+  border: none;
+  border-right: 1px solid var(--border-pixel);
+  background: transparent;
+  color: var(--text-sub);
+  padding: 4px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lang-btn:last-child {
+  border-right: none;
+}
+
+.lang-btn.active {
+  background: var(--accent-amber);
+  color: #140f24;
+}
+
+.onboarding-wrap {
+  max-width: 1620px;
+  margin: 12px auto 0;
+  padding: 0 16px;
+}
+
+.onboarding-bar {
+  background: var(--bg-panel);
+  border: 2px solid var(--accent-amber);
+  box-shadow: var(--shadow-pixel-sm);
+  padding: 9px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboarding-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.onboarding-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--accent-amber);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.onboarding-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.onboarding-bar.collapsed .onboarding-steps {
+  display: none;
+}
+
+.onboarding-step {
+  appearance: none;
+  text-align: left;
+  padding: 7px 10px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-pixel);
+  color: var(--text-main);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.onboarding-step:hover {
+  border-color: var(--accent-cyan);
+  transform: translateY(-1px);
+}
+
+.onboarding-step.done {
+  border-color: var(--accent-green);
+  background: var(--accent-green-glow);
+  color: var(--text-main);
+}
+
+.github-import-card {
+  padding: 12px;
+  background: var(--bg-card);
+  border: 2px dashed var(--accent-cyan);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.github-import-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.achievement-card {
+  padding: 10px;
+  background: var(--bg-input);
+  border: 2px solid var(--border-pixel);
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  opacity: 0.72;
+  transition: all 0.2s ease;
+}
+
+.achievement-card.unlocked {
+  opacity: 1;
+  background: var(--bg-card);
+  border-color: var(--accent-gold);
+  box-shadow: var(--shadow-pixel-sm), 0 0 12px rgba(255, 217, 90, 0.2);
+}
+
+.achievement-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-panel);
+  border: 2px solid var(--border-pixel);
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.achievement-card.unlocked .achievement-icon {
+  border-color: var(--accent-gold);
+}
+
+.achievement-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.achievement-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.achievement-desc {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-top: 2px;
+}
+
+@media (max-width: 900px) {
+  .onboarding-steps,
+  .github-import-row,
+  .achievements-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes toastSlideIn {

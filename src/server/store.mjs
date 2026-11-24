@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createInitialState } from './seed.mjs';
+import { createInitialAchievements, createInitialState } from './seed.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +43,9 @@ export class StateStore {
       const raw = await fs.readFile(this.stateFile, 'utf8');
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && parsed.player && Array.isArray(parsed.projects)) {
+        if (!Array.isArray(parsed.achievements) || parsed.achievements.length === 0) {
+          parsed.achievements = createInitialAchievements();
+        }
         return parsed;
       }
       return null;

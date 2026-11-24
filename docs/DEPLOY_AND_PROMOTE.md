@@ -21,16 +21,20 @@
 
 本專案採用 **零外部 npm 依賴（Node.js 22+ 原生模組）**，啟動時間低於 1 秒、記憶體占用極低，非常適合免費或極低成本部署 Public Alpha。
 
-### Step 1：把專案推上 GitHub
+### Step 1：把專案推上 GitHub（自動觸發 CI 綠燈保護）
+
+專案已內建 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)，推送至 `main` 後會自動於 Node.js 24 環境執行零依賴檢查、`npm test`（含安全標頭、速率限制、GitHub Issue 匯入、6 枚創世成就與 30/60/10 分紅精確度測試）與 `npm run smoke`（含 `pixel-worker --watch` 端對端檢查）。
 
 ```bash
 git init
 git add .
-git commit -m "feat: launch PixelCompute Town Public Alpha"
+git commit -m "feat: launch PixelCompute Town Alpha-Plus"
 git branch -M main
 git remote add origin https://github.com/<你的帳號>/pixel-compute-town.git
 git push -u origin main
 ```
+
+> 🛡️ **生產環境安全提示**：伺服器已內建安全標頭（`X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy`）、寫入速率限制（可透過 `RATE_LIMIT_MAX` 環境變數調整，預設每分鐘 120 次）與 `SIGTERM`/`SIGINT` 優雅關機。
 
 ---
 
@@ -125,7 +129,9 @@ docker run -d \
 
 ## 🎬 第二部分：30 秒吸睛像素 Demo 錄影分鏡腳本
 
-> **錄影秘訣**：不用剪輯特效，直接用 **OBS / Screen Studio / CleanShot X** 錄製瀏覽器（16:9，1920×1080，60fps，縮放 100%）。錄影前先點開 **賽博暖夜模式** 並開啟 **8-bit 音效**（錄進系統音訊更帶感！）。
+> **錄影秘訣**：不用剪輯特效，直接用 **OBS / Screen Studio / CleanShot X** 錄製瀏覽器（16:9，1920×1080，60fps，縮放 100%）。錄影前先點開 **賽博暖夜模式** 並開啟 **8-bit 音效**（錄進系統音訊更帶感！）。發佈海外平台（X 英文串 / Reddit / Show HN / Product Hunt）前，只需點一下頂部 HUD 的 **`繁中 / 简中 / EN` 三語切換鈕** 切到 `EN`，即可 1 秒錄出全英文介面 Demo！
+>
+> 💡 **加分鏡頭**：別忘了順手展示 **「🔗 從 GitHub 匯入真實 Issue」** 一鍵變出任務卡，以及解鎖 **創世成就徽章** 後刻印在《算力打工證 PNG》底部的炫酷畫面！
 
 | 秒數 | 畫面鏡頭（實機操作） | 螢幕大字字幕（中 / EN） | 節奏與音效 |
 | :--- | :--- | :--- | :--- |

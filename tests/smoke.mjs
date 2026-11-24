@@ -248,8 +248,8 @@ async function main() {
       return `${staticFiles.length + 1} routes returned 200 with exact MIME types`;
     });
 
-    // 5. CLI --help, --list, and --demo end-to-end execution against temp server
-    await runCheck('5. bin/pixel-worker.mjs --help, --list, and --demo run end-to-end against server', async () => {
+    // 5. CLI --help, --list, --demo, and --watch end-to-end execution against temp server
+    await runCheck('5. bin/pixel-worker.mjs --help, --list, --demo, and --watch run E2E against server', async () => {
       const cliPath = path.join(ROOT_DIR, 'bin', 'pixel-worker.mjs');
 
       // 5a. --help
@@ -260,6 +260,7 @@ async function main() {
       assert.match(helpOut.stdout, /--list/);
       assert.match(helpOut.stdout, /--demo/);
       assert.match(helpOut.stdout, /--cmd/);
+      assert.match(helpOut.stdout, /--watch/);
 
       // 5b. --list
       const listOut = await execFileAsync(process.execPath, [cliPath, '--list', '--server', baseUrl], {
@@ -288,17 +289,71 @@ async function main() {
         'Server activityFeed should contain CLI heartbeat entries',
       );
 
-      return '--help, --list, and --demo verified E2E with server state update';
+      // 5d. --watch --max-ticks 1
+      const watchOut = await execFileAsync(
+        process.execPath,
+        [cliPath, '--watch', '--worker', 'w-pro-01', '--interval', '0.1', '--max-ticks', '1', '--server', baseUrl],
+        { env: { ...process.env, NO_COLOR: '1' } },
+      );
+      assert.match(watchOut.stdout, /watch|常駐|Tick|心跳/i);
+      const afterWatch = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
+      const proWorker = afterWatch.state.workers.find((w) => w.id === 'w-pro-01');
+      assert.ok(proWorker?.lastHeartbeatAt, 'Worker lastHeartbeatAt should be populated by --watch');
+
+      return '--help, --list, --demo, and --watch --max-ticks 1 verified E2E';
     });
 
-    // 6. Deployment & documentation assets presence check
-    await runCheck('6. Deployment configs (.env.example, Dockerfile, render.yaml, fly.toml) & docs exist', async () => {
+    // 6. i18n module integrity (zh-TW / zh-CN / en key parity + HTML data-i18n validation)
+    await runCheck('6. public/js/i18n.js trilingual dictionaries (zh-TW/zh-CN/en) & HTML data-i18n keys match', async () => {
+      const i18nMod = await import('../public/js/i18n.js');
+      assert.ok(Array.isArray(i18nMod.SUPPORTED_LANGS) && i18nMod.SUPPORTED_LANGS.length === 3);
+      assert.equal(typeof i18nMod.t, 'function');
+      assert.equal(typeof i18nMod.getLang, 'function');
+      assert.equal(typeof i18nMod.setLang, 'function');
+      assert.equal(typeof i18nMod.applyI18nToDom, 'function');
+
+      const dict = i18nMod.DICTIONARY;
+      const baseKeys = Object.keys(dict['zh-TW']).sort();
+      assert.ok(baseKeys.length >= 40, `Expected >= 40 i18n keys, found ${baseKeys.length}`);
+
+      for (const lang of ['zh-TW', 'zh-CN', 'en']) {
+        assert.ok(dict[lang], `Missing dictionary for locale ${lang}`);
+        const keys = Object.keys(dict[lang]).sort();
+        assert.deepEqual(keys, baseKeys, `Key mismatch between zh-TW and ${lang}`);
+        for (const k of keys) {
+          assert.ok(
+            typeof dict[lang][k] === 'string' && dict[lang][k].trim().length > 0,
+            `Empty translation for ${lang}.${k}`,
+          );
+        }
+      }
+
+      // Check all data-i18n* attributes in public/index.html exist in DICTIONARY
+      const html = await fs.readFile(path.join(ROOT_DIR, 'public', 'index.html'), 'utf8');
+      const attrRx = /data-i18n(?:-[a-z]+)?\s*=\s*["']([^"']+)["']/g;
+      const missingKeys = [];
+      let totalHtmlI18n = 0;
+      let am;
+      while ((am = attrRx.exec(html)) !== null) {
+        totalHtmlI18n += 1;
+        if (!(am[1] in dict['zh-TW'])) {
+          missingKeys.push(am[1]);
+        }
+      }
+      assert.deepEqual(missingKeys, [], `Missing i18n keys referenced in index.html: ${missingKeys.join(', ')}`);
+
+      return `${baseKeys.length} keys × 3 locales verified, ${totalHtmlI18n} HTML data-i18n bindings valid`;
+    });
+
+    // 7. Deployment, CI workflow & documentation assets check
+    await runCheck('7. Deployment configs, GitHub Actions CI (.github/workflows/ci.yml) & docs verified', async () => {
       const requiredFiles = [
         '.env.example',
         'Dockerfile',
         '.dockerignore',
         'render.yaml',
         'fly.toml',
+        '.github/workflows/ci.yml',
         'docs/PRD.md',
         'docs/DEPLOY_AND_PROMOTE.md',
         'README.md',
@@ -307,7 +362,13 @@ async function main() {
         const stat = await fs.stat(path.join(ROOT_DIR, rel));
         assert.ok(stat.size > 20, `${rel} is missing or unexpectedly small`);
       }
-      return `${requiredFiles.length} deployment & documentation files verified`;
+
+      const ciYaml = await fs.readFile(path.join(ROOT_DIR, '.github', 'workflows', 'ci.yml'), 'utf8');
+      assert.match(ciYaml, /node-version:\s*["']?24["']?/);
+      assert.match(ciYaml, /npm test/);
+      assert.match(ciYaml, /npm run smoke/);
+
+      return `${requiredFiles.length} deployment, CI & documentation files verified`;
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));

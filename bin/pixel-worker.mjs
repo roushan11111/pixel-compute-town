@@ -20,7 +20,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
-const CLI_VERSION = '0.2.0';
+const CLI_VERSION = '0.3.0';
 const DEFAULT_SERVER = (process.env.PIXEL_TOWN_SERVER || 'http://localhost:3456').replace(/\/+$/, '');
 
 const USE_COLOR = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
@@ -58,6 +58,9 @@ ${c.bold('常用參數 (Options):')}
   -w, --worker <id>          指定要同步動畫的算力小人 ID（未指定時自動挑選合適小人）
   -t, --task <id>            指定要承接並提交的任務 ID
       --demo                 執行完整本機模擬流程（接單 → 即時心跳直播 → 驗收交卷）
+      --watch                常駐輪詢模式：定時偵測該小人的待辦任務並持續推送心跳
+      --interval <sec>       配合 --watch 使用的輪詢間隔秒數（預設: 5）
+      --max-ticks <n>        配合 --watch 使用的最大輪詢次數，0 代表不限（適合自動化測試）
   -c, --cmd "<command>"      呼叫本機官方 CLI 執行任務（如 gemini / claude / codex）
                              指令中可使用 {{TASK_ID}} 或 {{CONTEXT_FILE}} 佔位符
       --output <file>        從本機檔案讀取已完成的交付成果並送交驗收
@@ -72,11 +75,14 @@ ${c.bold('實用範例 (Examples):')}
   ${c.dim('# 2. 一鍵體驗本機 CLI 同步直播（開箱即跑，會即時驅動像素小鎮畫面！）')}
   node bin/pixel-worker.mjs --demo --server http://localhost:3456
 
-  ${c.dim('# 3. 使用本機 Gemini CLI 協助完成指定懸賞單，完成後由你親自確認交卷')}
+  ${c.dim('# 3. 啟動本機常駐監聽模式（每 5 秒同步小人待辦任務與線上心跳）')}
+  node bin/pixel-worker.mjs --watch --worker w-pro-01 --interval 5
+
+  ${c.dim('# 4. 使用本機 Gemini CLI 協助完成指定懸賞單，完成後由你親自確認交卷')}
   node bin/pixel-worker.mjs --worker w-pro-01 --task task-meta-pr \\
     --cmd "gemini -p '請閱讀任務需求並產出高品質實作方案'"
 
-  ${c.dim('# 4. 在本機完成程式碼並發起 PR 後，直接提交檔案內容與 PR 連結')}
+  ${c.dim('# 5. 在本機完成程式碼並發起 PR 後，直接提交檔案內容與 PR 連結')}
   node bin/pixel-worker.mjs --task task-i18n-ast-pr --output ./solution.md \\
     --pr https://github.com/pixel-compute-town/i18n-pixelbot/pull/42
 
@@ -92,6 +98,9 @@ function parseArgs(argv) {
     version: false,
     list: false,
     demo: false,
+    watch: false,
+    interval: 5,
+    maxTicks: 0,
     yes: false,
     dryRun: false,
     server: DEFAULT_SERVER,
@@ -116,8 +125,13 @@ function parseArgs(argv) {
     else if (arg === '-v' || arg === '--version') opts.version = true;
     else if (arg === '-l' || arg === '--list') opts.list = true;
     else if (arg === '--demo') opts.demo = true;
+    else if (arg === '--watch') opts.watch = true;
     else if (arg === '-y' || arg === '--yes') opts.yes = true;
     else if (arg === '--dry-run') opts.dryRun = true;
+    else if (arg === '--interval') opts.interval = Number(next());
+    else if (arg.startsWith('--interval=')) opts.interval = Number(arg.slice('--interval='.length));
+    else if (arg === '--max-ticks') opts.maxTicks = Number(next());
+    else if (arg.startsWith('--max-ticks=')) opts.maxTicks = Number(arg.slice('--max-ticks='.length));
     else if (arg === '-s' || arg === '--server') opts.server = next().replace(/\/+$/, '');
     else if (arg.startsWith('--server=')) opts.server = arg.slice('--server='.length).replace(/\/+$/, '');
     else if (arg === '-w' || arg === '--worker') opts.worker = next();
@@ -133,6 +147,13 @@ function parseArgs(argv) {
     else {
       throw new Error(`未知參數: ${arg}（使用 --help 查看支援的參數）`);
     }
+  }
+
+  if (!Number.isFinite(opts.interval) || opts.interval < 0.1) {
+    throw new Error(`--interval 必須為大於等於 0.1 的數字（收到: ${opts.interval}）`);
+  }
+  if (!Number.isInteger(opts.maxTicks) || opts.maxTicks < 0) {
+    throw new Error(`--max-ticks 必須為大於等於 0 的整數（收到: ${opts.maxTicks}）`);
   }
 
   return opts;
@@ -726,6 +747,112 @@ async function runWorkflow(opts) {
   }
 }
 
+async function runWatchLoop(opts) {
+  printBanner();
+  console.log(`${c.bold('🌐 連線伺服器')}: ${c.cyan(opts.server)}`);
+
+  const health = await apiRequest(opts.server, '/api/health');
+  console.log(c.green(`✓ 伺服器健康檢查通過 (${health.service || 'pixel-compute-town'} v${health.version || 'alpha'})`));
+  console.log(
+    c.bold('👁️  進入本機 Watch 常駐模式') +
+      c.dim(`（每 ${opts.interval} 秒巡檢一次${opts.maxTicks > 0 ? `，最多 ${opts.maxTicks} 次` : '，按 Ctrl+C 停止'}）\n`)
+  );
+
+  let stopped = false;
+  let sleepResolve = null;
+  let sleepTimer = null;
+
+  const requestStop = (signal) => {
+    if (stopped) return;
+    stopped = true;
+    console.log(c.yellow(`\n⏹️  收到 ${signal}，正在安全停止 Watch 監聽...`));
+    if (sleepTimer) clearTimeout(sleepTimer);
+    if (sleepResolve) sleepResolve();
+  };
+
+  process.on('SIGINT', requestStop);
+  process.on('SIGTERM', requestStop);
+
+  const waitInterruptible = (ms) =>
+    new Promise((resolve) => {
+      if (stopped) return resolve();
+      sleepResolve = resolve;
+      sleepTimer = setTimeout(() => {
+        sleepTimer = null;
+        sleepResolve = null;
+        resolve();
+      }, ms);
+    });
+
+  let tick = 0;
+  try {
+    while (!stopped) {
+      tick += 1;
+      const boot = await apiRequest(opts.server, '/api/bootstrap');
+      const state = boot.state || boot;
+      const workers = state.workers || [];
+      const tasks = state.tasks || [];
+
+      const worker = pickWorker(workers, opts.worker, 'guild_bounty');
+      const expectedTrack = worker.track === 'api' ? 'api_auto' : 'guild_bounty';
+
+      const activeTasks = tasks.filter(
+        (t) =>
+          (t.status === 'in_progress' || t.status === 'claimed') &&
+          (t.assignedWorkerId === worker.id || (opts.task && t.id === opts.task))
+      );
+      const openTasks = tasks.filter((t) => t.status === 'open' && t.track === expectedTrack);
+
+      const activeTask = activeTasks[0] || null;
+      const status = activeTask ? 'working' : 'idle';
+      const progressPct = activeTask ? Math.min(95, 25 + ((tick * 15) % 70)) : 0;
+      const message = activeTask
+        ? `本機 Watch 同步中：${activeTask.title.slice(0, 42)}`
+        : openTasks.length > 0
+          ? `本機 Watch 待命中（偵測到 ${openTasks.length} 張可接任務）`
+          : '本機 Watch 待命中（目前所有任務已完成）';
+
+      const ok = await sendHeartbeat(opts.server, {
+        workerId: worker.id,
+        taskId: activeTask?.id || openTasks[0]?.id || undefined,
+        status,
+        progressPct,
+        cliTool: 'pixel-worker-watch',
+        message,
+        logToFeed: tick === 1 || Boolean(activeTask),
+      });
+
+      const ts = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+      const activeLabel = activeTask ? c.yellow(`進行中: ${activeTask.id}`) : c.dim('無進行中任務');
+      console.log(
+        `  ${c.dim(`[${ts}]`)} ${c.cyan(`Tick #${tick}`)} · ${c.magenta(worker.id)} (${worker.name}) · ` +
+          `${activeLabel} · ${c.green(`可接任務: ${openTasks.length}`)} · Heartbeat: ${ok ? c.green('OK') : c.yellow('WARN')}`
+      );
+
+      if (tick === 1 && !activeTask && openTasks.length > 0) {
+        console.log(
+          c.dim(
+            `     💡 建議接單範例: node bin/pixel-worker.mjs --server ${opts.server} --worker ${worker.id} --task ${openTasks[0].id} --demo`
+          )
+        );
+      }
+
+      if (opts.maxTicks > 0 && tick >= opts.maxTicks) {
+        console.log(c.green(`\n✓ 已完成 ${tick} 次 Watch 巡檢並安全退出。\n`));
+        break;
+      }
+
+      if (!stopped) {
+        await waitInterruptible(Math.round(opts.interval * 1000));
+      }
+    }
+  } finally {
+    process.off('SIGINT', requestStop);
+    process.off('SIGTERM', requestStop);
+    if (sleepTimer) clearTimeout(sleepTimer);
+  }
+}
+
 async function main() {
   try {
     const opts = parseArgs(process.argv.slice(2));
@@ -739,6 +866,10 @@ async function main() {
     }
     if (opts.list) {
       await handleList(opts.server);
+      return;
+    }
+    if (opts.watch) {
+      await runWatchLoop(opts);
       return;
     }
     await runWorkflow(opts);

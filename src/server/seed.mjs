@@ -9,6 +9,59 @@ export const REVENUE_SPLIT = Object.freeze({
 export const PLATFORM_BOUNTY_FEE_PCT = 10;
 export const BILLBOARD_PRICE_USD = 29;
 
+export const ACHIEVEMENT_CATALOG = Object.freeze([
+  {
+    id: 'first_blood',
+    name: '首單開張',
+    icon: '🏅',
+    rewardGold: 50,
+    description: '完成並通過 Proof of Accepted Work 驗收你的第 1 張算力任務。',
+  },
+  {
+    id: 'dual_track_master',
+    name: '雙軌大師',
+    icon: '⚔️',
+    rewardGold: 120,
+    description: '同時在「自動工坊 (API)」與「懸賞工會 (額度)」兩條軌道各完成至少 1 張任務。',
+  },
+  {
+    id: 'community_builder',
+    name: '立項推手',
+    icon: '🏗️',
+    rewardGold: 80,
+    description: '參與社群投票，親手讓一個孵化提案達標並自動生成雙軌任務。',
+  },
+  {
+    id: 'launch_founder',
+    name: '上線創世者',
+    icon: '🚀',
+    rewardGold: 150,
+    description: '將一個孵化項目推進至 100% 並成功發布上線點燃煙火。',
+  },
+  {
+    id: 'dividend_earner',
+    name: '首批分紅股東',
+    icon: '💸',
+    rewardGold: 100,
+    description: '從已上線項目的 30/60/10 透明分紅池中領取到真實美金分紅。',
+  },
+  {
+    id: 'cli_pioneer',
+    name: '本機 CLI 先鋒',
+    icon: '💻',
+    rewardGold: 80,
+    description: '透過本機 pixel-worker CLI 橋接器發送即時心跳同步像素小人狀態。',
+  },
+]);
+
+export function createInitialAchievements() {
+  return ACHIEVEMENT_CATALOG.map((item) => ({
+    ...item,
+    unlocked: false,
+    unlockedAt: null,
+  }));
+}
+
 export const WORKER_TEMPLATES = Object.freeze([
   {
     roleClass: 'flash_worker',
@@ -970,5 +1023,6 @@ export function createInitialState() {
     dividendLedger: [],
     founderRevenue,
     activityFeed,
+    achievements: createInitialAchievements(),
   };
 }

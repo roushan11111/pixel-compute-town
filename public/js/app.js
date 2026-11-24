@@ -7,6 +7,7 @@
 import { PixelTownEngine } from './pixelEngine.js';
 import { soundFX } from './sound.js';
 import { renderWorkCertificate, downloadWorkCertificate } from './certCard.js';
+import { applyI18nToDom, getLang, setLang, t } from './i18n.js';
 import {
   PRESET_MODELS,
   buildTaskPrompt,
@@ -18,6 +19,8 @@ import {
   saveByokConfig,
   testConnection,
 } from './geminiRunner.js';
+
+const ONBOARDING_STORAGE_KEY = 'pixel_compute_town_onboarding_collapsed_v1';
 
 // ============================================================================
 // App Runtime Store
@@ -40,6 +43,15 @@ const app = {
   activeReportText: '',
   syncDebounceTimer: null,
   lastLocalMutationAt: 0,
+  certExported: false,
+  onboardingCollapsed: (() => {
+    try {
+      return localStorage.getItem(ONBOARDING_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  })(),
+  seenUnlockedAchievements: new Set(),
 };
 
 const ROLE_LABELS = {
@@ -139,12 +151,57 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-function applyNewState(nextState) {
+function celebrateAchievement(ach) {
+  if (!ach || !ach.id || app.seenUnlockedAchievements.has(ach.id)) return;
+  app.seenUnlockedAchievements.add(ach.id);
+  const bonus = ach.rewardGold > 0 ? ` (+${ach.rewardGold}G)` : '';
+  soundFX.playVerify();
+  showToast(
+    t('toast.achievement', { title: `${ach.icon || '🏆'} ${ach.name}`, bonus }),
+    'achievement',
+    5200,
+  );
+}
+
+function seedSeenAchievements(state) {
+  app.seenUnlockedAchievements.clear();
+  for (const ach of state?.achievements || []) {
+    if (ach.unlocked) app.seenUnlockedAchievements.add(ach.id);
+  }
+}
+
+function checkNewAchievements(state) {
+  for (const ach of state?.achievements || []) {
+    if (ach.unlocked && !app.seenUnlockedAchievements.has(ach.id)) {
+      celebrateAchievement(ach);
+    }
+  }
+}
+
+function resetTransientUiAfterWorldReset() {
+  app.activeGuildTaskId = null;
+  app.certExported = false;
+  app.seenUnlockedAchievements.clear();
+  const hint = $('stage-overlay-hint');
+  if (hint) {
+    hint.textContent = t('stage.hintDefault');
+  }
+  const importRes = $('gh-import-result');
+  if (importRes) {
+    importRes.style.display = 'none';
+    importRes.textContent = '';
+  }
+}
+
+function applyNewState(nextState, { silentAchievements = false } = {}) {
   if (!nextState) return;
   app.state = nextState;
   app.lastLocalMutationAt = Date.now();
   if (app.engine) {
     app.engine.syncState(app.state);
+  }
+  if (!silentAchievements) {
+    checkNewAchievements(app.state);
   }
   renderAll();
 }
@@ -234,6 +291,8 @@ function triggerDownloadCert() {
   const payload = buildCertPayload();
   const handle = (app.state.player?.username || 'founder').replace(/[^a-z0-9_-]/gi, '');
   downloadWorkCertificate(payload, `pixel-compute-town-cert-${handle}.png`);
+  app.certExported = true;
+  renderOnboardingBar();
   soundFX.playCoin();
   showToast('🪪 已匯出《像素算力打工證 PNG》，快去發推炫耀吧！', 'success');
 }
@@ -293,6 +352,7 @@ function focusBuilding(buildingId) {
 function renderAll() {
   if (!app.state) return;
   renderHud();
+  renderOnboardingBar();
   renderByokIndicator();
   renderStageStatus();
   renderActivityFeed();
@@ -301,6 +361,48 @@ function renderAll() {
   renderIncubatorTab();
   renderWorkersAndShopTab();
   renderRevenueAndLeaderboardTab();
+}
+
+function renderOnboardingBar() {
+  const bar = $('onboarding-bar');
+  if (!bar || !app.state) return;
+  bar.classList.toggle('collapsed', app.onboardingCollapsed);
+  const toggleBtn = $('btn-toggle-onboarding');
+  if (toggleBtn) {
+    toggleBtn.textContent = app.onboardingCollapsed ? t('onboarding.expand') : t('onboarding.collapse');
+  }
+
+  const tasks = app.state.tasks || [];
+  const projects = app.state.projects || [];
+  const achievements = app.state.achievements || [];
+
+  const step1Done =
+    tasks.some((tk) => tk.status === 'completed') ||
+    achievements.some((a) => a.id === 'first_blood' && a.unlocked);
+  const step2Done =
+    projects.some((p) => p.id === 'proj-pomo' && p.status !== 'voting') ||
+    achievements.some((a) => a.id === 'community_builder' && a.unlocked);
+  const step3Done =
+    app.certExported ||
+    projects.some((p) => p.status === 'launched') ||
+    achievements.some((a) => (a.id === 'launch_founder' || a.id === 'dividend_earner') && a.unlocked);
+
+  const states = [step1Done, step2Done, step3Done];
+  const doneCount = states.filter(Boolean).length;
+
+  states.forEach((done, idx) => {
+    const n = idx + 1;
+    const btn = $(`onboarding-step-${n}`);
+    const icon = $(`onboarding-icon-${n}`);
+    if (btn) btn.classList.toggle('done', done);
+    if (icon) icon.textContent = done ? '✅' : '⬜';
+  });
+
+  const badge = $('onboarding-progress-badge');
+  if (badge) {
+    badge.textContent = doneCount === 3 ? t('onboarding.allDone') : `${doneCount} / 3`;
+    badge.className = `badge ${doneCount === 3 ? 'green' : 'amber'}`;
+  }
 }
 
 function renderHud() {
@@ -345,8 +447,8 @@ function renderByokIndicator() {
   }
   if (label) {
     label.textContent = isLive
-      ? `BYOK：${cfg.model.slice(0, 18)}`
-      : 'BYOK：擬真體驗';
+      ? t('hud.byokLive', { model: cfg.model.slice(0, 18) })
+      : t('hud.byokDemo');
   }
 }
 
@@ -491,43 +593,43 @@ function renderFactoryTab() {
   }
 
   listEl.innerHTML = tasks
-    .map((t) => {
-      const proj = projectMap.get(t.projectId);
-      const isCompleted = t.status === 'completed';
-      const isWorking = t.status === 'in_progress';
+    .map((task) => {
+      const proj = projectMap.get(task.projectId);
+      const isCompleted = task.status === 'completed';
+      const isWorking = task.status === 'in_progress';
       const statusBadge = isCompleted
-        ? '<span class="badge green">✅ 已驗收</span>'
+        ? `<span class="badge green">${escapeHtml(t('badge.completed'))}</span>`
         : isWorking
-          ? '<span class="badge cyan">⚡ 執行中</span>'
-          : '<span class="badge amber">🟡 可派工</span>';
+          ? `<span class="badge cyan">${escapeHtml(t('badge.working'))}</span>`
+          : `<span class="badge amber">${escapeHtml(t('badge.open'))}</span>`;
 
       return `
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
           <div class="card-head">
             <div>
-              <h3 class="card-title">${escapeHtml(t.title)}</h3>
-              <p class="card-subtitle">${escapeHtml(t.description || '')}</p>
+              <h3 class="card-title">${escapeHtml(task.title)}</h3>
+              <p class="card-subtitle">${escapeHtml(task.description || '')}</p>
             </div>
             ${statusBadge}
           </div>
           <div class="badge-row">
-            <span class="badge">📦 ${escapeHtml(proj?.shortName || t.projectId)}</span>
-            <span class="badge cyan">🤖 ${escapeHtml(t.modelSuggestion || 'gemini-2.5-flash')}</span>
-            <span class="badge">⚡ 預估 ${(t.tokenCostEst || 0).toLocaleString()} tok / -${t.staminaCost || 12} 體力</span>
-            <span class="badge gold">🪙 +${t.goldReward}G</span>
-            <span class="badge pink">✨ +${t.contributionPoints} 貢獻</span>
-            ${t.cashBountyUsd > 0 ? `<span class="badge green">💵 $${t.cashBountyUsd} 懸賞（實得 $${(t.cashBountyUsd * 0.9).toFixed(2)}）</span>` : ''}
+            <span class="badge">📦 ${escapeHtml(proj?.shortName || task.projectId)}</span>
+            <span class="badge cyan">🤖 ${escapeHtml(task.modelSuggestion || 'gemini-2.5-flash')}</span>
+            <span class="badge">⚡ ${(task.tokenCostEst || 0).toLocaleString()} tok / -${task.staminaCost || 12}</span>
+            <span class="badge gold">🪙 +${task.goldReward}G</span>
+            <span class="badge pink">✨ +${task.contributionPoints} pt</span>
+            ${task.cashBountyUsd > 0 ? `<span class="badge green">💵 $${task.cashBountyUsd} ($${(task.cashBountyUsd * 0.9).toFixed(2)} net)</span>` : ''}
           </div>
           <div class="card-footer">
             <span class="mono" style="font-size: 11px; color: var(--text-muted);">
-              類別：${escapeHtml(t.category)} ｜ 項目進度 +${t.progressWeight || 15}%
+              ${escapeHtml(task.category)} ｜ +${task.progressWeight || 15}%
             </span>
             <div class="toolbar-group">
               ${
                 isCompleted
-                  ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(t.id)}">📋 查看 AI 交卷與驗收報告 (${t.verification?.score ?? 90}分)</button>`
-                  : `<button type="button" class="btn btn-sm btn-green" data-dispatch-api="${escapeHtml(t.id)}" ${isWorking ? 'disabled' : ''}>
-                      ${isWorking ? '⚡ 小人趕工中...' : '🚀 一鍵派工執行'}
+                  ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('factory.inspect'))} (${task.verification?.score ?? 90})</button>`
+                  : `<button type="button" class="btn btn-sm btn-green" data-dispatch-api="${escapeHtml(task.id)}" ${isWorking ? 'disabled' : ''}>
+                      ${escapeHtml(isWorking ? t('factory.working') : t('factory.dispatch'))}
                     </button>`
               }
             </div>
@@ -543,6 +645,18 @@ function renderGuildTab() {
   const workerSelect = $('guild-worker-select');
   populateProjectFilterSelect(projFilter);
   populateWorkerSelect(workerSelect, 'quota');
+
+  const importProjSelect = $('gh-import-project');
+  if (importProjSelect) {
+    const prev = importProjSelect.value || '';
+    const projects = app.state.projects || [];
+    importProjSelect.innerHTML =
+      `<option value="">${escapeHtml(t('guild.importAutoProj'))}</option>` +
+      projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.shortName || p.name)}</option>`).join('');
+    if ([...importProjSelect.options].some((o) => o.value === prev)) {
+      importProjSelect.value = prev;
+    }
+  }
 
   const selectedProj = projFilter?.value || 'all';
   const projectMap = new Map((app.state.projects || []).map((p) => [p.id, p]));
@@ -562,49 +676,49 @@ function renderGuildTab() {
   }
 
   listEl.innerHTML = tasks
-    .map((t) => {
-      const proj = projectMap.get(t.projectId);
-      const isCompleted = t.status === 'completed';
-      const isWorking = t.status === 'in_progress';
-      const netUsd = Number((t.cashBountyUsd * 0.9).toFixed(2));
-      const feeUsd = Number((t.cashBountyUsd * 0.1).toFixed(2));
+    .map((task) => {
+      const proj = projectMap.get(task.projectId);
+      const isCompleted = task.status === 'completed';
+      const isWorking = task.status === 'in_progress';
+      const netUsd = Number((task.cashBountyUsd * 0.9).toFixed(2));
+      const feeUsd = Number((task.cashBountyUsd * 0.1).toFixed(2));
 
       return `
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
           <div class="card-head">
             <div>
-              <h3 class="card-title">${escapeHtml(t.title)}</h3>
-              <p class="card-subtitle">${escapeHtml(t.description || '')}</p>
+              <h3 class="card-title">${escapeHtml(task.title)}</h3>
+              <p class="card-subtitle">${escapeHtml(task.description || '')}</p>
             </div>
             ${
               isCompleted
-                ? '<span class="badge green">✅ 已結案</span>'
+                ? `<span class="badge green">${escapeHtml(t('badge.guildCompleted'))}</span>`
                 : isWorking
-                  ? '<span class="badge cyan">⚔️ 接單進行中</span>'
-                  : '<span class="badge amber">📜 懸賞開放</span>'
+                  ? `<span class="badge cyan">${escapeHtml(t('badge.guildWorking'))}</span>`
+                  : `<span class="badge amber">${escapeHtml(t('badge.guildOpen'))}</span>`
             }
           </div>
           <div class="badge-row">
-            <span class="badge">📦 ${escapeHtml(proj?.shortName || t.projectId)}</span>
-            <span class="badge amber">🖥️ ${escapeHtml(t.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
-            <span class="badge gold">🪙 +${t.goldReward}G</span>
-            <span class="badge pink">✨ +${t.contributionPoints} 貢獻</span>
+            <span class="badge">📦 ${escapeHtml(proj?.shortName || task.projectId)}</span>
+            <span class="badge amber">🖥️ ${escapeHtml(task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
+            <span class="badge gold">🪙 +${task.goldReward}G</span>
+            <span class="badge pink">✨ +${task.contributionPoints} pt</span>
             ${
-              t.cashBountyUsd > 0
-                ? `<span class="badge green">💰 懸賞 $${t.cashBountyUsd}（實得 $${netUsd} / 平臺費 $${feeUsd}）</span>`
-                : '<span class="badge cyan">🚀 30/60/10 分紅池持股</span>'
+              task.cashBountyUsd > 0
+                ? `<span class="badge green">💰 $${task.cashBountyUsd} ($${netUsd} net / $${feeUsd} fee)</span>`
+                : '<span class="badge cyan">🚀 30/60/10 Pool</span>'
             }
           </div>
           <div class="card-footer">
             <span class="mono" style="font-size: 11px; color: var(--text-muted);">
-              類別：${escapeHtml(t.category)} ｜ 體力 -${t.staminaCost || 20} ｜ 進度 +${t.progressWeight || 20}%
+              ${escapeHtml(task.category)} ｜ -${task.staminaCost || 20} ｜ +${task.progressWeight || 20}%
             </span>
             <div class="toolbar-group">
               ${
                 isCompleted
-                  ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(t.id)}">📋 查看交卷與驗收報告 (${t.verification?.score ?? 90}分)</button>`
-                  : `<button type="button" class="btn btn-sm btn-amber" data-open-guild="${escapeHtml(t.id)}">
-                      ${isWorking ? '🛠️ 開啟工作台提交成果' : '⚔️ 撕下懸賞令 / 開啟工作台'}
+                  ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('factory.inspect'))} (${task.verification?.score ?? 90})</button>`
+                  : `<button type="button" class="btn btn-sm btn-amber" data-open-guild="${escapeHtml(task.id)}">
+                      ${escapeHtml(isWorking ? t('guild.claimResume') : t('guild.claimOpen'))}
                     </button>`
               }
             </div>
@@ -780,6 +894,37 @@ function renderWorkersAndShopTab() {
         `;
       })
       .join('');
+  }
+
+  // Genesis Achievements Wall
+  const achievements = app.state.achievements || [];
+  const achSummary = $('achievements-summary');
+  const achList = $('achievements-list');
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  if (achSummary) {
+    achSummary.textContent = `${unlockedCount} / ${achievements.length || 6}`;
+  }
+  if (achList) {
+    if (achievements.length === 0) {
+      achList.innerHTML = '<div class="empty-state">尚無創世成就資料。</div>';
+    } else {
+      achList.innerHTML = achievements
+        .map(
+          (a) => `
+            <article class="achievement-card ${a.unlocked ? 'unlocked' : ''}">
+              <div class="achievement-icon" aria-hidden="true">${escapeHtml(a.icon || '🏆')}</div>
+              <div class="achievement-info">
+                <div class="achievement-name">
+                  <span>${escapeHtml(a.name)}</span>
+                  <span class="badge ${a.unlocked ? 'gold' : ''}">${a.unlocked ? '✓ 已解鎖' : `+${a.rewardGold || 0}G`}</span>
+                </div>
+                <div class="achievement-desc">${escapeHtml(a.description || '')}</div>
+              </div>
+            </article>
+          `,
+        )
+        .join('');
+    }
   }
 
   // Shop items
@@ -1350,6 +1495,28 @@ function connectSse() {
     }
   });
 
+  sse.addEventListener('achievement_unlocked', (evt) => {
+    try {
+      const data = JSON.parse(evt.data);
+      if (data?.achievement) {
+        celebrateAchievement(data.achievement);
+      }
+      scheduleBootstrapRefresh();
+    } catch {
+      // ignore
+    }
+  });
+
+  sse.addEventListener('tasks_imported', () => {
+    if (Date.now() - app.lastLocalMutationAt < 500) return;
+    scheduleBootstrapRefresh();
+  });
+
+  sse.addEventListener('world_reset', () => {
+    resetTransientUiAfterWorldReset();
+    scheduleBootstrapRefresh();
+  });
+
   sse.addEventListener('state_sync', () => {
     // Avoid redundant fetch right after our own HTTP mutation already applied the fresh state
     if (Date.now() - app.lastLocalMutationAt < 500) return;
@@ -1626,6 +1793,98 @@ function bindEvents() {
     }
   });
 
+  // Trilingual live language switcher
+  document.querySelectorAll('#lang-switch [data-lang]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang;
+      setLang(lang);
+      document.querySelectorAll('#lang-switch [data-lang]').forEach((b) => {
+        b.classList.toggle('active', b.dataset.lang === lang);
+      });
+      applyI18nToDom();
+      const hint = $('stage-overlay-hint');
+      if (hint) hint.textContent = t('stage.hintDefault');
+      renderAll();
+      soundFX.playClick();
+      showToast(t('toast.langSwitched'), 'info', 2200);
+    });
+  });
+
+  // Collapsible 3-step onboarding bar & step shortcuts
+  $('btn-toggle-onboarding').addEventListener('click', () => {
+    app.onboardingCollapsed = !app.onboardingCollapsed;
+    try {
+      localStorage.setItem(ONBOARDING_STORAGE_KEY, app.onboardingCollapsed ? '1' : '0');
+    } catch {
+      // ignore
+    }
+    renderOnboardingBar();
+    soundFX.playClick();
+  });
+
+  document.querySelectorAll('[data-onboarding-jump]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.onboardingJump;
+      soundFX.playClick();
+      if (target === 'factory') switchTab('factory');
+      else if (target === 'incubator') switchTab('incubator');
+      else if (target === 'cert') openCertModal();
+    });
+  });
+
+  // Incubator quick-jump to GitHub Issue importer
+  $('btn-incubator-jump-import').addEventListener('click', () => {
+    soundFX.playClick();
+    switchTab('guild');
+    $('gh-import-repo')?.focus();
+  });
+
+  // GitHub Public Repo Issue Importer form
+  $('github-import-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const repoUrl = $('gh-import-repo').value.trim();
+    const track = $('gh-import-track').value || 'guild_bounty';
+    const projectId = $('gh-import-project').value || '';
+    const resultEl = $('gh-import-result');
+    const submitBtn = $('btn-gh-import');
+    if (!repoUrl) return;
+
+    if (submitBtn) submitBtn.disabled = true;
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.textContent = '⏳ 正在向 GitHub Issues API 匯入公開倉庫任務...';
+    }
+
+    try {
+      app.lastLocalMutationAt = Date.now();
+      const res = await apiFetch('/api/github/import-issues', {
+        method: 'POST',
+        body: {
+          repoUrl,
+          track,
+          projectId: projectId || undefined,
+          maxIssues: 3,
+        },
+      });
+      applyNewState(res.state);
+      soundFX.playVerify();
+      const modeTag = res.fallbackUsed ? `（離線預覽：${res.fallbackReason || '限流降級'}）` : '（真實 GitHub Issue）';
+      const summary = `✅ 已從 ${res.repo?.fullName || repoUrl} 匯入 ${res.importedCount} 張任務卡至《${res.project?.shortName || res.project?.name}》${modeTag}`;
+      if (resultEl) resultEl.textContent = summary;
+      showToast(summary, 'success', 4800);
+      $('gh-import-repo').value = '';
+      if (track === 'api_auto') {
+        switchTab('factory');
+      }
+    } catch (err) {
+      soundFX.playReject();
+      if (resultEl) resultEl.textContent = `❌ 匯入失敗：${err.message}`;
+      showToast(`GitHub 匯入失敗：${err.message}`, 'error', 4200);
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
   // Reset world button
   $('btn-reset-world').addEventListener('click', async () => {
     if (!window.confirm('確定要重置像素算力鎮示範世界？所有測試任務、進度與帳本將回到初始創世狀態。')) {
@@ -1634,10 +1893,13 @@ function bindEvents() {
     try {
       setAutoPilot(false);
       $('toggle-autopilot').checked = false;
+      app.lastLocalMutationAt = Date.now();
       const res = await apiFetch('/api/reset', { method: 'POST' });
-      applyNewState(res.state);
+      resetTransientUiAfterWorldReset();
+      applyNewState(res.state, { silentAchievements: true });
+      seedSeenAchievements(res.state);
       soundFX.playClick();
-      showToast('🔄 示範世界已重置回創世初始狀態！', 'info');
+      showToast(t('toast.resetDone'), 'info');
     } catch (err) {
       showToast(`重置失敗：${err.message}`, 'error');
     }
@@ -1824,6 +2086,14 @@ function bindEvents() {
 // Bootstrap Application
 // ============================================================================
 async function init() {
+  // Apply saved UI language
+  const initialLang = getLang();
+  setLang(initialLang);
+  document.querySelectorAll('#lang-switch [data-lang]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.lang === initialLang);
+  });
+  applyI18nToDom();
+
   bindEvents();
 
   // Initialize PixelTownEngine canvas
@@ -1858,6 +2128,7 @@ async function init() {
     app.shopItems = data.shopItems || [];
     app.workerTemplates = data.workerTemplates || [];
     app.config = data.config || {};
+    seedSeenAchievements(app.state);
     app.engine?.syncState(app.state);
     renderAll();
     connectSse();

@@ -1,0 +1,48 @@
+name: PixelCompute Town CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Zero-Dep Test & Smoke Suite (Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify zero external npm dependencies
+        run: |
+          node -e "
+            const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+            const deps = Object.keys(pkg.dependencies || {});
+            if (deps.length > 0) {
+              console.error('Expected zero runtime dependencies, found:', deps);
+              process.exit(1);
+            }
+            console.log('Zero runtime dependencies verified! Node:', process.version);
+          "
+
+      - name: Run API & Economy Ledger Tests (node:test)
+        run: npm test
+
+      - name: Run Static, Frontend & CLI E2E Smoke Suite
+        run: npm run smoke
+
+      - name: Verify Local BYOT CLI Help & Version
+        run: |
+          node bin/pixel-worker.mjs --version
+          node bin/pixel-worker.mjs --help > /dev/null

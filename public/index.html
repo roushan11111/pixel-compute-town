@@ -13,10 +13,10 @@
       <div class="brand-logo-box" aria-hidden="true">👾</div>
       <div class="brand-titles">
         <div class="brand-name">
-          像素算力鎮
+          <span data-i18n="brand.name">像素算力鎮</span>
           <span class="alpha-pill">ALPHA v1.0</span>
         </div>
-        <div class="brand-sub">PixelCompute Town · BYOK + BYOT 雙軌孵化</div>
+        <div class="brand-sub" data-i18n="brand.sub">PixelCompute Town · BYOK + BYOT 雙軌孵化</div>
       </div>
     </div>
 
@@ -31,7 +31,7 @@
       </div>
       <div class="hud-pill rep" title="驗收信譽分（防刷單 Proof of Accepted Work）">
         <span>🛡️</span>
-        <span>信譽 <strong id="hud-rep">100</strong></span>
+        <span><span data-i18n="hud.repPrefix">信譽</span> <strong id="hud-rep">100</strong></span>
       </div>
       <button type="button" class="hud-pill byok-pill" id="btn-byok-pill" title="點擊設定瀏覽器端 BYOK 金鑰（絕不傳給伺服器）">
         <span class="status-dot" id="hud-byok-dot"></span>
@@ -40,18 +40,50 @@
     </div>
 
     <div class="hud-actions">
+      <div class="lang-switch" id="lang-switch" role="group" aria-label="語言切換">
+        <button type="button" class="lang-btn active" data-lang="zh-TW">繁中</button>
+        <button type="button" class="lang-btn" data-lang="zh-CN">简中</button>
+        <button type="button" class="lang-btn" data-lang="en">EN</button>
+      </div>
       <div class="user-badge" id="hud-user-badge">
         <span class="user-avatar-dot" id="hud-user-avatar">🧑‍💻</span>
         <span id="hud-user-name">創始開發者</span>
       </div>
-      <a class="btn btn-sm btn-primary" id="btn-github-login" href="/api/auth/github" style="display: none;">GitHub 登入</a>
-      <button type="button" class="btn btn-sm" id="btn-logout" style="display: none;">登出</button>
+      <a class="btn btn-sm btn-primary" id="btn-github-login" href="/api/auth/github" style="display: none;" data-i18n="hud.githubLogin">GitHub 登入</a>
+      <button type="button" class="btn btn-sm" id="btn-logout" style="display: none;" data-i18n="hud.logout">登出</button>
       <button type="button" class="btn btn-icon" id="btn-day-night" title="切換賽博暖夜 / 清晨白天模式">🌙</button>
       <button type="button" class="btn btn-icon" id="btn-sound-toggle" title="切換 8-bit 復古音效">🔇</button>
-      <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" title="預覽並下載像素風算力打工證 PNG">🪪 打工證</button>
-      <button type="button" class="btn btn-sm" id="btn-open-settings" title="BYOK API Key 與本機 CLI 設定">⚙️ 設定</button>
+      <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" title="預覽並下載像素風算力打工證 PNG" data-i18n="hud.certBtn">🪪 打工證</button>
+      <button type="button" class="btn btn-sm" id="btn-open-settings" title="BYOK API Key 與本機 CLI 設定" data-i18n="hud.settingsBtn">⚙️ 設定</button>
     </div>
   </header>
+
+  <!-- 3 步新手導引條（可收合、隨進度自動打勾） -->
+  <section class="onboarding-wrap" aria-label="新手 3 步快速體驗">
+    <div class="onboarding-bar" id="onboarding-bar">
+      <div class="onboarding-head">
+        <div class="onboarding-title">
+          <span data-i18n="onboarding.title">🧭 創世鎮長 3 步快速體驗</span>
+          <span class="badge amber" id="onboarding-progress-badge">0 / 3</span>
+        </div>
+        <button type="button" class="btn btn-sm" id="btn-toggle-onboarding" data-i18n="onboarding.collapse">收合導引</button>
+      </div>
+      <div class="onboarding-steps">
+        <button type="button" class="onboarding-step" id="onboarding-step-1" data-onboarding-jump="factory">
+          <span id="onboarding-icon-1">⬜</span>
+          <span data-i18n="onboarding.step1">1. 派小人完成首單並通過驗收</span>
+        </button>
+        <button type="button" class="onboarding-step" id="onboarding-step-2" data-onboarding-jump="incubator">
+          <span id="onboarding-icon-2">⬜</span>
+          <span data-i18n="onboarding.step2">2. 幫 PixelPomo 投滿票破土立項</span>
+        </button>
+        <button type="button" class="onboarding-step" id="onboarding-step-3" data-onboarding-jump="cert">
+          <span id="onboarding-icon-3">⬜</span>
+          <span data-i18n="onboarding.step3">3. 項目上線分紅或匯出打工證</span>
+        </button>
+      </div>
+    </div>
+  </section>
 
   <!-- 主工作區：左側像素舞台 + 右側五大控制台 -->
   <main class="workspace">
@@ -70,16 +102,16 @@
         </div>
 
         <div class="quick-nav-bar">
-          <span class="mono" style="font-size: 11px; color: var(--text-muted);">快捷視角：</span>
-          <button type="button" class="quick-chip active" data-building="factory">🏭 自動工坊</button>
-          <button type="button" class="quick-chip" data-building="guild">⚔️ 懸賞工會</button>
-          <button type="button" class="quick-chip" data-building="launchpad">🚀 孵化廣場</button>
-          <button type="button" class="quick-chip" data-building="lounge">☕ 算力宿舍</button>
+          <span class="mono" style="font-size: 11px; color: var(--text-muted);" data-i18n="stage.quickNav">快捷視角：</span>
+          <button type="button" class="quick-chip active" data-building="factory" data-i18n="stage.navFactory">🏭 自動工坊</button>
+          <button type="button" class="quick-chip" data-building="guild" data-i18n="stage.navGuild">⚔️ 懸賞工會</button>
+          <button type="button" class="quick-chip" data-building="launchpad" data-i18n="stage.navLaunchpad">🚀 孵化廣場</button>
+          <button type="button" class="quick-chip" data-building="lounge" data-i18n="stage.navLounge">☕ 算力宿舍</button>
         </div>
 
         <div class="canvas-stage" id="canvas-stage">
           <canvas id="town-canvas" width="540" height="340"></canvas>
-          <div class="stage-overlay-hint" id="stage-overlay-hint">點擊建築或像素小人可快速切換對應控制台</div>
+          <div class="stage-overlay-hint" id="stage-overlay-hint" data-i18n="stage.hintDefault">點擊建築或像素小人可快速切換對應控制台</div>
         </div>
 
         <div class="stage-worker-strip" id="stage-worker-strip">
@@ -92,13 +124,13 @@
         <div class="terminal-header">
           <div class="terminal-title">
             <span>&gt;_</span>
-            <span>小鎮即時動態終端（含 AI 交付與本機 CLI 心跳）</span>
+            <span data-i18n="terminal.title">小鎮即時動態終端（含 AI 交付與本機 CLI 心跳）</span>
           </div>
           <div class="feed-filters">
-            <button type="button" class="feed-filter-btn active" data-feed-filter="all">全部</button>
-            <button type="button" class="feed-filter-btn" data-feed-filter="deliverable">交付</button>
-            <button type="button" class="feed-filter-btn" data-feed-filter="revenue">分紅</button>
-            <button type="button" class="feed-filter-btn" data-feed-filter="cli">CLI</button>
+            <button type="button" class="feed-filter-btn active" data-feed-filter="all" data-i18n="terminal.filterAll">全部</button>
+            <button type="button" class="feed-filter-btn" data-feed-filter="deliverable" data-i18n="terminal.filterDeliverable">交付</button>
+            <button type="button" class="feed-filter-btn" data-feed-filter="revenue" data-i18n="terminal.filterRevenue">分紅</button>
+            <button type="button" class="feed-filter-btn" data-feed-filter="cli" data-i18n="terminal.filterCli">CLI</button>
           </div>
         </div>
         <div class="terminal-feed" id="activity-feed">
@@ -112,49 +144,49 @@
       <nav class="tab-bar" role="tablist">
         <button type="button" class="tab-btn active" data-tab="factory" role="tab" aria-selected="true">
           <span class="tab-icon">🏭</span>
-          <span>自動工坊</span>
+          <span data-i18n="tab.factory">自動工坊</span>
         </button>
         <button type="button" class="tab-btn" data-tab="guild" role="tab" aria-selected="false">
           <span class="tab-icon">⚔️</span>
-          <span>懸賞工會</span>
+          <span data-i18n="tab.guild">懸賞工會</span>
         </button>
         <button type="button" class="tab-btn" data-tab="incubator" role="tab" aria-selected="false">
           <span class="tab-icon">🚀</span>
-          <span>孵化廣場</span>
+          <span data-i18n="tab.incubator">孵化廣場</span>
         </button>
         <button type="button" class="tab-btn" data-tab="workers" role="tab" aria-selected="false">
           <span class="tab-icon">👾</span>
-          <span>小人商店</span>
+          <span data-i18n="tab.workers">小人商店</span>
         </button>
         <button type="button" class="tab-btn" data-tab="revenue" role="tab" aria-selected="false">
           <span class="tab-icon">💰</span>
-          <span>創作者收益</span>
+          <span data-i18n="tab.revenue">創作者收益</span>
         </button>
       </nav>
 
       <!-- Tab 1: 自動工坊 (API 任務) -->
       <div class="tab-pane active" id="tab-factory" data-pane="factory">
         <div class="info-banner">
-          <span>⚡ <strong>API 軌道（BYOK 零信任）</strong>：支援瀏覽器直連 Gemini API / OpenAI 相容端點，未填 Key 亦可免門檻擬真體驗！</span>
-          <button type="button" class="btn btn-sm btn-primary" id="btn-factory-byok">🔑 設定 API Key</button>
+          <span data-i18n-html="factory.banner">⚡ <strong>API 軌道（BYOK 零信任）</strong>：支援瀏覽器直連 Gemini API / OpenAI 相容端點，未填 Key 亦可免門檻擬真體驗！</span>
+          <button type="button" class="btn btn-sm btn-primary" id="btn-factory-byok" data-i18n="factory.keyBtn">🔑 設定 API Key</button>
         </div>
 
         <div class="section-toolbar">
           <div class="toolbar-group">
             <select class="select select-inline" id="factory-project-filter" aria-label="篩選項目">
-              <option value="all">全部項目</option>
+              <option value="all" data-i18n="factory.allProjects">全部項目</option>
             </select>
             <select class="select select-inline" id="factory-status-filter" aria-label="篩選狀態">
-              <option value="all">全部狀態</option>
-              <option value="open">可接單</option>
-              <option value="completed">已驗收</option>
+              <option value="all" data-i18n="factory.allStatus">全部狀態</option>
+              <option value="open" data-i18n="factory.statusOpen">可接單</option>
+              <option value="completed" data-i18n="factory.statusCompleted">已驗收</option>
             </select>
           </div>
           <div class="toolbar-group">
             <select class="select select-inline" id="factory-worker-select" aria-label="選擇 API 小人"></select>
             <label class="autopilot-toggle" id="autopilot-label" title="每 6 秒自動為閒置 API 小人接單並執行驗收">
               <input type="checkbox" id="toggle-autopilot" />
-              <span>🤖 自動掛機</span>
+              <span data-i18n="factory.autopilot">🤖 自動掛機</span>
             </label>
           </div>
         </div>
@@ -167,17 +199,37 @@
       <!-- Tab 2: 懸賞工會 (月/週額度 BYOT) -->
       <div class="tab-pane" id="tab-guild" data-pane="guild">
         <div class="info-banner amber">
-          <span>⚔️ <strong>月／週訂閱額度軌道（BYOT 合規）</strong>：接單後複製標準化 Context Pack 給本機 Gemini CLI / Claude Code / Codex，或跑 <code class="mono">pixel-worker</code> 即時直播小人幹活！</span>
+          <span data-i18n-html="guild.banner">⚔️ <strong>月／週訂閱額度軌道（BYOT 合規）</strong>：接單後複製標準化 Context Pack 給本機 Gemini CLI / Claude Code / Codex，或跑 <code class="mono">pixel-worker</code> 即時直播小人幹活！</span>
         </div>
+
+        <!-- GitHub 公開倉庫 Issue 實單匯入面板 -->
+        <form class="github-import-card" id="github-import-form">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+            <strong style="font-size: 12px; color: var(--accent-cyan);" data-i18n="guild.importTitle">🔗 從 GitHub 公開倉庫匯入真實 Issue 為懸賞任務</strong>
+            <span class="badge cyan">GitHub Issues API</span>
+          </div>
+          <div class="github-import-row">
+            <input class="input mono" id="gh-import-repo" type="text" required data-i18n-placeholder="guild.importPlaceholder" placeholder="輸入 owner/repo 或完整 GitHub 網址（例：vercel/next.js）" />
+            <select class="select select-inline" id="gh-import-track" aria-label="匯入軌道">
+              <option value="guild_bounty" data-i18n="guild.importTrackGuild">懸賞工會 (BYOT)</option>
+              <option value="api_auto" data-i18n="guild.importTrackApi">自動工坊 (API)</option>
+            </select>
+            <select class="select select-inline" id="gh-import-project" aria-label="歸屬項目">
+              <option value="" data-i18n="guild.importAutoProj">自動建立對應項目</option>
+            </select>
+            <button type="submit" class="btn btn-primary" id="btn-gh-import" data-i18n="guild.importBtn">📥 匯入 Issue</button>
+          </div>
+          <div id="gh-import-result" class="mono" style="font-size: 11px; color: var(--text-sub); display: none;"></div>
+        </form>
 
         <div class="section-toolbar">
           <div class="toolbar-group">
             <select class="select select-inline" id="guild-project-filter" aria-label="篩選工會項目">
-              <option value="all">全部項目</option>
+              <option value="all" data-i18n="factory.allProjects">全部項目</option>
             </select>
           </div>
           <div class="toolbar-group">
-            <span class="mono" style="font-size: 11px; color: var(--text-muted);">派駐工會小人：</span>
+            <span class="mono" style="font-size: 11px; color: var(--text-muted);" data-i18n="guild.workerLabel">派駐工會小人：</span>
             <select class="select select-inline" id="guild-worker-select" aria-label="選擇工會小人"></select>
           </div>
         </div>
@@ -193,7 +245,10 @@
           <div class="mono" style="font-size: 12px; color: var(--text-sub);" id="incubator-summary">
             投票立項 → 雙軌共建 → 上線透明分紅（30% 發起人 / 60% 貢獻者 / 10% 平臺）
           </div>
-          <button type="button" class="btn btn-pink" id="btn-open-propose">＋ 我要提案新項目</button>
+          <div class="toolbar-group">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-incubator-jump-import" data-i18n="incubator.jumpImport">🔗 匯入 GitHub Issue</button>
+            <button type="button" class="btn btn-pink" id="btn-open-propose" data-i18n="incubator.proposeBtn">＋ 我要提案新項目</button>
+          </div>
         </div>
 
         <div class="card-list" id="project-list">
@@ -204,14 +259,22 @@
       <!-- Tab 4: 小人與商店 -->
       <div class="tab-pane" id="tab-workers" data-pane="workers">
         <div class="subsection-title">
-          <span>🤖 我的算力小人（管理體力上限與裝扮）</span>
+          <span data-i18n="workers.myWorkers">🤖 我的算力小人（管理體力上限與裝扮）</span>
         </div>
         <div class="card-list" id="worker-list">
           <div class="empty-state">載入算力小人中...</div>
         </div>
 
         <div class="subsection-title">
-          <span>✨ 招募新算力小人（4 大職業任選）</span>
+          <span data-i18n="workers.achievements">🏆 創世成就牆（自動解鎖領金幣＋印上打工證）</span>
+          <span class="badge gold" id="achievements-summary">0 / 6</span>
+        </div>
+        <div class="achievements-grid" id="achievements-list">
+          <div class="empty-state">載入創世成就中...</div>
+        </div>
+
+        <div class="subsection-title">
+          <span data-i18n="workers.recruitTitle">✨ 招募新算力小人（4 大職業任選）</span>
         </div>
         <form class="recruit-box" id="recruit-form">
           <div class="form-grid">
@@ -238,25 +301,25 @@
             </div>
           </div>
           <div style="display: flex; justify-content: flex-end;">
-            <button type="submit" class="btn btn-primary">＋ 招募並進駐小鎮</button>
+            <button type="submit" class="btn btn-primary" data-i18n="workers.recruitBtn">＋ 招募並進駐小鎮</button>
           </div>
         </form>
 
         <div class="subsection-title">
-          <span>🛍️ 像素外觀、機房裝潢與 Pro 會員商店</span>
+          <span data-i18n="workers.shopTitle">🛍️ 像素外觀、機房裝潢與 Pro 會員商店</span>
         </div>
         <div class="two-col-grid" id="shop-list">
           <div class="empty-state">載入商店品項中...</div>
         </div>
 
         <div class="subsection-title">
-          <span>🪪 像素風《算力打工證 PNG》分享卡</span>
+          <span data-i18n="workers.certTitle">🪪 像素風《算力打工證 PNG》分享卡</span>
         </div>
         <div class="pixel-card">
-          <div class="card-subtitle">一鍵生成專屬復古像素證件，展示你的信譽分、完工數與項目持倉分紅，發推炫耀超吸睛！</div>
+          <div class="card-subtitle" data-i18n="workers.certDesc">一鍵生成專屬復古像素證件，展示你的信譽分、完工數、成就徽章與項目持倉分紅，發推炫耀超吸睛！</div>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button type="button" class="btn btn-amber" id="btn-workers-preview-cert">👁️ 預覽打工證 PNG</button>
-            <button type="button" class="btn btn-green" id="btn-workers-download-cert">⬇️ 直接下載 PNG</button>
+            <button type="button" class="btn btn-amber" id="btn-workers-preview-cert" data-i18n="workers.previewCert">👁️ 預覽打工證 PNG</button>
+            <button type="button" class="btn btn-green" id="btn-workers-download-cert" data-i18n="workers.downloadCert">⬇️ 直接下載 PNG</button>
           </div>
         </div>
       </div>
@@ -265,47 +328,47 @@
       <div class="tab-pane" id="tab-revenue" data-pane="revenue">
         <div class="revenue-hero">
           <div>
-            <div style="font-size: 12px; color: var(--text-sub);">創作者平臺累計總變現（USD）</div>
+            <div style="font-size: 12px; color: var(--text-sub);" data-i18n="revenue.totalLabel">創作者平臺累計總變現（USD）</div>
             <div class="revenue-hero-amount" id="rev-total-usd">$0.00</div>
           </div>
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
             <span class="badge green">透明帳本即時結算</span>
-            <button type="button" class="btn btn-sm btn-danger" id="btn-reset-world" title="重置測試世界資料">🔄 重置示範世界</button>
+            <button type="button" class="btn btn-sm btn-danger" id="btn-reset-world" title="重置測試世界資料" data-i18n="revenue.resetBtn">🔄 重置示範世界</button>
           </div>
         </div>
 
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">⚔️ 現金懸賞 10% 託管抽成</div>
+            <div class="kpi-label" data-i18n="revenue.kpiBounty">⚔️ 現金懸賞 10% 託管抽成</div>
             <div class="kpi-value" id="rev-bounty-fees">$0.00</div>
             <div class="kpi-sub">每筆現金懸賞驗收自動結算</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">🚀 孵化分紅池 10% Carry</div>
+            <div class="kpi-label" data-i18n="revenue.kpiCarry">🚀 孵化分紅池 10% Carry</div>
             <div class="kpi-value" id="rev-incubation-carry">$0.00</div>
             <div class="kpi-sub">項目上線與後續營收自動入帳</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">📺 像素廣場霓虹廣告位</div>
+            <div class="kpi-label" data-i18n="revenue.kpiAds">📺 像素廣場霓虹廣告位</div>
             <div class="kpi-value" id="rev-billboard-ads">$0.00</div>
             <div class="kpi-sub">$29/位 · 同步點亮小鎮霓虹招牌</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">✨ 像素皮膚與 Pro 會員</div>
+            <div class="kpi-label" data-i18n="revenue.kpiPro">✨ 像素皮膚與 Pro 會員</div>
             <div class="kpi-value" id="rev-pro-skins">$0.00</div>
             <div class="kpi-sub">純外觀與效率加成，絕不賣戰力</div>
           </div>
         </div>
 
         <div class="subsection-title">
-          <span>📒 平臺營收流水紀錄</span>
+          <span data-i18n="revenue.historyTitle">📒 平臺營收流水紀錄</span>
         </div>
         <div class="ledger-list" id="rev-history-list">
           <div class="empty-state">尚無營收流水，快去驗收懸賞、租用廣告位或發布項目吧！</div>
         </div>
 
         <div class="subsection-title">
-          <span>🏆 全鎮創世貢獻排行榜</span>
+          <span data-i18n="revenue.leaderboardTitle">🏆 全鎮創世貢獻排行榜</span>
         </div>
         <div class="ledger-list" id="leaderboard-list">
           <div class="empty-state">載入排行榜中...</div>

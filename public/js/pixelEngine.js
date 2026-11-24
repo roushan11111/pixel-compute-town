@@ -61,11 +61,11 @@ const BUILDINGS = {
     hubNode: 'in_lounge',
     accent: '#f472b6',
     spots: [
-      { x: 48, y: 262, kind: 'coffee' },
-      { x: 104, y: 262, kind: 'sofa' },
-      { x: 48, y: 302, kind: 'pad' },
-      { x: 96, y: 302, kind: 'pad' },
-      { x: 144, y: 302, kind: 'pad' },
+      { x: 42, y: 268, kind: 'coffee' },
+      { x: 134, y: 268, kind: 'sofa' },
+      { x: 38, y: 306, kind: 'pad' },
+      { x: 96, y: 306, kind: 'pad' },
+      { x: 154, y: 306, kind: 'pad' },
     ],
   },
   launchpad: {
@@ -211,6 +211,18 @@ function truncateText(text, maxChars) {
   return str.length > maxChars ? `${str.slice(0, maxChars - 1)}…` : str;
 }
 
+/**
+ * Strip parenthetical suffix (e.g. "閃電小吉 (Flash-01)" -> "閃電小吉")
+ * so worker canvas nameplates stay crisp, legible, and never crowd.
+ */
+function formatWorkerNameplate(name) {
+  if (!name) return '小人';
+  const cleaned = String(name)
+    .replace(/\s*[（(][^）)]*[）)]\s*$/g, '')
+    .trim();
+  return truncateText(cleaned || String(name).trim(), 9);
+}
+
 export class PixelTownEngine {
   /**
    * @param {HTMLCanvasElement} canvas
@@ -230,12 +242,15 @@ export class PixelTownEngine {
     this.lastFrameTs = 0;
     this.rafId = null;
 
-    // World state snapshot
+    // World state snapshot & live shop decor
     this.state = {
       workers: [],
       projects: [],
       tasks: [],
     };
+    this.ownedDecor = new Set();
+    this.playerIsPro = false;
+    this.unlockedAchievements = 0;
 
     // Animated worker agents keyed by workerId
     this.agents = new Map();
@@ -250,6 +265,8 @@ export class PixelTownEngine {
     this.fireworkRockets = [];
     this.fireworkSparks = [];
     this.dataParticles = [];
+    this.meteors = [];
+    this.nextMeteorIn = 3.2;
     this.launchBannerTimer = 0;
     this.launchBannerText = '';
     this.ambientFlash = 0;
@@ -257,13 +274,20 @@ export class PixelTownEngine {
     // Billboard scrolling state
     this.marqueeOffset = 0;
 
-    // Decorative stars / fireflies (deterministic pseudo-random)
-    this.stars = Array.from({ length: 34 }, (_, i) => ({
-      x: (i * 53 + 17) % LOGICAL_W,
-      y: (i * 19 + 4) % 22,
-      phase: i * 0.7,
-      size: i % 5 === 0 ? 2 : 1,
+    // Decorative stars, clouds & fireflies (deterministic pseudo-random)
+    this.stars = Array.from({ length: 44 }, (_, i) => ({
+      x: (i * 47 + 13) % LOGICAL_W,
+      y: (i * 17 + 3) % 21,
+      phase: i * 0.73,
+      size: i % 6 === 0 ? 2 : 1,
+      tint: i % 5 === 0 ? '#67e8f9' : i % 7 === 0 ? '#fde68a' : '#e2e8f0',
     }));
+    this.clouds = [
+      { x: 30, y: 4, w: 28, speed: 4.2 },
+      { x: 180, y: 8, w: 34, speed: 3.1 },
+      { x: 345, y: 5, w: 24, speed: 4.8 },
+      { x: 470, y: 9, w: 30, speed: 2.8 },
+    ];
     this.fireflies = Array.from({ length: 12 }, (_, i) => ({
       baseX: 192 + ((i * 41) % 156),
       baseY: 112 + ((i * 29) % 120),
@@ -320,6 +344,24 @@ export class PixelTownEngine {
       tasks: Array.isArray(raw.tasks) ? raw.tasks : [],
     };
 
+    // Sync owned shop decor & items for live in-town rendering
+    const player = raw.player || {};
+    const decorSet = new Set();
+    if (Array.isArray(player.ownedDecor)) {
+      for (const id of player.ownedDecor) decorSet.add(String(id));
+    }
+    if (Array.isArray(player.ownedItems)) {
+      for (const id of player.ownedItems) decorSet.add(String(id));
+    }
+    if (Array.isArray(player.ownedSkins)) {
+      for (const id of player.ownedSkins) decorSet.add(String(id));
+    }
+    this.ownedDecor = decorSet;
+    this.playerIsPro = Boolean(player.isPro || decorSet.has('pro-pass-monthly'));
+    this.unlockedAchievements = Array.isArray(raw.achievements)
+      ? raw.achievements.filter((a) => a && a.unlocked).length
+      : 0;
+
     const activeIds = new Set();
     const occupiedFactorySeats = new Set();
     const occupiedGuildSeats = new Set();
@@ -350,11 +392,13 @@ export class PixelTownEngine {
       let agent = this.agents.get(w.id);
       const busy = this._isWorkerBusy(w);
       const targetBuilding = this._getWorkBuildingForWorker(w);
+      const stamina = Number(w.stamina ?? 100);
+      const maxStamina = Math.max(1, Number(w.maxStamina ?? 100));
 
       if (!agent) {
         const startSpot = busy
           ? this._claimSeat(targetBuilding, occupiedFactorySeats, occupiedGuildSeats, idx)
-          : this._getLoungeSpot(idx);
+          : this._getLoungeSpot(idx, w.id);
 
         agent = {
           id: w.id,
@@ -362,13 +406,18 @@ export class PixelTownEngine {
           roleClass: w.roleClass || 'flash_worker',
           skinId: w.skin || w.skinId || 'default',
           track: w.track || 'api',
+          providerLabel: w.providerLabel || '',
           level: w.level || 1,
+          stamina,
+          maxStamina,
+          completedCount: Number(w.completedCount ?? 0),
           x: startSpot.x,
           y: startSpot.y,
           flipX: false,
           zone: busy ? targetBuilding : 'lounge',
           seatBuilding: busy ? targetBuilding : null,
           seatIndex: busy ? startSpot.seatIndex : null,
+          loungeSpotIndex: busy ? null : startSpot.spotIndex,
           path: [],
           anim: busy ? 'work' : 'idle',
           speed: 44 + (idx % 3) * 5,
@@ -387,18 +436,24 @@ export class PixelTownEngine {
         agent.roleClass = w.roleClass || agent.roleClass;
         agent.skinId = w.skin || w.skinId || 'default';
         agent.track = w.track || agent.track;
+        agent.providerLabel = w.providerLabel || agent.providerLabel;
         agent.level = w.level || agent.level;
+        agent.stamina = stamina;
+        agent.maxStamina = maxStamina;
+        agent.completedCount = Number(w.completedCount ?? agent.completedCount ?? 0);
         agent.taskTitle = this._findWorkerTaskTitle(w);
 
         if (busy && agent.seatBuilding !== targetBuilding) {
           const seat = this._claimSeat(targetBuilding, occupiedFactorySeats, occupiedGuildSeats, idx);
           agent.seatBuilding = targetBuilding;
           agent.seatIndex = seat.seatIndex;
+          agent.loungeSpotIndex = null;
           this._routeAgentTo(agent, targetBuilding, seat.x, seat.y);
         } else if (!busy && agent.seatBuilding !== null && agent.cliTimer <= 0) {
           agent.seatBuilding = null;
           agent.seatIndex = null;
-          const spot = this._getLoungeSpot(idx);
+          const spot = this._getLoungeSpot(idx, agent.id);
+          agent.loungeSpotIndex = spot.spotIndex;
           this._routeAgentTo(agent, 'lounge', spot.x, spot.y);
         }
       }
@@ -646,9 +701,32 @@ export class PixelTownEngine {
     return { ...b.seats[idx], seatIndex: idx };
   }
 
-  _getLoungeSpot(index) {
+  _getLoungeSpot(index, excludeWorkerId = null) {
     const spots = BUILDINGS.lounge.spots;
-    return spots[Math.abs(index) % spots.length];
+    const used = new Set();
+    for (const [id, ag] of this.agents.entries()) {
+      if (id !== excludeWorkerId && ag.loungeSpotIndex != null) {
+        used.add(ag.loungeSpotIndex);
+      }
+    }
+    const startIdx = Math.abs(index) % spots.length;
+    for (let offset = 0; offset < spots.length; offset++) {
+      const candidate = (startIdx + offset) % spots.length;
+      if (!used.has(candidate)) {
+        return { ...spots[candidate], spotIndex: candidate };
+      }
+    }
+    return { ...spots[startIdx], spotIndex: startIdx };
+  }
+
+  _hasDecor(...keywords) {
+    if (!this.ownedDecor || this.ownedDecor.size === 0) return false;
+    for (const id of this.ownedDecor) {
+      for (const kw of keywords) {
+        if (id === kw || id.includes(kw)) return true;
+      }
+    }
+    return false;
   }
 
   _getNearestWaypointForAgent(agent) {
@@ -865,6 +943,30 @@ export class PixelTownEngine {
     if (this.launchBannerTimer > 0) this.launchBannerTimer = Math.max(0, this.launchBannerTimer - dt);
     if (this.ambientFlash > 0) this.ambientFlash = Math.max(0, this.ambientFlash - dt * 0.9);
 
+    // Night shooting stars (occasional meteors streaking across top sky)
+    if (this.dayNight === 'night') {
+      this.nextMeteorIn -= dt;
+      if (this.nextMeteorIn <= 0) {
+        this.nextMeteorIn = 4.2 + Math.random() * 4.8;
+        this.meteors.push({
+          x: 60 + Math.random() * (LOGICAL_W - 140),
+          y: 2 + Math.random() * 6,
+          vx: 88 + Math.random() * 42,
+          vy: 20 + Math.random() * 14,
+          life: 0.65,
+          maxLife: 0.65,
+          color: Math.random() < 0.5 ? '#67e8f9' : '#fef08a',
+        });
+      }
+    }
+    for (let i = this.meteors.length - 1; i >= 0; i--) {
+      const m = this.meteors[i];
+      m.x += m.vx * dt;
+      m.y += m.vy * dt;
+      m.life -= dt;
+      if (m.life <= 0 || m.y > 23) this.meteors.splice(i, 1);
+    }
+
     // Update worker agents
     for (const agent of this.agents.values()) {
       if (agent.bubbleTimer > 0) {
@@ -933,8 +1035,10 @@ export class PixelTownEngine {
               const py = 176 + Math.random() * 24;
               this._routeAgentTo(agent, 'plaza', px, py);
             } else {
-              // Move between coffee machine, sofa, and charging pads inside lounge
-              const spot = BUILDINGS.lounge.spots[Math.floor(Math.random() * BUILDINGS.lounge.spots.length)];
+              // Move between unoccupied coffee, sofa, and charging pads inside lounge
+              const randIdx = Math.floor(Math.random() * BUILDINGS.lounge.spots.length);
+              const spot = this._getLoungeSpot(randIdx, agent.id);
+              agent.loungeSpotIndex = spot.spotIndex;
               this._routeAgentTo(agent, 'lounge', spot.x, spot.y);
             }
           }
@@ -1067,6 +1171,7 @@ export class PixelTownEngine {
     }
     this._drawParticlesAndFireworks(g);
     this._drawLaunchBanner(g);
+    this._drawWorkerHoverCard(g, isNight);
 
     // 8. Blit logical buffer sharply onto main display canvas
     const ctx = this.ctx;
@@ -1094,21 +1199,42 @@ export class PixelTownEngine {
     g.fillRect(0, 14, LOGICAL_W, 10);
 
     if (isNight) {
-      // Twinkling stars
+      // Twinkling multi-tint pixel stars
       for (const s of this.stars) {
-        const alpha = 0.35 + 0.65 * Math.abs(Math.sin(this.time * 1.8 + s.phase));
-        g.fillStyle = `rgba(226, 232, 240, ${alpha.toFixed(2)})`;
+        const alpha = 0.28 + 0.72 * Math.abs(Math.sin(this.time * 1.9 + s.phase));
+        g.globalAlpha = Number(alpha.toFixed(2));
+        g.fillStyle = s.tint || '#e2e8f0';
         g.fillRect(s.x, s.y, s.size, s.size);
       }
+      g.globalAlpha = 1;
+
+      // Occasional pixel shooting stars (meteors)
+      for (const m of this.meteors) {
+        const progress = Math.max(0, m.life / m.maxLife);
+        const mx = Math.round(m.x);
+        const my = Math.round(m.y);
+        for (let t = 0; t < 7; t++) {
+          g.globalAlpha = Number((progress * (1 - t / 7)).toFixed(2));
+          g.fillStyle = t === 0 ? '#ffffff' : m.color;
+          g.fillRect(mx - t * 3, my - Math.round(t * 0.8), t === 0 ? 2 : 1, 1);
+        }
+      }
+      g.globalAlpha = 1;
     } else {
-      // Soft drifting pixel clouds
-      g.fillStyle = '#ffffff';
-      const c1 = Math.floor((this.time * 5) % (LOGICAL_W + 60)) - 30;
-      const c2 = Math.floor((this.time * 3.5 + 220) % (LOGICAL_W + 60)) - 30;
-      g.fillRect(c1, 6, 22, 5);
-      g.fillRect(c1 + 4, 3, 14, 4);
-      g.fillRect(c2, 9, 26, 5);
-      g.fillRect(c2 + 6, 6, 14, 4);
+      // Multi-layer fluffy drifting pixel clouds
+      for (const cl of this.clouds) {
+        const cx = Math.floor((cl.x + this.time * cl.speed) % (LOGICAL_W + 70)) - 35;
+        const cy = cl.y;
+        const cw = cl.w;
+        // Soft cloud shadow base
+        g.fillStyle = '#e0f2fe';
+        g.fillRect(cx + 1, cy + 5, cw - 2, 2);
+        // Fluffy white pixel puffs
+        g.fillStyle = '#ffffff';
+        g.fillRect(cx, cy + 2, cw, 4);
+        g.fillRect(cx + 4, cy, Math.max(8, cw - 10), 3);
+        g.fillRect(cx + Math.round(cw * 0.45), cy - 1, Math.max(6, Math.round(cw * 0.3)), 3);
+      }
     }
 
     // Town ground base with subtle tile texture
@@ -1241,11 +1367,20 @@ export class PixelTownEngine {
     g.fillStyle = '#22d3ee';
     g.fillRect(154, b.y + b.h - 4, 18, 1);
 
-    // Blinking Server Racks
+    // Blinking Server Racks (upgrades to Neon Overclocked Racks when shop decor owned!)
     const rackFrame = Math.floor(this.time * 2.5) % 2;
-    drawObjectSprite(g, 'server_rack', b.x + 7, b.y + 28, 1, rackFrame);
-    drawObjectSprite(g, 'server_rack', b.x + 21, b.y + 28, 1, (rackFrame + 1) % 2);
-    drawObjectSprite(g, 'server_rack', b.x + 7, b.y + 46, 1, (rackFrame + 1) % 2);
+    const hasNeonRack = this._hasDecor('decor-neon-rack', 'neon-rack', 'server');
+    const rackSprite = hasNeonRack ? 'neon_server_rack' : 'server_rack';
+    if (hasNeonRack && isNight) {
+      g.fillStyle = 'rgba(244, 114, 182, 0.14)';
+      g.fillRect(b.x + 5, b.y + 26, 30, 36);
+    }
+    drawObjectSprite(g, rackSprite, b.x + 7, b.y + 28, 1, rackFrame);
+    drawObjectSprite(g, rackSprite, b.x + 21, b.y + 28, 1, (rackFrame + 1) % 2);
+    drawObjectSprite(g, rackSprite, b.x + 7, b.y + 46, 1, (rackFrame + 1) % 2);
+    if (hasNeonRack) {
+      drawObjectSprite(g, 'neon_server_rack', b.x + 21, b.y + 46, 1, rackFrame);
+    }
 
     // Rotating bronze gears mounted on roof corners
     const gearFrame = Math.floor(this.time * 4) % 2;
@@ -1326,17 +1461,31 @@ export class PixelTownEngine {
     g.fillStyle = '#f472b6';
     g.fillRect(154, b.y + 3, 18, 1);
 
-    // Coffee counter + Steaming Coffee Machine
-    g.fillStyle = '#78350f';
-    g.fillRect(b.x + 8, b.y + 40, 34, 10);
-    g.fillStyle = '#b45309';
-    g.fillRect(b.x + 8, b.y + 40, 34, 3);
+    // Coffee counter + Steaming Coffee Machine (upgrades to Golden Espresso + Sleeping Cat!)
+    const hasEspresso = this._hasDecor('decor-espresso', 'espresso', 'coffee');
+    const hasCatDecor = hasEspresso || this._hasDecor('skin-cat', 'decor-cat');
+    g.fillStyle = hasEspresso ? '#92400e' : '#78350f';
+    g.fillRect(b.x + 8, b.y + 40, 36, 10);
+    g.fillStyle = hasEspresso ? '#f59e0b' : '#b45309';
+    g.fillRect(b.x + 8, b.y + 40, 36, 3);
     const steamFrame = Math.floor(this.time * 3.2) % 2;
-    drawObjectSprite(g, 'coffee_machine', b.x + 14, b.y + 29, 1, steamFrame);
+    if (hasEspresso) {
+      if (isNight) {
+        g.fillStyle = 'rgba(251, 191, 36, 0.16)';
+        g.fillRect(b.x + 10, b.y + 26, 20, 16);
+      }
+      drawObjectSprite(g, 'gold_espresso', b.x + 13, b.y + 29, 1, steamFrame);
+    } else {
+      drawObjectSprite(g, 'coffee_machine', b.x + 14, b.y + 29, 1, steamFrame);
+    }
 
-    // Plush Sofa & Potted Tree
+    // Plush Sofa, Potted Tree & Cozy Sleeping Pixel Cat (when espresso/cat unlocked)
     drawObjectSprite(g, 'sofa', b.x + 82, b.y + 34, 1, 0);
     drawObjectSprite(g, 'potted_tree', b.x + 150, b.y + 30, 1, steamFrame);
+    if (hasCatDecor) {
+      const catFrame = Math.floor(this.time * 1.4) % 2;
+      drawObjectSprite(g, 'sleeping_cat', b.x + 78, b.y + 56, 1, catFrame);
+    }
 
     // 3 Glowing Charging Pads
     const padFrame = Math.floor(this.time * 2.5) % 2;
@@ -1367,6 +1516,21 @@ export class PixelTownEngine {
     const padY = b.y + 30;
     const padW = 104;
     const padH = 64;
+
+    // Live Genesis Trophy Pedestal when player owns Pro / founder bundle / trophy decor or launched a project
+    const hasTrophy =
+      this.playerIsPro ||
+      this._hasDecor('decor-trophy', 'founder-skin-bundle', 'pro-pass') ||
+      isLaunched ||
+      this.unlockedAchievements >= 2;
+    if (hasTrophy) {
+      const trophyFrame = Math.floor(this.time * 2.4) % 2;
+      if (isNight) {
+        g.fillStyle = 'rgba(253, 224, 71, 0.16)';
+        g.fillRect(b.x + 11, b.y + 58, 16, 18);
+      }
+      drawObjectSprite(g, 'genesis_trophy', b.x + 13, b.y + 60, 1, trophyFrame);
+    }
 
     // Hazard stripe border around launch site
     g.fillStyle = '#1e293b';
@@ -1682,19 +1846,92 @@ export class PixelTownEngine {
       agent.flipX
     );
 
-    // Compact pixel name tag below feet
-    const shortName = truncateText(agent.name, 7);
+    // Clean pixel name tag below feet (parenthetical suffix stripped to prevent crowding)
+    const shortName = formatWorkerNameplate(agent.name);
     g.font = 'bold 7px "Courier New", "Microsoft JhengHei", monospace';
     g.textAlign = 'center';
     g.textBaseline = 'top';
-    const tw = Math.min(48, Math.ceil(g.measureText(shortName).width) + 4);
+    const tw = Math.ceil(g.measureText(shortName).width) + 6;
     const tx = Math.round(agent.x - tw / 2);
     const ty = Math.round(agent.y + 2);
 
-    g.fillStyle = isNight ? 'rgba(9, 13, 26, 0.78)' : 'rgba(255, 255, 255, 0.82)';
+    g.fillStyle = isNight ? 'rgba(9, 13, 26, 0.84)' : 'rgba(255, 255, 255, 0.88)';
     g.fillRect(tx, ty, tw, 9);
     g.fillStyle = agent.anim === 'work' ? meta.accent : isNight ? '#e2e8f0' : '#0f172a';
     g.fillText(shortName, Math.round(agent.x), ty + 1);
+  }
+
+  _drawWorkerHoverCard(g, isNight) {
+    if (!this.hoveredWorkerId) return;
+    const agent = this.agents.get(this.hoveredWorkerId);
+    if (!agent) return;
+
+    const meta = WORKER_ROLE_META[agent.roleClass] || WORKER_ROLE_META.flash_worker;
+    const cleanName = formatWorkerNameplate(agent.name);
+    const staminaPct = Math.max(
+      0,
+      Math.min(100, Math.round(((agent.stamina ?? 100) / Math.max(1, agent.maxStamina ?? 100)) * 100))
+    );
+    const statusLabel =
+      agent.cliTimer > 0
+        ? '💻 CLI 同步中'
+        : agent.anim === 'work'
+          ? '⚡ 執行任務中'
+          : agent.anim === 'walk'
+            ? '🚶 移動中'
+            : agent.anim === 'celebrate'
+              ? '🎉 驗收歡呼'
+              : '☕ 宿舍待命';
+
+    const cardW = 224;
+    const cardH = 30;
+    const cardX = Math.round((LOGICAL_W - cardW) / 2);
+    const cardY = 6;
+
+    // Retro pixel HUD backdrop
+    g.fillStyle = isNight ? 'rgba(9, 13, 26, 0.94)' : 'rgba(15, 23, 42, 0.92)';
+    g.fillRect(cardX, cardY, cardW, cardH);
+    g.strokeStyle = meta.accent;
+    g.lineWidth = 1;
+    g.strokeRect(cardX + 0.5, cardY + 0.5, cardW - 1, cardH - 1);
+
+    // Corner pixel accents
+    g.fillStyle = '#fde047';
+    g.fillRect(cardX, cardY, 3, 2);
+    g.fillRect(cardX + cardW - 3, cardY, 3, 2);
+    g.fillRect(cardX, cardY + cardH - 2, 3, 2);
+    g.fillRect(cardX + cardW - 3, cardY + cardH - 2, 3, 2);
+
+    // Line 1: Badge + Name + Role + Level
+    g.font = 'bold 8px "Courier New", "Microsoft JhengHei", monospace';
+    g.textAlign = 'left';
+    g.textBaseline = 'top';
+    g.fillStyle = '#f8fafc';
+    g.fillText(`${meta.badge} ${cleanName} · ${meta.name}`, cardX + 7, cardY + 4);
+
+    g.textAlign = 'right';
+    g.fillStyle = '#fde047';
+    g.fillText(`LV.${agent.level || 1}`, cardX + cardW - 7, cardY + 4);
+
+    // Line 2: Status + Stamina bar
+    g.font = 'bold 7px "Courier New", "Microsoft JhengHei", monospace';
+    g.textAlign = 'left';
+    g.fillStyle = agent.anim === 'work' || agent.cliTimer > 0 ? '#4ade80' : '#94a3b8';
+    g.fillText(statusLabel, cardX + 7, cardY + 17);
+
+    // Stamina label & mini pixel bar on right side
+    const barW = 54;
+    const barX = cardX + cardW - barW - 7;
+    const barY = cardY + 18;
+    g.textAlign = 'right';
+    g.fillStyle = '#cbd5e1';
+    g.fillText(`體力 ${staminaPct}%`, barX - 4, cardY + 17);
+
+    g.fillStyle = '#1e293b';
+    g.fillRect(barX, barY, barW, 5);
+    const fillW = Math.round(((barW - 2) * staminaPct) / 100);
+    g.fillStyle = staminaPct >= 50 ? '#22c55e' : staminaPct >= 25 ? '#f59e0b' : '#ef4444';
+    g.fillRect(barX + 1, barY + 1, fillW, 3);
   }
 
   _drawSpeechBubble(g, agent) {

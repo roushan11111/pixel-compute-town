@@ -9,6 +9,20 @@ import { drawWorkerSprite, drawObjectSprite } from './sprites.js';
 const CARD_W = 900;
 const CARD_H = 540;
 
+const DEFAULT_ACHIEVEMENTS = [
+  { id: 'first_blood', icon: '⚡', title: '首單開張' },
+  { id: 'dual_track_master', icon: '⚔️', title: '雙軌大師' },
+  { id: 'community_builder', icon: '🗳️', title: '立項推手' },
+  { id: 'launch_founder', icon: '🚀', title: '上線創世者' },
+  { id: 'dividend_earner', icon: '💸', title: '首批分紅股東' },
+  { id: 'cli_pioneer', icon: '💻', title: '本機 CLI 先鋒' },
+];
+
+function stripParenSuffix(str) {
+  if (!str) return '';
+  return String(str).replace(/\s*[（(][^）)]*[）)]\s*$/g, '').trim();
+}
+
 function truncate(str, max) {
   if (!str) return '';
   const s = String(str);
@@ -185,6 +199,29 @@ function extractCertData(input) {
     .sort((a, b) => b.points - a.points || b.progressPct - a.progressPct)
     .slice(0, 4);
 
+  // Normalize Genesis Achievements list (prefer backend state.achievements)
+  const rawAch = Array.isArray(world.achievements)
+    ? world.achievements
+    : Array.isArray(player.achievements)
+      ? player.achievements
+      : [];
+
+  let achievements;
+  if (rawAch.length > 0 && typeof rawAch[0] === 'object') {
+    achievements = rawAch.slice(0, 6).map((a) => ({
+      id: a.id || a.key || '',
+      icon: a.icon || a.emoji || '🏅',
+      title: a.title || a.name || a.label || a.id || '成就',
+      unlocked: Boolean(a.unlocked || a.unlockedAt),
+    }));
+  } else {
+    const unlockedSet = new Set(rawAch.map((id) => String(id)));
+    achievements = DEFAULT_ACHIEVEMENTS.map((def) => ({
+      ...def,
+      unlocked: unlockedSet.has(def.id),
+    }));
+  }
+
   let tier = '創世開拓者';
   if (reputation >= 120 || completedTasks >= 10) tier = '傳奇算力領主';
   else if (reputation >= 105 || completedTasks >= 4) tier = '公會資深大匠';
@@ -202,6 +239,7 @@ function extractCertData(input) {
     tier,
     workers: workers.slice(0, 4),
     holdings,
+    achievements,
   };
 }
 
@@ -270,80 +308,80 @@ export function renderWorkCertificate(state) {
 
   // 3. Header Banner
   ctx.fillStyle = '#0f172a';
-  ctx.fillRect(28, 28, CARD_W - 56, 74);
+  ctx.fillRect(28, 28, CARD_W - 56, 68);
   ctx.fillStyle = '#22d3ee';
-  ctx.fillRect(28, 100, CARD_W - 56, 2);
+  ctx.fillRect(28, 94, CARD_W - 56, 2);
 
   // Header Left Title
-  ctx.font = 'bold 24px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.font = 'bold 23px "Courier New", "Microsoft JhengHei", monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#fef08a';
-  ctx.fillText('★ PIXELCOMPUTE TOWN · 像素算力鎮', 44, 38);
+  ctx.fillText('★ PIXELCOMPUTE TOWN · 像素算力鎮', 44, 36);
 
-  ctx.font = 'bold 13px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#67e8f9';
-  ctx.fillText('《算力打工證 & 透明收益分紅結算單》  PROOF OF ACCEPTED WORK', 46, 72);
+  ctx.fillText('《算力打工證 & 透明收益分紅結算單》  PROOF OF ACCEPTED WORK', 46, 68);
 
   // Header Right Stamp Badge
-  drawPixelBox(ctx, CARD_W - 224, 38, 180, 50, '#1e1b4b', '#fde047', '#f472b6');
+  drawPixelBox(ctx, CARD_W - 224, 36, 180, 48, '#1e1b4b', '#fde047', '#f472b6');
   ctx.textAlign = 'center';
   ctx.font = 'bold 13px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#fde047';
-  ctx.fillText('✔ VERIFIED BUILDER', CARD_W - 134, 48);
+  ctx.fillText('✔ VERIFIED BUILDER', CARD_W - 134, 45);
   const dateStr = new Date().toISOString().slice(0, 10);
   ctx.font = '11px "Courier New", monospace';
   ctx.fillStyle = '#cbd5e1';
-  ctx.fillText(`ISSUED: ${dateStr}`, CARD_W - 134, 68);
+  ctx.fillText(`ISSUED: ${dateStr}`, CARD_W - 134, 65);
 
   // 4. Left Column: Player Profile & Pixel Worker Squad Showcase
   const leftX = 34;
-  const leftY = 116;
+  const leftY = 108;
   const leftW = 316;
-  const leftH = 342;
+  const leftH = 310;
   drawPixelBox(ctx, leftX, leftY, leftW, leftH, '#0d1428', '#334155', '#22d3ee');
 
   // Player Name & Tier
   ctx.textAlign = 'left';
-  ctx.font = 'bold 20px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.font = 'bold 19px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#f8fafc';
-  ctx.fillText(truncate(data.playerName, 14), leftX + 18, leftY + 18);
+  ctx.fillText(truncate(data.playerName, 14), leftX + 18, leftY + 14);
 
   ctx.font = '12px "Courier New", monospace';
   ctx.fillStyle = '#94a3b8';
-  ctx.fillText(truncate(data.handle, 24), leftX + 18, leftY + 46);
+  ctx.fillText(truncate(data.handle, 24), leftX + 18, leftY + 38);
 
   // Tier Pill & Optional Pro Pill
-  drawPixelBox(ctx, leftX + 18, leftY + 68, 146, 24, '#312e81', '#a855f7');
+  drawPixelBox(ctx, leftX + 18, leftY + 58, 146, 24, '#312e81', '#a855f7');
   ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#e9d5ff';
   ctx.textAlign = 'center';
-  ctx.fillText(`✦ ${data.tier}`, leftX + 91, leftY + 74);
+  ctx.fillText(`✦ ${data.tier}`, leftX + 91, leftY + 64);
 
   if (data.isPro) {
-    drawPixelBox(ctx, leftX + 172, leftY + 68, 92, 24, '#78350f', '#fde047');
+    drawPixelBox(ctx, leftX + 172, leftY + 58, 92, 24, '#78350f', '#fde047');
     ctx.fillStyle = '#fef08a';
-    ctx.fillText('👑 PRO 會員', leftX + 218, leftY + 74);
+    ctx.fillText('👑 PRO 會員', leftX + 218, leftY + 64);
   }
 
   // Pixel Squad Stage Box
   const stageX = leftX + 16;
-  const stageY = leftY + 106;
+  const stageY = leftY + 92;
   const stageW = leftW - 32;
-  const stageH = 166;
+  const stageH = 158;
   drawPixelBox(ctx, stageX, stageY, stageW, stageH, '#151d36', '#475569', '#38bdf8');
 
   // Stage Title
   ctx.textAlign = 'left';
   ctx.font = 'bold 11px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#38bdf8';
-  ctx.fillText(`ACTIVE SQUAD · 旗下算力小人 (${data.workers.length})`, stageX + 10, stageY + 10);
+  ctx.fillText(`ACTIVE SQUAD · 旗下算力小人 (${data.workers.length})`, stageX + 10, stageY + 9);
 
   // Glowing platform floor inside stage
   ctx.fillStyle = '#1e293b';
-  ctx.fillRect(stageX + 10, stageY + 118, stageW - 20, 34);
+  ctx.fillRect(stageX + 10, stageY + 112, stageW - 20, 34);
   ctx.fillStyle = '#22d3ee';
-  ctx.fillRect(stageX + 10, stageY + 118, stageW - 20, 2);
+  ctx.fillRect(stageX + 10, stageY + 112, stageW - 20, 2);
 
   // Render actual pixel worker sprites (up to 4) or default hero duo
   const squad =
@@ -357,7 +395,7 @@ export function renderWorkCertificate(state) {
   const slotW = (stageW - 20) / squad.length;
   squad.forEach((w, idx) => {
     const cx = Math.round(stageX + 10 + slotW * idx + slotW / 2);
-    const footY = stageY + 118;
+    const footY = stageY + 112;
     const anim = idx % 2 === 0 ? 'celebrate' : 'idle';
     drawWorkerSprite(
       ctx,
@@ -373,30 +411,30 @@ export function renderWorkCertificate(state) {
     ctx.textAlign = 'center';
     ctx.font = 'bold 10px "Courier New", "Microsoft JhengHei", monospace';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(truncate(w.name || '小人', 7), cx, footY + 8);
+    ctx.fillText(truncate(stripParenSuffix(w.name || '小人'), 7), cx, footY + 7);
     ctx.font = '10px "Courier New", monospace';
     ctx.fillStyle = '#fde047';
-    ctx.fillText(`LV.${w.level || 1}`, cx, footY + 21);
+    ctx.fillText(`LV.${w.level || 1}`, cx, footY + 20);
   });
 
   // Mini Seal / Proof Note at bottom of Left Column
-  drawObjectSprite(ctx, 'coin', leftX + 20, leftY + 288, 3, 0);
+  drawObjectSprite(ctx, 'coin', leftX + 20, leftY + 264, 3, 0);
   ctx.textAlign = 'left';
   ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#fde047';
-  ctx.fillText('防刷單鐵律 · 按驗收成果記功', leftX + 54, leftY + 288);
+  ctx.fillText('防刷單鐵律 · 按驗收成果記功', leftX + 54, leftY + 264);
   ctx.font = '11px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#94a3b8';
-  ctx.fillText('BYOK 零信任金鑰 · 30/60/10 透明分紅', leftX + 54, leftY + 308);
+  ctx.fillText('BYOK 零信任金鑰 · 30/60/10 透明分紅', leftX + 54, leftY + 283);
 
   // 5. Right Column: 4 KPI Cards + Holdings & Dividend Table
   const rightX = 366;
-  const rightY = 116;
+  const rightY = 108;
   const rightW = CARD_W - rightX - 34; // 500px
 
   // 2x2 KPI Grid
   const kpiW = (rightW - 14) / 2;
-  const kpiH = 74;
+  const kpiH = 68;
 
   const stars = '★'.repeat(Math.max(1, Math.min(5, Math.round(data.reputation / 22))));
   const kpis = [
@@ -420,7 +458,7 @@ export function renderWorkCertificate(state) {
     },
     {
       x: rightX,
-      y: rightY + kpiH + 12,
+      y: rightY + kpiH + 10,
       label: '💵 累積分紅與懸賞 (USD EARNED)',
       value: formatUsd(data.usdBalance),
       sub: '含上線分紅池 + 懸賞實得',
@@ -429,7 +467,7 @@ export function renderWorkCertificate(state) {
     },
     {
       x: rightX + kpiW + 14,
-      y: rightY + kpiH + 12,
+      y: rightY + kpiH + 10,
       label: '🪙 小鎮金幣資產 (GOLD)',
       value: `${data.gold.toLocaleString()} G`,
       sub: '可招募小人與兌換像素外觀',
@@ -443,54 +481,54 @@ export function renderWorkCertificate(state) {
     ctx.textAlign = 'left';
     ctx.font = 'bold 11px "Courier New", "Microsoft JhengHei", monospace';
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText(k.label, k.x + 12, k.y + 10);
+    ctx.fillText(k.label, k.x + 12, k.y + 8);
 
-    ctx.font = 'bold 22px "Courier New", "Microsoft JhengHei", monospace';
+    ctx.font = 'bold 21px "Courier New", "Microsoft JhengHei", monospace';
     ctx.fillStyle = k.valColor;
-    ctx.fillText(k.value, k.x + 12, k.y + 28);
+    ctx.fillText(k.value, k.x + 12, k.y + 25);
 
     ctx.font = '10px "Courier New", "Microsoft JhengHei", monospace';
     ctx.fillStyle = '#cbd5e1';
-    ctx.fillText(k.sub, k.x + 12, k.y + 55);
+    ctx.fillText(k.sub, k.x + 12, k.y + 50);
   }
 
   // Holdings & Dividend Projects Table
-  const tblY = rightY + (kpiH + 12) * 2;
-  const tblH = 170;
+  const tblY = rightY + (kpiH + 10) * 2;
+  const tblH = 154;
   drawPixelBox(ctx, rightX, tblY, rightW, tblH, '#0d1428', '#475569', '#fde047');
 
   ctx.textAlign = 'left';
   ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#fde047';
-  ctx.fillText('📊 持倉與分紅項目清單 (PROJECT HOLDINGS & DIVIDENDS)', rightX + 14, tblY + 12);
+  ctx.fillText('📊 持倉與分紅項目清單 (PROJECT HOLDINGS & DIVIDENDS)', rightX + 14, tblY + 10);
 
   // Table header divider
   ctx.fillStyle = '#1e293b';
-  ctx.fillRect(rightX + 12, tblY + 32, rightW - 24, 18);
+  ctx.fillRect(rightX + 12, tblY + 29, rightW - 24, 17);
   ctx.font = 'bold 10px "Courier New", "Microsoft JhengHei", monospace';
   ctx.fillStyle = '#94a3b8';
-  ctx.fillText('項目名稱', rightX + 18, tblY + 36);
-  ctx.fillText('狀態', rightX + 216, tblY + 36);
-  ctx.fillText('進度', rightX + 292, tblY + 36);
-  ctx.fillText('貢獻點 / 預估權重', rightX + 344, tblY + 36);
+  ctx.fillText('項目名稱', rightX + 18, tblY + 32);
+  ctx.fillText('狀態', rightX + 216, tblY + 32);
+  ctx.fillText('進度', rightX + 292, tblY + 32);
+  ctx.fillText('貢獻點 / 預估權重', rightX + 344, tblY + 32);
 
   if (data.holdings.length === 0) {
     ctx.textAlign = 'center';
     ctx.font = '13px "Courier New", "Microsoft JhengHei", monospace';
     ctx.fillStyle = '#64748b';
-    ctx.fillText('尚未參與孵化項目，快派小人進工坊賺取首批分紅份額！', rightX + rightW / 2, tblY + 95);
+    ctx.fillText('尚未參與孵化項目，快派小人進工坊賺取首批分紅份額！', rightX + rightW / 2, tblY + 86);
   } else {
     data.holdings.forEach((h, idx) => {
-      const ry = tblY + 58 + idx * 26;
+      const ry = tblY + 52 + idx * 24;
       if (idx % 2 === 1) {
         ctx.fillStyle = 'rgba(30, 41, 59, 0.45)';
-        ctx.fillRect(rightX + 12, ry - 4, rightW - 24, 24);
+        ctx.fillRect(rightX + 12, ry - 3, rightW - 24, 22);
       }
 
       ctx.textAlign = 'left';
       ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
       ctx.fillStyle = '#f8fafc';
-      ctx.fillText(truncate(h.name, 14), rightX + 18, ry + 2);
+      ctx.fillText(truncate(h.name, 14), rightX + 18, ry + 1);
 
       // Status pill
       const isLaunched = h.status === 'launched' || h.progressPct >= 100;
@@ -498,11 +536,11 @@ export function renderWorkCertificate(state) {
       const statusLabel = isLaunched ? '🚀 已上線' : isVoting ? '🗳️ 投票中' : '🔨 建設中';
       ctx.font = 'bold 11px "Courier New", "Microsoft JhengHei", monospace';
       ctx.fillStyle = isLaunched ? '#4ade80' : isVoting ? '#f472b6' : '#38bdf8';
-      ctx.fillText(statusLabel, rightX + 216, ry + 2);
+      ctx.fillText(statusLabel, rightX + 216, ry + 1);
 
       // Progress
       ctx.fillStyle = '#e2e8f0';
-      ctx.fillText(`${h.progressPct}%`, rightX + 292, ry + 2);
+      ctx.fillText(`${h.progressPct}%`, rightX + 292, ry + 1);
 
       // Points / share / earned USD
       const shareStr =
@@ -514,16 +552,50 @@ export function renderWorkCertificate(state) {
               ? `營收 ${formatUsd(h.totalRevenueUsd)}`
               : '可接單參與';
       ctx.fillStyle = h.earnedUsd > 0 ? '#4ade80' : '#fde047';
-      ctx.fillText(shareStr, rightX + 344, ry + 2);
+      ctx.fillText(shareStr, rightX + 344, ry + 1);
     });
   }
 
-  // 6. Footer Serial & Decorative Pixel Barcode
-  const footY = 472;
+  // 6. Full-Width Genesis Achievement Badges Strip
+  const achX = 34;
+  const achY = 426;
+  const achW = CARD_W - 68; // 832px
+  const achH = 46;
+  const unlockedCount = data.achievements.filter((a) => a.unlocked).length;
+  drawPixelBox(ctx, achX, achY, achW, achH, '#0d1428', '#334155', '#fde047');
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 11px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#fde047';
+  ctx.fillText(`🏆 創世成就徽章 (${unlockedCount}/${data.achievements.length})`, achX + 12, achY + 16);
+
+  const badgeStartX = achX + 166;
+  const badgeAreaW = achW - 178;
+  const badgeGap = 6;
+  const badgeCount = Math.max(1, data.achievements.length);
+  const badgeW = Math.floor((badgeAreaW - badgeGap * (badgeCount - 1)) / badgeCount);
+
+  data.achievements.forEach((ach, idx) => {
+    const bx = badgeStartX + idx * (badgeW + badgeGap);
+    const by = achY + 9;
+    const bh = 28;
+    const fill = ach.unlocked ? '#2e1065' : '#111827';
+    const border = ach.unlocked ? '#fde047' : '#334155';
+    drawPixelBox(ctx, bx, by, badgeW, bh, fill, border);
+
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 10px "Courier New", "Microsoft JhengHei", monospace';
+    ctx.fillStyle = ach.unlocked ? '#fef08a' : '#64748b';
+    const label = `${ach.unlocked ? ach.icon : '🔒'} ${truncate(ach.title, 6)}`;
+    ctx.fillText(label, bx + badgeW / 2, by + 9);
+  });
+
+  // 7. Footer Serial & Decorative Pixel Barcode
+  const footY = 480;
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(28, footY, CARD_W - 56, 2);
 
-  const serial = hashSerial(`${data.playerName}-${data.completedTasks}-${data.totalPoints}-${dateStr}`);
+  const serial = hashSerial(`${data.playerName}-${data.completedTasks}-${data.totalPoints}-${unlockedCount}-${dateStr}`);
   ctx.textAlign = 'left';
   ctx.font = 'bold 11px "Courier New", monospace';
   ctx.fillStyle = '#67e8f9';
