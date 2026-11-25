@@ -102,15 +102,23 @@
         </div>
 
         <div class="quick-nav-bar">
-          <span class="mono" style="font-size: 11px; color: var(--text-muted);" data-i18n="stage.quickNav">快捷視角：</span>
-          <button type="button" class="quick-chip active" data-building="factory" data-i18n="stage.navFactory">🏭 自動工坊</button>
-          <button type="button" class="quick-chip" data-building="guild" data-i18n="stage.navGuild">⚔️ 懸賞工會</button>
-          <button type="button" class="quick-chip" data-building="launchpad" data-i18n="stage.navLaunchpad">🚀 孵化廣場</button>
-          <button type="button" class="quick-chip" data-building="lounge" data-i18n="stage.navLounge">☕ 算力宿舍</button>
+          <div class="quick-nav-chips" role="tablist" aria-label="HD 場景切換">
+            <span class="mono quick-nav-label" data-i18n="stage.quickNav">HD 場景：</span>
+            <button type="button" class="quick-chip active" data-scene="factory" data-building="factory" role="tab" aria-selected="true" data-i18n="stage.navFactory">🏭 自動工坊</button>
+            <button type="button" class="quick-chip" data-scene="guild" data-building="guild" role="tab" aria-selected="false" data-i18n="stage.navGuild">⚔️ 懸賞工會</button>
+            <button type="button" class="quick-chip" data-scene="launchpad" data-building="launchpad" role="tab" aria-selected="false" data-i18n="stage.navLaunchpad">🚀 孵化中心</button>
+            <button type="button" class="quick-chip" data-scene="lounge" data-building="lounge" role="tab" aria-selected="false" data-i18n="stage.navLounge">☕ 算力宿舍</button>
+            <button type="button" class="quick-chip" data-scene="vault" data-building="vault" role="tab" aria-selected="false" data-i18n="stage.navVault">💰 創作者金庫</button>
+            <button type="button" class="quick-chip" data-scene="town" data-building="town" role="tab" aria-selected="false" data-i18n="stage.navTown">🗺️ 小鎮總覽</button>
+          </div>
+          <label class="scene-sync-toggle active" id="scene-sync-label" title="切換右側 5 大分頁時，左側畫布自動無縫切進專屬 HD 室內場景">
+            <input type="checkbox" id="toggle-scene-sync" checked />
+            <span data-i18n="stage.autoFollow">🔗 自動跟隨分頁</span>
+          </label>
         </div>
 
         <div class="canvas-stage" id="canvas-stage">
-          <canvas id="town-canvas" width="540" height="340"></canvas>
+          <canvas id="town-canvas" width="480" height="300"></canvas>
           <div class="stage-overlay-hint" id="stage-overlay-hint" data-i18n="stage.hintDefault">點擊建築或像素小人可快速切換對應控制台</div>
         </div>
 

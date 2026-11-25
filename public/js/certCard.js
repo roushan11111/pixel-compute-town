@@ -4,7 +4,7 @@
  * Zero-dependency ES Module.
  */
 
-import { drawWorkerSprite, drawObjectSprite } from './sprites.js';
+import { drawHDWorker, drawObjectSprite } from './sprites.js';
 
 const CARD_W = 900;
 const CARD_H = 540;
@@ -383,7 +383,7 @@ export function renderWorkCertificate(state) {
   ctx.fillStyle = '#22d3ee';
   ctx.fillRect(stageX + 10, stageY + 112, stageW - 20, 2);
 
-  // Render actual pixel worker sprites (up to 4) or default hero duo
+  // Render 32x32 HD pixel worker portraits (up to 4) with subtle spotlight glow
   const squad =
     data.workers.length > 0
       ? data.workers
@@ -395,26 +395,37 @@ export function renderWorkCertificate(state) {
   const slotW = (stageW - 20) / squad.length;
   squad.forEach((w, idx) => {
     const cx = Math.round(stageX + 10 + slotW * idx + slotW / 2);
-    const footY = stageY + 112;
+    const footY = stageY + 111;
     const anim = idx % 2 === 0 ? 'celebrate' : 'idle';
-    drawWorkerSprite(
+    const skinId = w.skin || w.skinId || 'default';
+
+    // Subtle glowing pedestal aura behind each HD character
+    const aura = ctx.createRadialGradient(cx, footY - 28, 6, cx, footY - 28, 34);
+    aura.addColorStop(0, idx % 2 === 0 ? 'rgba(34, 211, 238, 0.20)' : 'rgba(168, 85, 247, 0.20)');
+    aura.addColorStop(1, 'rgba(15, 23, 42, 0)');
+    ctx.fillStyle = aura;
+    ctx.fillRect(cx - 34, footY - 62, 68, 64);
+
+    drawHDWorker(
       ctx,
-      w.roleClass || 'flash_worker',
-      w.skin || w.skinId || 'default',
-      anim,
-      0,
       cx,
       footY,
-      3,
-      false
+      { roleClass: w.roleClass || 'flash_worker', skinId },
+      anim,
+      0,
+      2,
+      {
+        shadow: true,
+        crown: data.isPro && idx === 0 && skinId === 'default' ? 'gold' : null,
+      }
     );
     ctx.textAlign = 'center';
     ctx.font = 'bold 10px "Courier New", "Microsoft JhengHei", monospace';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(truncate(stripParenSuffix(w.name || '小人'), 7), cx, footY + 7);
+    ctx.fillText(truncate(stripParenSuffix(w.name || '小人'), 7), cx, footY + 8);
     ctx.font = '10px "Courier New", monospace';
     ctx.fillStyle = '#fde047';
-    ctx.fillText(`LV.${w.level || 1}`, cx, footY + 20);
+    ctx.fillText(`LV.${w.level || 1}`, cx, footY + 21);
   });
 
   // Mini Seal / Proof Note at bottom of Left Column

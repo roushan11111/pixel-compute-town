@@ -5,6 +5,7 @@
  */
 
 import { PixelTownEngine } from './pixelEngine.js';
+import { renderWorkerPortrait } from './sprites.js';
 import { soundFX } from './sound.js';
 import { renderWorkCertificate, downloadWorkCertificate } from './certCard.js';
 import { applyI18nToDom, getLang, setLang, t } from './i18n.js';
@@ -21,6 +22,55 @@ import {
 } from './geminiRunner.js';
 
 const ONBOARDING_STORAGE_KEY = 'pixel_compute_town_onboarding_collapsed_v1';
+const SCENE_SYNC_STORAGE_KEY = 'pixel_compute_town_scene_sync_v1';
+
+const VALID_SCENES = new Set(['factory', 'guild', 'launchpad', 'lounge', 'vault', 'town']);
+
+const TAB_TO_SCENE = Object.freeze({
+  factory: 'factory',
+  api: 'factory',
+  guild: 'guild',
+  incubator: 'launchpad',
+  launchpad: 'launchpad',
+  workers: 'lounge',
+  revenue: 'vault',
+  founder: 'vault',
+});
+
+const SCENE_TO_TAB = Object.freeze({
+  factory: 'factory',
+  guild: 'guild',
+  launchpad: 'incubator',
+  lounge: 'workers',
+  vault: 'revenue',
+});
+
+const SCENE_HINT_KEYS = Object.freeze({
+  factory: 'stage.hintFactory',
+  guild: 'stage.hintGuild',
+  launchpad: 'stage.hintLaunchpad',
+  lounge: 'stage.hintLounge',
+  vault: 'stage.hintVault',
+  town: 'stage.hintTown',
+});
+
+const SKIN_PREVIEW_ROLES = Object.freeze({
+  'skin-cyber': 'flash_worker',
+  'skin-cat': 'pixel_artist',
+  'skin-gold': 'pro_architect',
+});
+
+const LEADERBOARD_AVATAR_PRESETS = Object.freeze({
+  'npc-kuro': { roleClass: 'guild_artisan', skin: 'skin-gold' },
+  'npc-momo': { roleClass: 'pixel_artist', skin: 'skin-cat' },
+  'npc-yuna': { roleClass: 'pro_architect', skin: 'skin-cyber' },
+  'npc-rin': { roleClass: 'pro_architect', skin: 'default' },
+  'npc-zero': { roleClass: 'flash_worker', skin: 'skin-cyber' },
+});
+
+const FALLBACK_ROLES = ['pro_architect', 'pixel_artist', 'guild_artisan', 'flash_worker'];
+const TOP_RANK_SKINS = ['skin-gold', 'skin-cyber', 'skin-cat'];
+const TOP_RANK_CROWNS = ['👑', '🥈', '🥉'];
 
 // ============================================================================
 // App Runtime Store
@@ -34,6 +84,14 @@ const app = {
   engine: null,
   sse: null,
   activeTab: 'factory',
+  activeScene: 'factory',
+  autoFollowScene: (() => {
+    try {
+      return localStorage.getItem(SCENE_SYNC_STORAGE_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  })(),
   feedFilter: 'all',
   dayNight: 'night',
   autoPilotOn: false,
@@ -182,15 +240,55 @@ function resetTransientUiAfterWorldReset() {
   app.activeGuildTaskId = null;
   app.certExported = false;
   app.seenUnlockedAchievements.clear();
-  const hint = $('stage-overlay-hint');
-  if (hint) {
-    hint.textContent = t('stage.hintDefault');
+  if (app.autoFollowScene) {
+    const mapped = TAB_TO_SCENE[app.activeTab] || 'factory';
+    selectScene(mapped, { syncTab: false, silent: true });
+  } else {
+    updateSceneHint(app.activeScene);
   }
   const importRes = $('gh-import-result');
   if (importRes) {
     importRes.style.display = 'none';
     importRes.textContent = '';
   }
+}
+
+function hydrateWorkerPortraits(root = document) {
+  if (!root || typeof renderWorkerPortrait !== 'function') return;
+  root.querySelectorAll('canvas[data-portrait-role]').forEach((canvas) => {
+    const roleClass = canvas.dataset.portraitRole || 'flash_worker';
+    const skinId = canvas.dataset.portraitSkin || 'default';
+    const opts = {};
+    if (canvas.dataset.portraitAnim) opts.animState = canvas.dataset.portraitAnim;
+    if (canvas.dataset.portraitCrown) opts.crown = canvas.dataset.portraitCrown;
+    try {
+      renderWorkerPortrait(canvas, roleClass, skinId, opts);
+    } catch {
+      // Keep UI resilient if canvas rendering fails in headless environments
+    }
+  });
+}
+
+function resolveLeaderboardPortrait(row, rank) {
+  if (row?.isCurrentUser) {
+    const primaryWorker = (app.state?.workers || [])[0];
+    return {
+      roleClass: primaryWorker?.roleClass || 'flash_worker',
+      skin: primaryWorker?.skin && primaryWorker.skin !== 'default'
+        ? primaryWorker.skin
+        : rank === 1
+          ? 'skin-gold'
+          : 'default',
+    };
+  }
+  if (row?.userId && LEADERBOARD_AVATAR_PRESETS[row.userId]) {
+    return LEADERBOARD_AVATAR_PRESETS[row.userId];
+  }
+  const idx = Math.max(0, (rank || 1) - 1);
+  return {
+    roleClass: FALLBACK_ROLES[idx % FALLBACK_ROLES.length],
+    skin: TOP_RANK_SKINS[idx] || 'default',
+  };
 }
 
 function applyNewState(nextState, { silentAchievements = false } = {}) {
@@ -298,9 +396,54 @@ function triggerDownloadCert() {
 }
 
 // ============================================================================
-// Tab & Building Navigation
+// Tab, HD Scene & Building Navigation
 // ============================================================================
-function switchTab(tabName) {
+function syncAutoFollowUi() {
+  const checkbox = $('toggle-scene-sync');
+  const label = $('scene-sync-label');
+  if (checkbox) checkbox.checked = app.autoFollowScene;
+  if (label) label.classList.toggle('active', app.autoFollowScene);
+}
+
+function syncSceneChipsUI(sceneId) {
+  document.querySelectorAll('.quick-chip').forEach((chip) => {
+    const chipScene = chip.dataset.scene || chip.dataset.building;
+    const isActive = chipScene === sceneId;
+    chip.classList.toggle('active', isActive);
+    chip.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+}
+
+function updateSceneHint(sceneId) {
+  const hint = $('stage-overlay-hint');
+  if (!hint) return;
+  const key = SCENE_HINT_KEYS[sceneId] || 'stage.hintDefault';
+  hint.textContent = t(key);
+}
+
+function selectScene(sceneId, { syncTab = false, fromEngine = false, silent = false } = {}) {
+  const normalized = VALID_SCENES.has(sceneId) ? sceneId : 'factory';
+  app.activeScene = normalized;
+  syncSceneChipsUI(normalized);
+  updateSceneHint(normalized);
+
+  if (!fromEngine && app.engine && typeof app.engine.setScene === 'function') {
+    const currentEngineScene = typeof app.engine.getScene === 'function' ? app.engine.getScene() : null;
+    if (currentEngineScene !== normalized) {
+      app.engine.setScene(normalized);
+    }
+  }
+
+  if (syncTab && SCENE_TO_TAB[normalized] && app.activeTab !== SCENE_TO_TAB[normalized]) {
+    switchTab(SCENE_TO_TAB[normalized], { skipSceneSync: true });
+  }
+
+  if (!silent) {
+    soundFX.playClick();
+  }
+}
+
+function switchTab(tabName, { skipSceneSync = false } = {}) {
   app.activeTab = tabName;
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     const isActive = btn.dataset.tab === tabName;
@@ -311,39 +454,24 @@ function switchTab(tabName) {
     pane.classList.toggle('active', pane.dataset.pane === tabName);
   });
 
-  const buildingMap = {
-    factory: 'factory',
-    guild: 'guild',
-    incubator: 'launchpad',
-    workers: 'lounge',
-  };
-  const activeBuilding = buildingMap[tabName] || null;
-  document.querySelectorAll('.quick-chip').forEach((chip) => {
-    chip.classList.toggle('active', chip.dataset.building === activeBuilding);
-  });
+  if (!skipSceneSync && app.autoFollowScene) {
+    const mappedScene = TAB_TO_SCENE[tabName];
+    if (mappedScene) {
+      selectScene(mappedScene, { syncTab: false, silent: true });
+      return;
+    }
+  }
+  syncSceneChipsUI(app.activeScene);
 }
 
 function focusBuilding(buildingId) {
-  const tabMap = {
-    factory: 'factory',
-    guild: 'guild',
-    launchpad: 'incubator',
-    lounge: 'workers',
-  };
-  const labels = {
-    factory: '🏭 已聚焦【自動工坊】：管理 API 軌道微任務與 Auto-Pilot 自動掛機',
-    guild: '⚔️ 已聚焦【懸賞工會】：接取月/週額度高價值大單並透過 BYOT CLI 同步',
-    launchpad: '🚀 已聚焦【孵化廣場】：社群投票立項、霓虹廣告位與上線 30/60/10 分紅',
-    lounge: '☕ 已聚焦【算力宿舍】：讓小人喝咖啡回血、調整每日 Token 上限與換裝',
-  };
-  if (tabMap[buildingId]) {
-    switchTab(tabMap[buildingId]);
+  if (!buildingId) return;
+  if (buildingId === 'town') {
+    selectScene('town', { syncTab: false });
+    return;
   }
-  const hint = $('stage-overlay-hint');
-  if (hint && labels[buildingId]) {
-    hint.textContent = labels[buildingId];
-  }
-  soundFX.playClick();
+  const targetScene = VALID_SCENES.has(buildingId) ? buildingId : TAB_TO_SCENE[buildingId] || 'factory';
+  selectScene(targetScene, { syncTab: true });
 }
 
 // ============================================================================
@@ -469,14 +597,21 @@ function renderStageStatus() {
   if (strip) {
     const pills = workers
       .map((w) => {
-        const icon = w.status === 'working' ? '⚡' : '☕';
-        return `<span class="badge ${w.status === 'working' ? 'cyan' : ''}">${icon} ${escapeHtml(w.name)} Lv.${w.level} (${w.stamina}/${w.maxStamina})</span>`;
+        const isWorking = w.status === 'working';
+        const icon = isWorking ? '⚡' : '☕';
+        return `
+          <button type="button" class="worker-strip-pill ${isWorking ? 'working' : ''}" data-select-strip-worker="${escapeHtml(w.id)}" title="${escapeHtml(w.name)} · ${escapeHtml(ROLE_LABELS[w.roleClass] || w.roleClass)}">
+            <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(w.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(w.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'idle'}"></canvas>
+            <span>${icon} ${escapeHtml(w.name)} Lv.${w.level} (${w.stamina}/${w.maxStamina})</span>
+          </button>
+        `;
       })
-      .join(' ');
+      .join('');
     strip.innerHTML = `
       <div class="badge-row">${pills}</div>
       <span>開工中 ${workingCount}/${workers.length} ｜ 可接任務 ${openTasks} 張</span>
     `;
+    hydrateWorkerPortraits(strip);
   }
 }
 
@@ -575,6 +710,7 @@ function renderFactoryTab() {
   const selectedProj = projFilter?.value || 'all';
   const selectedStatus = statusFilter?.value || 'all';
   const projectMap = new Map((app.state.projects || []).map((p) => [p.id, p]));
+  const workerMap = new Map((app.state.workers || []).map((w) => [w.id, w]));
 
   const tasks = (app.state.tasks || []).filter((t) => {
     if (t.track !== 'api_auto') return false;
@@ -597,11 +733,21 @@ function renderFactoryTab() {
       const proj = projectMap.get(task.projectId);
       const isCompleted = task.status === 'completed';
       const isWorking = task.status === 'in_progress';
+      const assignedWorker = workerMap.get(task.assignedWorkerId || task.submission?.workerId || '');
       const statusBadge = isCompleted
         ? `<span class="badge green">${escapeHtml(t('badge.completed'))}</span>`
         : isWorking
           ? `<span class="badge cyan">${escapeHtml(t('badge.working'))}</span>`
           : `<span class="badge amber">${escapeHtml(t('badge.open'))}</span>`;
+      const workerChipHtml =
+        assignedWorker && (isWorking || isCompleted)
+          ? `
+            <div class="task-worker-chip ${isCompleted ? 'completed' : ''}">
+              <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(assignedWorker.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(assignedWorker.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'celebrate'}"></canvas>
+              <span>${isWorking ? '⚡' : '✅'} ${escapeHtml(assignedWorker.name)} ${isWorking ? '趕工中' : '交付'}</span>
+            </div>
+          `
+          : '';
 
       return `
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
@@ -612,6 +758,7 @@ function renderFactoryTab() {
             </div>
             ${statusBadge}
           </div>
+          ${workerChipHtml}
           <div class="badge-row">
             <span class="badge">📦 ${escapeHtml(proj?.shortName || task.projectId)}</span>
             <span class="badge cyan">🤖 ${escapeHtml(task.modelSuggestion || 'gemini-2.5-flash')}</span>
@@ -638,6 +785,7 @@ function renderFactoryTab() {
       `;
     })
     .join('');
+  hydrateWorkerPortraits(listEl);
 }
 
 function renderGuildTab() {
@@ -660,6 +808,7 @@ function renderGuildTab() {
 
   const selectedProj = projFilter?.value || 'all';
   const projectMap = new Map((app.state.projects || []).map((p) => [p.id, p]));
+  const workerMap = new Map((app.state.workers || []).map((w) => [w.id, w]));
 
   const tasks = (app.state.tasks || []).filter((t) => {
     if (t.track !== 'guild_bounty') return false;
@@ -680,8 +829,18 @@ function renderGuildTab() {
       const proj = projectMap.get(task.projectId);
       const isCompleted = task.status === 'completed';
       const isWorking = task.status === 'in_progress';
+      const assignedWorker = workerMap.get(task.assignedWorkerId || task.submission?.workerId || '');
       const netUsd = Number((task.cashBountyUsd * 0.9).toFixed(2));
       const feeUsd = Number((task.cashBountyUsd * 0.1).toFixed(2));
+      const workerChipHtml =
+        assignedWorker && (isWorking || isCompleted)
+          ? `
+            <div class="task-worker-chip ${isCompleted ? 'completed' : ''}">
+              <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(assignedWorker.roleClass || 'pro_architect')}" data-portrait-skin="${escapeHtml(assignedWorker.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'celebrate'}"></canvas>
+              <span>${isWorking ? '⚔️' : '✅'} ${escapeHtml(assignedWorker.name)} ${isWorking ? '接單處理中' : '結案'}</span>
+            </div>
+          `
+          : '';
 
       return `
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
@@ -698,6 +857,7 @@ function renderGuildTab() {
                   : `<span class="badge amber">${escapeHtml(t('badge.guildOpen'))}</span>`
             }
           </div>
+          ${workerChipHtml}
           <div class="badge-row">
             <span class="badge">📦 ${escapeHtml(proj?.shortName || task.projectId)}</span>
             <span class="badge amber">🖥️ ${escapeHtml(task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
@@ -727,6 +887,7 @@ function renderGuildTab() {
       `;
     })
     .join('');
+  hydrateWorkerPortraits(listEl);
 }
 
 function renderIncubatorTab() {
@@ -852,13 +1013,19 @@ function renderWorkersAndShopTab() {
               `<option value="${escapeHtml(sid)}" ${w.skin === sid ? 'selected' : ''}>${escapeHtml(SKIN_LABELS[sid] || sid)}</option>`,
           )
           .join('');
+        const skinFrameClass = w.skin && w.skin !== 'default' ? escapeHtml(w.skin) : '';
 
         return `
           <article class="pixel-card">
             <div class="card-head">
-              <div>
-                <h3 class="card-title">${escapeHtml(w.name)} <span class="badge cyan">Lv.${w.level}</span></h3>
-                <p class="card-subtitle">${escapeHtml(ROLE_LABELS[w.roleClass] || w.roleClass)} ｜ ${escapeHtml(w.providerLabel || '')}</p>
+              <div class="worker-card-lead">
+                <div class="worker-portrait-frame ${w.status === 'working' ? 'working' : ''} ${skinFrameClass}">
+                  <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(w.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(w.skin || 'default')}" data-portrait-anim="${w.status === 'working' ? 'work' : 'idle'}"></canvas>
+                </div>
+                <div class="worker-card-info">
+                  <h3 class="card-title">${escapeHtml(w.name)} <span class="badge cyan">Lv.${w.level}</span></h3>
+                  <p class="card-subtitle">${escapeHtml(ROLE_LABELS[w.roleClass] || w.roleClass)} ｜ ${escapeHtml(w.providerLabel || '')}</p>
+                </div>
               </div>
               <span class="badge ${w.status === 'working' ? 'cyan' : 'green'}">${w.status === 'working' ? '⚡ 趕工中' : '☕ 待命中'}</span>
             </div>
@@ -894,6 +1061,7 @@ function renderWorkersAndShopTab() {
         `;
       })
       .join('');
+    hydrateWorkerPortraits(workerList);
   }
 
   // Genesis Achievements Wall
@@ -935,15 +1103,44 @@ function renderWorkersAndShopTab() {
       .map((item) => {
         const owned = ownedItems.includes(item.id);
         const priceLabel = item.priceUsd > 0 ? `$${item.priceUsd} USD` : `${item.priceGold} G`;
+        const previewSkinId = item.skinId || '';
+        const previewRole = SKIN_PREVIEW_ROLES[previewSkinId] || workers[0]?.roleClass || 'flash_worker';
+        const hasSingleSkinPreview = Boolean(previewSkinId);
+        const bundleSkins = Array.isArray(item.unlockSkins) ? item.unlockSkins : [];
+        const bundleStripHtml =
+          bundleSkins.length > 1
+            ? `
+              <div class="shop-bundle-strip" title="內含全部限定皮膚預覽">
+                ${bundleSkins
+                  .map(
+                    (sid) =>
+                      `<canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(SKIN_PREVIEW_ROLES[sid] || 'flash_worker')}" data-portrait-skin="${escapeHtml(sid)}"></canvas>`,
+                  )
+                  .join('')}
+                <span class="mono" style="font-size: 11px; color: var(--accent-gold);">3 款 HD 皮膚全收錄</span>
+              </div>
+            `
+            : '';
+
         return `
           <article class="pixel-card">
             <div class="card-head">
-              <div>
-                <h3 class="card-title">${escapeHtml(item.icon || '🛍️')} ${escapeHtml(item.name)}</h3>
-                <p class="card-subtitle">${escapeHtml(item.description || '')}</p>
+              <div class="shop-card-lead">
+                ${
+                  hasSingleSkinPreview
+                    ? `<div class="shop-skin-preview ${escapeHtml(previewSkinId)}" title="HD 皮膚試穿預覽">
+                        <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(previewRole)}" data-portrait-skin="${escapeHtml(previewSkinId)}"></canvas>
+                      </div>`
+                    : ''
+                }
+                <div style="min-width: 0; flex: 1;">
+                  <h3 class="card-title">${escapeHtml(item.icon || '🛍️')} ${escapeHtml(item.name)}</h3>
+                  <p class="card-subtitle">${escapeHtml(item.description || '')}</p>
+                </div>
               </div>
               <span class="badge ${item.priceUsd > 0 ? 'pink' : 'gold'}">${escapeHtml(item.badge || '')}</span>
             </div>
+            ${bundleStripHtml}
             <div class="card-footer">
               <span class="mono" style="font-weight: 800; color: ${item.priceUsd > 0 ? 'var(--accent-green)' : 'var(--accent-gold)'};">${priceLabel}</span>
               ${
@@ -956,6 +1153,7 @@ function renderWorkersAndShopTab() {
         `;
       })
       .join('');
+    hydrateWorkerPortraits(shopList);
   }
 }
 
@@ -1002,17 +1200,28 @@ function renderRevenueAndLeaderboardTab() {
       .map((row, idx) => {
         const rank = idx + 1;
         const rankClass = rank <= 3 ? `top-${rank}` : '';
+        const portraitMeta = rank <= 3 ? resolveLeaderboardPortrait(row, rank) : null;
+        const crownTier = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+        const avatarHtml = portraitMeta
+          ? `
+            <div class="lb-avatar-badge ${rankClass}" title="Top ${rank} HD 像素徽章">
+              <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(portraitMeta.roleClass)}" data-portrait-skin="${escapeHtml(portraitMeta.skin)}" data-portrait-anim="celebrate" data-portrait-crown="${crownTier}"></canvas>
+              <span class="lb-crown-tag" aria-hidden="true">${TOP_RANK_CROWNS[rank - 1] || '🏅'}</span>
+            </div>
+          `
+          : '';
         return `
           <div class="ledger-row" style="${row.isCurrentUser ? 'border-color: var(--accent-amber); background: rgba(255,183,77,0.08);' : ''}">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
               <span class="rank-badge ${rankClass}">#${rank}</span>
-              <div>
+              ${avatarHtml}
+              <div style="min-width: 0;">
                 <strong>${escapeHtml(row.displayName)}</strong>
                 <span class="mono" style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">${escapeHtml(row.handle || '')}</span>
                 ${row.badge ? `<span class="badge amber" style="margin-left: 5px;">${escapeHtml(row.badge)}</span>` : ''}
               </div>
             </div>
-            <div class="mono" style="display: flex; gap: 10px; align-items: center; font-size: 11px;">
+            <div class="mono" style="display: flex; gap: 10px; align-items: center; font-size: 11px; flex-shrink: 0;">
               <span style="color: var(--accent-pink);">${row.contributionPoints || 0} 貢獻</span>
               <span style="color: var(--accent-green);">${fmtUsd(row.earnedUsd || 0)}</span>
               <span style="color: var(--accent-cyan);">信譽 ${row.reputation ?? 100}</span>
@@ -1021,6 +1230,7 @@ function renderRevenueAndLeaderboardTab() {
         `;
       })
       .join('');
+    hydrateWorkerPortraits(lbEl);
   }
 }
 
@@ -1559,9 +1769,36 @@ function bindEvents() {
     });
   });
 
-  // Quick building nav chips
+  // Quick HD scene nav chips (6 scenes)
   document.querySelectorAll('.quick-chip').forEach((chip) => {
-    chip.addEventListener('click', () => focusBuilding(chip.dataset.building));
+    chip.addEventListener('click', () => {
+      const sceneId = chip.dataset.scene || chip.dataset.building;
+      if (!sceneId) return;
+      if (sceneId === 'town') {
+        selectScene('town', { syncTab: false });
+      } else {
+        selectScene(sceneId, { syncTab: true });
+      }
+    });
+  });
+
+  // Auto-follow tab toggle for HD stage
+  $('toggle-scene-sync').addEventListener('change', (e) => {
+    app.autoFollowScene = Boolean(e.target.checked);
+    try {
+      localStorage.setItem(SCENE_SYNC_STORAGE_KEY, app.autoFollowScene ? '1' : '0');
+    } catch {
+      // ignore
+    }
+    syncAutoFollowUi();
+    soundFX.playClick();
+    if (app.autoFollowScene) {
+      const mapped = TAB_TO_SCENE[app.activeTab];
+      if (mapped) selectScene(mapped, { syncTab: false, silent: true });
+      showToast(t('stage.syncOn'), 'success', 2600);
+    } else {
+      showToast(t('stage.syncOff'), 'info', 2600);
+    }
   });
 
   // Activity feed filter chips
@@ -1802,8 +2039,7 @@ function bindEvents() {
         b.classList.toggle('active', b.dataset.lang === lang);
       });
       applyI18nToDom();
-      const hint = $('stage-overlay-hint');
-      if (hint) hint.textContent = t('stage.hintDefault');
+      updateSceneHint(app.activeScene);
       renderAll();
       soundFX.playClick();
       showToast(t('toast.langSwitched'), 'info', 2200);
@@ -1907,6 +2143,27 @@ function bindEvents() {
 
   // Delegated click handlers for dynamically rendered lists
   document.addEventListener('click', async (e) => {
+    const stripWorkerBtn = e.target.closest('[data-select-strip-worker]');
+    if (stripWorkerBtn) {
+      const wid = stripWorkerBtn.dataset.selectStripWorker;
+      const w = (app.state?.workers || []).find((x) => x.id === wid);
+      if (w) {
+        soundFX.playClick();
+        const hint = $('stage-overlay-hint');
+        if (hint) {
+          hint.textContent = `👾 【${w.name}】Lv.${w.level} · 體力 ${w.stamina}/${w.maxStamina} · ${w.lastMessage || '待命中'}`;
+        }
+        if (w.track === 'api') {
+          const sel = $('factory-worker-select');
+          if (sel) sel.value = w.id;
+        } else {
+          const sel = $('guild-worker-select');
+          if (sel) sel.value = w.id;
+        }
+      }
+      return;
+    }
+
     const inspectBtn = e.target.closest('[data-inspect-task]');
     if (inspectBtn) {
       openTaskReportModal(inspectBtn.dataset.inspectTask);
@@ -2095,12 +2352,33 @@ async function init() {
   applyI18nToDom();
 
   bindEvents();
+  syncAutoFollowUi();
 
   // Initialize PixelTownEngine canvas
   const canvas = $('town-canvas');
   if (canvas) {
     app.engine = new PixelTownEngine(canvas, {
       onSelectBuilding: (buildingId) => focusBuilding(buildingId),
+      onSceneChange: (sceneId) => {
+        if (!sceneId || !VALID_SCENES.has(sceneId)) return;
+        const shouldSyncTab = Boolean(SCENE_TO_TAB[sceneId]);
+        selectScene(sceneId, { syncTab: shouldSyncTab, fromEngine: true, silent: true });
+      },
+      onSelectTask: (taskId) => {
+        const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
+        if (!task) return;
+        soundFX.playClick();
+        if (task.status === 'completed') {
+          openTaskReportModal(task.id);
+        } else if (task.track === 'guild_bounty') {
+          switchTab('guild');
+          openGuildWorkbench(task.id);
+        } else {
+          switchTab('factory');
+          const hint = $('stage-overlay-hint');
+          if (hint) hint.textContent = `🏭 已選取任務：${task.title}`;
+        }
+      },
       onSelectWorker: (workerId) => {
         const w = (app.state?.workers || []).find((x) => x.id === workerId);
         if (!w) return;
@@ -2119,6 +2397,11 @@ async function init() {
       },
     });
     app.engine.setDayNight(app.dayNight);
+    if (typeof app.engine.setScene === 'function') {
+      app.engine.setScene(app.activeScene);
+    }
+    syncSceneChipsUI(app.activeScene);
+    updateSceneHint(app.activeScene);
   }
 
   try {
