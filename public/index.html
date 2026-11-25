@@ -3,77 +3,118 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>像素算力鎮 PixelCompute Town — 閒置算力雙軌打工與開源孵化平臺</title>
+  <title>像素算力鎮 · PixelCompute Town</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body data-theme="night">
-  <!-- 頂部 HUD 狀態列 -->
+  <!-- 頂部極簡單行遊戲 HUD -->
   <header class="hud-bar">
-    <div class="hud-brand">
+    <div class="hud-brand" data-i18n-title="brand.sub" title="PixelCompute Town · 閒置算力像素小鎮">
       <div class="brand-logo-box" aria-hidden="true">👾</div>
       <div class="brand-titles">
         <div class="brand-name">
           <span data-i18n="brand.name">像素算力鎮</span>
           <span class="alpha-pill">v1.2</span>
         </div>
-        <div class="brand-sub" data-i18n="brand.sub">PixelCompute Town · BYOK + BYOT 雙軌孵化</div>
       </div>
     </div>
 
     <div class="hud-metrics">
-      <div class="hud-pill gold" data-i18n-title="hud.goldTitle" title="小鎮金幣餘額（可用於商店裝扮與小人咖啡）">
-        <span>🪙</span>
-        <span id="hud-gold">0 G</span>
+      <div class="hud-metrics-capsule">
+        <div class="hud-pill gold" data-i18n-title="hud.goldTitle" title="小鎮金幣餘額（可用於商店裝扮與小人咖啡）">
+          <span>🪙</span>
+          <span id="hud-gold">0 G</span>
+        </div>
+        <div class="hud-pill usd" data-i18n-title="hud.usdTitle" title="累計懸賞實得與項目分紅收益（USD）">
+          <span>💵</span>
+          <span id="hud-usd">$0.00</span>
+        </div>
+        <div class="hud-pill rep" data-i18n-title="hud.repTitle" title="驗收信譽分（防刷單 Proof of Accepted Work）">
+          <span>🛡️</span>
+          <strong id="hud-rep">100</strong>
+        </div>
       </div>
-      <div class="hud-pill usd" data-i18n-title="hud.usdTitle" title="累計懸賞實得與項目分紅收益（USD）">
-        <span>💵</span>
-        <span id="hud-usd">$0.00</span>
-      </div>
-      <div class="hud-pill rep" data-i18n-title="hud.repTitle" title="驗收信譽分（防刷單 Proof of Accepted Work）">
-        <span>🛡️</span>
-        <span><span data-i18n="hud.repPrefix">信譽</span> <strong id="hud-rep">100</strong></span>
-      </div>
-      <button type="button" class="hud-pill byok-pill" id="btn-byok-pill" data-i18n-title="hud.byokTitle" title="點擊設定瀏覽器端 BYOK 金鑰（絕不傳給伺服器）">
-        <span class="status-dot" id="hud-byok-dot"></span>
-        <span id="hud-byok-label">BYOK：擬真體驗</span>
-      </button>
     </div>
 
     <div class="hud-actions">
-      <a class="btn btn-sm" id="btn-hud-home" href="/" data-i18n="hud.homeBtn">🏠 官網</a>
-      <button type="button" class="btn btn-sm btn-tutorial" id="btn-hud-tutorial" data-i18n="hud.tutorialBtn" data-i18n-title="hud.tutorialTitle" title="打開經典 RPG 互動新手教學（5 步輕鬆上手＋領 +100G 禮包）">🎓 新手教學</button>
-      <a class="btn btn-sm" id="btn-hud-docs" href="/docs" data-i18n="hud.docsBtn">📖 說明書</a>
-      <a class="btn btn-sm" id="btn-hud-whitepaper" href="/whitepaper" data-i18n="hud.whitepaperBtn">📜 白皮書</a>
-      <a class="btn btn-sm btn-primary" id="btn-hud-install" href="/#install" data-i18n="hud.installBtn">📦 安裝小人</a>
-      <div class="bgm-controls" id="bgm-controls" role="region" aria-label="8-bit BGM Player">
-        <button type="button" class="bgm-btn bgm-play-btn" id="btn-bgm-toggle" aria-pressed="false" data-i18n-title="bgm.toggleTitle" title="播放 / 暫停 8-bit 原創配樂">🎵</button>
-        <button type="button" class="bgm-btn" id="btn-bgm-prev" data-i18n-title="bgm.prevTitle" title="上一首 8-bit 配樂">⏮</button>
-        <span class="bgm-track-name mono" id="bgm-track-name" title="像素晨光・廣場序曲">像素晨光・廣場序曲</span>
-        <button type="button" class="bgm-btn" id="btn-bgm-next" data-i18n-title="bgm.nextTitle" title="下一首 8-bit 配樂">⏭</button>
-        <button type="button" class="bgm-btn bgm-auto-btn active" id="btn-bgm-auto" aria-pressed="true" data-i18n="bgm.autoLabel" data-i18n-title="bgm.autoTitle" title="切換 HD 像素房間時自動切換對應配樂">自動</button>
-        <input type="range" class="bgm-volume" id="bgm-volume" min="0" max="100" step="1" value="32" aria-label="BGM Volume" data-i18n-title="bgm.volumeTitle" title="調整 8-bit 背景音樂音量" />
-      </div>
-      <div class="lang-switch" id="lang-switch" role="group" aria-label="Language Switcher">
-        <button type="button" class="lang-btn active" data-lang="zh-TW">繁中</button>
-        <button type="button" class="lang-btn" data-lang="zh-CN">简中</button>
-        <button type="button" class="lang-btn" data-lang="en">EN</button>
-      </div>
+      <button type="button" class="btn btn-sm btn-tutorial" id="btn-hud-tutorial" data-i18n="hud.tutorialBtn" data-i18n-title="hud.tutorialTitle" title="打開經典 RPG 互動新手教學（5 步輕鬆上手＋領 +100G 禮包）">🎓 教學</button>
+
       <button type="button" class="user-badge user-badge-btn" id="hud-user-badge" data-i18n-title="hud.userTitle" title="點擊開啟帳號登入、註冊與切換">
         <span class="user-avatar-dot" id="hud-user-avatar">🧑‍💻</span>
         <span id="hud-user-name">創始鎮長 (Demo)</span>
       </button>
-      <a class="btn btn-sm btn-primary" id="btn-github-login" href="/api/auth/github" style="display: none;" data-i18n="hud.githubLogin">GitHub 登入</a>
-      <button type="button" class="btn btn-sm" id="btn-logout" style="display: none;" data-i18n="hud.logout">登出</button>
-      <button type="button" class="btn btn-icon" id="btn-day-night" data-i18n-title="hud.dayNightTitle" title="切換賽博暖夜 / 清晨白天模式">🌙</button>
-      <button type="button" class="btn btn-icon" id="btn-sound-toggle" data-i18n-title="hud.soundTitle" title="切換 8-bit 復古音效">🔇</button>
-      <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" data-i18n="hud.certBtn">🪪 打工證</button>
-      <button type="button" class="btn btn-sm" id="btn-open-settings" data-i18n="hud.settingsBtn">⚙️ 設定</button>
+
+      <!-- 🎵 8-bit 音樂與音效收合選單 -->
+      <div class="hud-popover-wrap" id="hud-audio-popover-wrap">
+        <button type="button" class="btn btn-icon" id="btn-hud-audio-menu" aria-haspopup="true" aria-expanded="false" data-i18n-title="hud.audioTitle" title="音樂與音效設定">🎵</button>
+        <div class="hud-popover-panel" id="hud-audio-popover" role="region" aria-label="8-bit Audio Controls">
+          <div class="bgm-controls" id="bgm-controls" role="region" aria-label="8-bit BGM Player">
+            <div class="bgm-pop-row">
+              <button type="button" class="bgm-btn bgm-play-btn" id="btn-bgm-toggle" aria-pressed="false" data-i18n-title="bgm.toggleTitle" title="播放 / 暫停 8-bit 原創配樂">🎵</button>
+              <button type="button" class="bgm-btn" id="btn-bgm-prev" data-i18n-title="bgm.prevTitle" title="上一首 8-bit 配樂">⏮</button>
+              <span class="bgm-track-name mono" id="bgm-track-name" title="像素晨光・廣場序曲">像素晨光・廣場序曲</span>
+              <button type="button" class="bgm-btn" id="btn-bgm-next" data-i18n-title="bgm.nextTitle" title="下一首 8-bit 配樂">⏭</button>
+            </div>
+            <div class="bgm-pop-row">
+              <button type="button" class="bgm-btn bgm-auto-btn active" id="btn-bgm-auto" aria-pressed="true" data-i18n="bgm.autoLabel" data-i18n-title="bgm.autoTitle" title="切換 HD 像素房間時自動切換對應配樂">自動</button>
+              <input type="range" class="bgm-volume" id="bgm-volume" min="0" max="100" step="1" value="32" aria-label="BGM Volume" data-i18n-title="bgm.volumeTitle" title="調整 8-bit 背景音樂音量" />
+            </div>
+          </div>
+          <div class="hud-menu-row">
+            <span class="hud-menu-label" data-i18n="hud.soundLabel">8-bit 音效</span>
+            <button type="button" class="btn btn-icon" id="btn-sound-toggle" data-i18n-title="hud.soundTitle" title="切換 8-bit 復古音效">🔇</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ☰ 更多功能與導覽收合選單 -->
+      <div class="hud-popover-wrap" id="hud-more-popover-wrap">
+        <button type="button" class="btn btn-sm" id="btn-hud-more-menu" aria-haspopup="true" aria-expanded="false" data-i18n="hud.moreBtn">☰ 更多</button>
+        <div class="hud-popover-panel hud-menu-panel" id="hud-more-popover" role="menu">
+          <div class="hud-menu-group">
+            <div class="hud-menu-heading" data-i18n="hud.menuWorkspace">工作區與 AI</div>
+            <button type="button" class="hud-pill byok-pill hud-menu-byok" id="btn-byok-pill" data-i18n-title="hud.byokTitle" title="點擊設定瀏覽器端 BYOK 金鑰（絕不傳給伺服器）">
+              <span class="status-dot" id="hud-byok-dot"></span>
+              <span id="hud-byok-label">擬真體驗模式</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" data-i18n="hud.certBtn">🪪 打工證</button>
+            <button type="button" class="btn btn-sm" id="btn-open-settings" data-i18n="hud.settingsBtn">⚙️ 設定</button>
+            <button type="button" class="btn btn-sm btn-primary" id="btn-menu-feedback" data-i18n="hud.feedbackBtn">📮 鎮民意見箱</button>
+            <a class="btn btn-sm btn-primary" id="btn-github-login" href="/api/auth/github" style="display: none;" data-i18n="hud.githubLogin">GitHub 登入</a>
+            <button type="button" class="btn btn-sm btn-danger" id="btn-logout" style="display: none;" data-i18n="hud.logout">登出</button>
+          </div>
+
+          <div class="hud-menu-group">
+            <div class="hud-menu-heading" data-i18n="hud.menuDisplay">顯示與語言</div>
+            <div class="hud-menu-row">
+              <span class="hud-menu-label" data-i18n="hud.themeLabel">介面主題</span>
+              <button type="button" class="btn btn-icon" id="btn-day-night" data-i18n-title="hud.dayNightTitle" title="切換賽博暖夜 / 清晨白天模式">🌙</button>
+            </div>
+            <div class="hud-menu-row">
+              <span class="hud-menu-label" data-i18n="hud.langLabel">顯示語言</span>
+              <div class="lang-switch" id="lang-switch" role="group" aria-label="Language Switcher">
+                <button type="button" class="lang-btn active" data-lang="zh-TW">繁中</button>
+                <button type="button" class="lang-btn" data-lang="zh-CN">简中</button>
+                <button type="button" class="lang-btn" data-lang="en">EN</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="hud-menu-group">
+            <div class="hud-menu-heading" data-i18n="hud.menuExplore">探索與文件</div>
+            <a class="btn btn-sm" id="btn-hud-home" href="/" data-i18n="hud.homeBtn">🏠 官網</a>
+            <a class="btn btn-sm" id="btn-hud-install" href="/#install" data-i18n="hud.installBtn">📦 安裝小人</a>
+            <a class="btn btn-sm" id="btn-hud-docs" href="/docs" data-i18n="hud.docsBtn">📖 說明書</a>
+            <a class="btn btn-sm" id="btn-hud-whitepaper" href="/whitepaper" data-i18n="hud.whitepaperBtn">📜 白皮書</a>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
-  <!-- 3 步新手導引條（可收合、隨進度自動打勾） -->
+  <!-- 3 步新手導引條（預設精簡收合，點一下展開） -->
   <section class="onboarding-wrap" aria-label="Quickstart Guide">
-    <div class="onboarding-bar" id="onboarding-bar">
+    <div class="onboarding-bar collapsed" id="onboarding-bar">
       <div class="onboarding-head">
         <div class="onboarding-title">
           <span data-i18n="onboarding.title">🧭 創世鎮長 3 步快速體驗</span>
@@ -230,46 +271,49 @@
           <span data-i18n-html="guild.banner">⚔️ <strong>月／週訂閱額度軌道（BYOT 合規）</strong>：接單後複製標準化 Context Pack 給本機 Gemini CLI / Claude Code / Codex，或跑 <code class="mono">pixel-worker</code> 即時直播小人幹活！</span>
         </div>
 
-        <!-- ⚖️ 實幹審閱佇列（防垃圾 AI 過濾站） -->
+        <!-- ⚖️ 實幹審閱佇列（預設自動收合，有待審再展開） -->
         <section class="review-queue-panel" id="review-queue-panel" aria-label="Peer Review Queue">
-          <div class="review-panel-head">
-            <div class="review-panel-title-wrap">
-              <strong class="review-panel-title" data-i18n="review.panelTitle">⚖️ 實幹審閱佇列（防垃圾 AI 過濾站）</strong>
-              <span class="badge red review-badge-pulse" id="review-queue-badge">0 筆待審</span>
+          <details class="card-details review-queue-details" id="review-queue-details">
+            <summary class="review-panel-head">
+              <div class="review-panel-title-wrap">
+                <strong class="review-panel-title" data-i18n="review.panelTitle">⚖️ 實幹審閱佇列</strong>
+                <span class="badge red review-badge-pulse" id="review-queue-badge">0 筆待審</span>
+              </div>
+              <button type="button" class="btn btn-sm" id="btn-refresh-reviews" data-i18n="review.refreshBtn">🔄 刷新</button>
+            </summary>
+            <div class="card-details-body">
+              <p class="review-panel-desc" data-i18n-html="review.panelDesc">
+                實幹者與維護者擁有合併否決權：核准優質 PR 領 <strong>+15G</strong> 審閱獎，揪出並駁回垃圾 AI 注水可直接<strong>沒收對方押金歸自己</strong>！
+              </p>
+              <div class="card-list review-queue-list" id="review-queue-list">
+                <div class="empty-state" data-i18n="review.empty">目前沒有待審閱的提交，所有佇列均已清空！</div>
+              </div>
+              <div class="review-history-wrap" id="review-history-wrap" style="display: none;">
+                <div class="review-history-title" data-i18n="review.historyTitle">📜 近期審閱裁決紀錄</div>
+                <div class="ledger-list" id="review-history-list"></div>
+              </div>
             </div>
-            <button type="button" class="btn btn-sm" id="btn-refresh-reviews" data-i18n="review.refreshBtn">🔄 刷新佇列</button>
-          </div>
-          <p class="review-panel-desc" data-i18n-html="review.panelDesc">
-            實幹者與維護者擁有合併否決權：核准優質 PR 領 <strong>+15G</strong> 審閱獎，揪出並駁回垃圾 AI 注水可直接<strong>沒收對方押金歸自己</strong>！
-          </p>
-          <div class="card-list review-queue-list" id="review-queue-list">
-            <div class="empty-state" data-i18n="review.empty">目前沒有待審閱的提交，所有佇列均已清空！</div>
-          </div>
-          <div class="review-history-wrap" id="review-history-wrap" style="display: none;">
-            <div class="review-history-title" data-i18n="review.historyTitle">📜 近期審閱裁決紀錄</div>
-            <div class="ledger-list" id="review-history-list"></div>
-          </div>
+          </details>
         </section>
 
-        <!-- GitHub 公開倉庫 Issue 實單匯入面板 -->
-        <form class="github-import-card" id="github-import-form">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-            <strong style="font-size: 12px; color: var(--accent-cyan);" data-i18n="guild.importTitle">🔗 從 GitHub 公開倉庫匯入真實 Issue 為懸賞任務</strong>
-            <span class="badge cyan">GitHub Issues API</span>
-          </div>
-          <div class="github-import-row">
-            <input class="input mono" id="gh-import-repo" type="text" required data-i18n-placeholder="guild.importPlaceholder" placeholder="輸入 owner/repo 或完整 GitHub 網址（例：vercel/next.js）" />
-            <select class="select select-inline" id="gh-import-track" aria-label="Import Track">
-              <option value="guild_bounty" data-i18n="guild.importTrackGuild">懸賞工會 (BYOT)</option>
-              <option value="api_auto" data-i18n="guild.importTrackApi">自動工坊 (API)</option>
-            </select>
-            <select class="select select-inline" id="gh-import-project" aria-label="Target Project">
-              <option value="" data-i18n="guild.importAutoProj">自動建立對應項目</option>
-            </select>
-            <button type="submit" class="btn btn-primary" id="btn-gh-import" data-i18n="guild.importBtn">📥 匯入 Issue</button>
-          </div>
-          <div id="gh-import-result" class="mono" style="font-size: 11px; color: var(--text-sub); display: none;"></div>
-        </form>
+        <!-- GitHub 公開倉庫 Issue 實單匯入面板（預設收合） -->
+        <details class="card-details" id="guild-import-details">
+          <summary data-i18n="guild.importSummary">🔗 從 GitHub 公開倉庫匯入真實 Issue（選用）</summary>
+          <form class="github-import-card card-details-body" id="github-import-form">
+            <div class="github-import-row">
+              <input class="input mono" id="gh-import-repo" type="text" required data-i18n-placeholder="guild.importPlaceholder" placeholder="輸入 owner/repo 或完整 GitHub 網址（例：vercel/next.js）" />
+              <select class="select select-inline" id="gh-import-track" aria-label="Import Track">
+                <option value="guild_bounty" data-i18n="guild.importTrackGuild">懸賞工會 (BYOT)</option>
+                <option value="api_auto" data-i18n="guild.importTrackApi">自動工坊 (API)</option>
+              </select>
+              <select class="select select-inline" id="gh-import-project" aria-label="Target Project">
+                <option value="" data-i18n="guild.importAutoProj">自動建立對應項目</option>
+              </select>
+              <button type="submit" class="btn btn-primary" id="btn-gh-import" data-i18n="guild.importBtn">📥 匯入 Issue</button>
+            </div>
+            <div id="gh-import-result" class="mono" style="font-size: 11px; color: var(--text-sub); display: none;"></div>
+          </form>
+        </details>
 
         <div class="section-toolbar">
           <div class="toolbar-group">
@@ -1157,5 +1201,6 @@
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
   <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/feedbackWidget.js"></script>
 </body>
 </html>

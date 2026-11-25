@@ -957,7 +957,46 @@ export function createAppServer(options = {}) {
     ? Number(options.rateLimitWindowMs)
     : 60_000;
   const rateBuckets = new Map();
+  const feedbackRateBuckets = new Map();
+  const feedbackRateMax = options.feedbackRateLimitMax !== undefined
+    ? Number(options.feedbackRateLimitMax)
+    : 8;
+  const feedbackRateWindowMs = Number(options.feedbackRateWindowMs) > 0
+    ? Number(options.feedbackRateWindowMs)
+    : 10 * 60_000;
   let rateLimitBlockedCount = 0;
+
+  function checkFeedbackRateLimit(req, res) {
+    if (!Number.isFinite(feedbackRateMax) || feedbackRateMax <= 0) return true;
+    const forwarded = typeof req.headers['x-forwarded-for'] === 'string'
+      ? req.headers['x-forwarded-for'].split(',')[0].trim()
+      : '';
+    const clientKey = forwarded || req.socket?.remoteAddress || 'local';
+    const now = Date.now();
+    let bucket = feedbackRateBuckets.get(clientKey);
+    if (!bucket || now >= bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + feedbackRateWindowMs };
+      feedbackRateBuckets.set(clientKey, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > feedbackRateMax) {
+      const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSec));
+      sendJson(res, 429, {
+        ok: false,
+        code: 'FEEDBACK_RATE_LIMITED',
+        error: `意見提交過於頻繁，請於 ${retryAfterSec} 秒後再試`,
+        retryAfterSec,
+      });
+      return false;
+    }
+    if (feedbackRateBuckets.size > 500) {
+      for (const [k, b] of feedbackRateBuckets.entries()) {
+        if (now >= b.resetAt) feedbackRateBuckets.delete(k);
+      }
+    }
+    return true;
+  }
 
   function checkWriteRateLimit(req, res) {
     if (rateLimitMax <= 0) return true;
@@ -1126,6 +1165,11 @@ export function createAppServer(options = {}) {
         const payouts = state.payouts || [];
         const pendingPayouts = payouts.filter((p) => p.status === 'pending');
         const pendingPayoutsUsd = round2(pendingPayouts.reduce((s, p) => s + (Number(p.amountUsd) || 0), 0));
+        const feedbacks = state.feedbacks || [];
+        const todayDateStr = new Date().toISOString().slice(0, 10);
+        const unreadFeedbackCount = feedbacks.filter((f) => f.status === 'unread').length;
+        const todayFeedbackCount = feedbacks.filter((f) => String(f.createdAt || '').slice(0, 10) === todayDateStr).length;
+        const totalFeedbackCount = feedbacks.length;
         const reviewQueue = state.reviewQueue || [];
         const provenance = verifyProvenanceChain(projects);
         const backupMeta = await store.exportBackup();
@@ -1191,6 +1235,9 @@ export function createAppServer(options = {}) {
             pendingReviewsCount: reviewQueue.length,
             pendingPayoutsCount: pendingPayouts.length,
             pendingPayoutsUsd,
+            unreadFeedbackCount,
+            todayFeedbackCount,
+            totalFeedbackCount,
             founderRevenue: state.founderRevenue,
             provenanceValid: provenance.valid,
             provenanceChainLength: provenance.chainLength,
@@ -1408,6 +1455,195 @@ export function createAppServer(options = {}) {
           'Cache-Control': 'no-store',
         });
         return res.end(JSON.stringify({ ok: true, ...backup }, null, 2));
+      }
+
+      // Public Daily Feedback / Suggestion Box: POST /api/feedback
+      if (pathname === '/api/feedback' && method === 'POST') {
+        if (!checkFeedbackRateLimit(req, res)) {
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const VALID_CATS = new Set(['suggestion', 'bug', 'ui', 'other']);
+        const rawCategory = String(body?.category || 'suggestion').trim().toLowerCase();
+        const category = VALID_CATS.has(rawCategory) ? rawCategory : 'suggestion';
+
+        const rawRating = body?.rating === undefined || body?.rating === null ? 5 : Number(body.rating);
+        if (!Number.isInteger(rawRating) || rawRating < 1 || rawRating > 5) {
+          throw new HttpError(400, '評分必須為 1 到 5 顆星的整數');
+        }
+
+        const message = sanitizeText(body?.message, 1000, { multiline: true });
+        if (message.length < 2) {
+          throw new HttpError(400, '請輸入至少 2 個字的建議或意見內容');
+        }
+        const contact = sanitizeText(body?.contact, 120);
+        let pagePath = sanitizeText(body?.page, 120);
+        if (!pagePath && typeof req.headers.referer === 'string') {
+          try {
+            pagePath = sanitizeText(new URL(req.headers.referer).pathname, 120);
+          } catch {
+            pagePath = '/';
+          }
+        }
+        if (!pagePath) pagePath = '/app';
+
+        const { result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          const isRealAuthed = Boolean(ctx.sessionId && !ctx.isGuestDemo);
+          const now = new Date().toISOString();
+          const guestName = sanitizeText(body?.userName, 32);
+
+          const item = {
+            id: uid('fb'),
+            category,
+            rating: rawRating,
+            message,
+            contact,
+            page: pagePath,
+            userId: isRealAuthed ? ctx.user.id : (ctx.sessionId ? ctx.user.id : null),
+            userName: isRealAuthed
+              ? (ctx.user.displayName || ctx.user.username)
+              : (guestName || '訪客鎮民 (Guest)'),
+            authMode: isRealAuthed ? (ctx.user.authMode || 'email') : (ctx.sessionId ? 'demo' : 'guest'),
+            status: 'unread',
+            founderNote: '',
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          s.feedbacks.unshift(item);
+          if (s.feedbacks.length > 500) {
+            s.feedbacks.length = 500;
+          }
+
+          const todayStr = now.slice(0, 10);
+          const unreadCount = s.feedbacks.filter((f) => f.status === 'unread').length;
+          const todayCount = s.feedbacks.filter((f) => String(f.createdAt || '').slice(0, 10) === todayStr).length;
+          return { item, unreadCount, todayCount };
+        });
+
+        store.appendAudit(
+          'feedback_submitted',
+          `[${result.item.category} ★${result.item.rating}] ${result.item.userName} (${result.item.page}): ${result.item.message.slice(0, 80)}`,
+        );
+
+        // Broadcast public preview via SSE (strictly omit private contact field)
+        sseHub.broadcast('feedback_received', {
+          id: result.item.id,
+          category: result.item.category,
+          rating: result.item.rating,
+          userName: result.item.userName,
+          authMode: result.item.authMode,
+          page: result.item.page,
+          preview: result.item.message.slice(0, 80),
+          createdAt: result.item.createdAt,
+          unreadCount: result.unreadCount,
+          todayCount: result.todayCount,
+        });
+
+        return sendJson(res, 201, {
+          ok: true,
+          feedback: {
+            id: result.item.id,
+            category: result.item.category,
+            rating: result.item.rating,
+            status: result.item.status,
+            createdAt: result.item.createdAt,
+          },
+        });
+      }
+
+      // Founder Daily Feedback Inbox: GET /api/admin/feedback
+      if (pathname === '/api/admin/feedback' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        const ctx = getActiveUserContext(req, state);
+        if (!isFounderAdmin(req, ctx)) {
+          throw new HttpError(403, '僅限創始鎮長閱讀每日意見箱', { code: 'ADMIN_ONLY' });
+        }
+
+        const all = state.feedbacks || [];
+        const todayDate = new Date().toISOString().slice(0, 10);
+        const statusFilter = String(url.searchParams.get('status') || '').trim().toLowerCase();
+        const dateFilter = String(url.searchParams.get('date') || '').trim();
+        const categoryFilter = String(url.searchParams.get('category') || '').trim().toLowerCase();
+
+        const filtered = all.filter((f) => {
+          if (statusFilter && statusFilter !== 'all' && f.status !== statusFilter) return false;
+          if (dateFilter && String(f.createdAt || '').slice(0, 10) !== dateFilter) return false;
+          if (categoryFilter && categoryFilter !== 'all' && f.category !== categoryFilter) return false;
+          return true;
+        });
+
+        return sendJson(res, 200, {
+          ok: true,
+          todayDate,
+          todayCount: all.filter((f) => String(f.createdAt || '').slice(0, 10) === todayDate).length,
+          unreadCount: all.filter((f) => f.status === 'unread').length,
+          totalCount: all.length,
+          feedbacks: filtered.slice(0, 200),
+        });
+      }
+
+      // Founder Update Feedback Status / Note: PATCH /api/admin/feedback/:id
+      const adminFeedbackMatch = pathname.match(/^\/api\/admin\/feedback\/([^/]+)$/);
+      if (adminFeedbackMatch && method === 'PATCH') {
+        const feedbackId = decodeURIComponent(adminFeedbackMatch[1]);
+        const body = await parseJsonBody(req);
+        const VALID_STATUS = new Set(['unread', 'read', 'planned', 'resolved']);
+        if (body?.status !== undefined && !VALID_STATUS.has(String(body.status))) {
+          throw new HttpError(400, '無效的意見狀態（僅支援 unread / read / planned / resolved）');
+        }
+
+        const { result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          if (!isFounderAdmin(req, ctx)) {
+            throw new HttpError(403, '僅限創始鎮長更新意見狀態', { code: 'ADMIN_ONLY' });
+          }
+
+          const item = (s.feedbacks || []).find((f) => f.id === feedbackId);
+          if (!item) {
+            throw new HttpError(404, `找不到意見紀錄：${feedbackId}`);
+          }
+
+          if (body?.status !== undefined) {
+            item.status = String(body.status);
+          }
+          if (typeof body?.founderNote === 'string') {
+            item.founderNote = sanitizeText(body.founderNote, 500, { multiline: true });
+          }
+          item.updatedAt = new Date().toISOString();
+
+          const todayStr = item.updatedAt.slice(0, 10);
+          return {
+            item,
+            adminName: ctx.user.displayName || ctx.user.username || 'Founder',
+            unreadCount: s.feedbacks.filter((f) => f.status === 'unread').length,
+            todayCount: s.feedbacks.filter((f) => String(f.createdAt || '').slice(0, 10) === todayStr).length,
+            totalCount: s.feedbacks.length,
+          };
+        });
+
+        store.appendAudit(
+          'feedback_updated',
+          `Founder ${result.adminName} marked feedback ${result.item.id} as ${result.item.status}`,
+        );
+        sseHub.broadcast('feedback_updated', {
+          id: result.item.id,
+          status: result.item.status,
+          updatedAt: result.item.updatedAt,
+          unreadCount: result.unreadCount,
+        });
+
+        return sendJson(res, 200, {
+          ok: true,
+          feedback: result.item,
+          unreadCount: result.unreadCount,
+          todayCount: result.todayCount,
+          totalCount: result.totalCount,
+        });
       }
 
       // Public landing page stats

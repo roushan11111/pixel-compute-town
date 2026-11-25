@@ -3308,4 +3308,137 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('35. Daily Feedback Box (POST /api/feedback, GET/PATCH /api/admin/feedback, SSE privacy & clean HUD)', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-feedback-box-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+    const sse = openSseClient(started.port);
+
+    try {
+      await sse.connectedPromise;
+      await sse.waitForEvent('connected');
+
+      // 1. Reject invalid rating & too-short message with 400
+      const badRating = await apiJson(isoUrl, 'POST', '/api/feedback', {
+        category: 'ui',
+        rating: 9,
+        message: 'Too many buttons',
+      });
+      assert.equal(badRating.status, 400);
+
+      const badMsg = await apiJson(isoUrl, 'POST', '/api/feedback', {
+        category: 'ui',
+        rating: 4,
+        message: 'a',
+      });
+      assert.equal(badMsg.status, 400);
+
+      // 2. Public guest submission -> 201, NOT misattributed to founder-demo, SSE omits private contact
+      const guestFb = await apiJson(isoUrl, 'POST', '/api/feedback', {
+        category: 'ui',
+        rating: 5,
+        message: 'New single-row header looks super clean and comfortable!',
+        contact: 'secret-guest@example.com',
+        page: '/app',
+      });
+      assert.equal(guestFb.status, 201);
+      assert.equal(guestFb.json.ok, true);
+      assert.equal(guestFb.json.feedback.status, 'unread');
+
+      const sseFbEvt = await sse.waitForEvent('feedback_received', 3000);
+      assert.equal(sseFbEvt.data.id, guestFb.json.feedback.id);
+      assert.equal(sseFbEvt.data.authMode, 'guest');
+      assert.equal(sseFbEvt.data.contact, undefined, 'SSE broadcast MUST NOT leak private contact info');
+
+      // 3. Authenticated real user submission
+      const reg = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'fb-user@pixelcompute.test',
+        password: 'fb-password-123',
+        displayName: 'Feedback Citizen',
+      });
+      assert.equal(reg.status, 201);
+      const userCookie = reg.cookie;
+
+      const userFb = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/feedback',
+        {
+          category: 'suggestion',
+          rating: 4,
+          message: 'Please add dark/light keyboard shortcut!',
+          contact: '@fbcitizen',
+          page: '/',
+        },
+        userCookie,
+      );
+      assert.equal(userFb.status, 201);
+
+      // 4. Non-founder blocked from reading/updating Founder feedback inbox (403 ADMIN_ONLY)
+      const forbiddenGet = await apiJson(isoUrl, 'GET', '/api/admin/feedback', undefined, userCookie);
+      assert.equal(forbiddenGet.status, 403);
+      assert.equal(forbiddenGet.json.code, 'ADMIN_ONLY');
+
+      const forbiddenPatch = await apiJson(
+        isoUrl,
+        'PATCH',
+        `/api/admin/feedback/${userFb.json.feedback.id}`,
+        { status: 'planned' },
+        userCookie,
+      );
+      assert.equal(forbiddenPatch.status, 403);
+      assert.equal(forbiddenPatch.json.code, 'ADMIN_ONLY');
+
+      // 5. Founder reads daily inbox with filters & updates status + founderNote
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const inbox = await apiJson(isoUrl, 'GET', `/api/admin/feedback?status=unread&date=${todayStr}`);
+      assert.equal(inbox.status, 200);
+      assert.equal(inbox.json.ok, true);
+      assert.equal(inbox.json.todayCount, 2);
+      assert.equal(inbox.json.unreadCount, 2);
+      assert.equal(inbox.json.totalCount, 2);
+      assert.equal(inbox.json.feedbacks.length, 2);
+
+      const guestStored = inbox.json.feedbacks.find((f) => f.id === guestFb.json.feedback.id);
+      assert.equal(guestStored.authMode, 'guest');
+      assert.equal(guestStored.userId, null);
+      assert.equal(guestStored.contact, 'secret-guest@example.com');
+
+      const userStored = inbox.json.feedbacks.find((f) => f.id === userFb.json.feedback.id);
+      assert.equal(userStored.userName, 'Feedback Citizen');
+      assert.equal(userStored.authMode, 'email');
+
+      const patchOk = await apiJson(isoUrl, 'PATCH', `/api/admin/feedback/${userFb.json.feedback.id}`, {
+        status: 'planned',
+        founderNote: 'Will ship in v1.3!',
+      });
+      assert.equal(patchOk.status, 200);
+      assert.equal(patchOk.json.feedback.status, 'planned');
+      assert.equal(patchOk.json.feedback.founderNote, 'Will ship in v1.3!');
+      assert.equal(patchOk.json.unreadCount, 1);
+
+      // 6. Verify /api/admin/overview KPIs, audit_log & static assets (/js/feedbackWidget.js + clean HUD)
+      const overview = await apiJson(isoUrl, 'GET', '/api/admin/overview');
+      assert.equal(overview.status, 200);
+      assert.equal(overview.json.summary.unreadFeedbackCount, 1);
+      assert.equal(overview.json.summary.todayFeedbackCount, 2);
+      assert.equal(overview.json.summary.totalFeedbackCount, 2);
+      const auditTypes = new Set(overview.json.auditLog.map((a) => a.eventType));
+      assert.ok(auditTypes.has('feedback_submitted'));
+      assert.ok(auditTypes.has('feedback_updated'));
+
+      const widgetRes = await fetch(`${isoUrl}/js/feedbackWidget.js`);
+      assert.equal(widgetRes.status, 200);
+      const appHtml = await (await fetch(`${isoUrl}/app`)).text();
+      assert.ok(appHtml.includes('hud-more-popover'));
+      assert.ok(appHtml.includes('/js/feedbackWidget.js'));
+      const adminHtml = await (await fetch(`${isoUrl}/admin`)).text();
+      assert.ok(adminHtml.includes('panel-feedback'));
+    } finally {
+      sse.close();
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });

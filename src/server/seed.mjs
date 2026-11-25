@@ -730,6 +730,29 @@ export function ensureStateSchema(state) {
     }
   }
 
+  if (!Array.isArray(state.feedbacks)) {
+    state.feedbacks = [];
+  }
+  const VALID_FB_CATS = new Set(['suggestion', 'bug', 'ui', 'other']);
+  const VALID_FB_STATUS = new Set(['unread', 'read', 'planned', 'resolved']);
+  state.feedbacks = state.feedbacks
+    .filter((f) => f && typeof f === 'object')
+    .map((f) => ({
+      id: f.id || `fb-${crypto.randomBytes(4).toString('hex')}`,
+      category: VALID_FB_CATS.has(f.category) ? f.category : 'suggestion',
+      rating: Number.isInteger(Number(f.rating)) && Number(f.rating) >= 1 && Number(f.rating) <= 5 ? Number(f.rating) : 5,
+      message: String(f.message || '').slice(0, 1000),
+      contact: String(f.contact || '').slice(0, 120),
+      page: String(f.page || '/app').slice(0, 120),
+      userId: f.userId || null,
+      userName: String(f.userName || '訪客鎮民 (Guest)').slice(0, 48),
+      authMode: String(f.authMode || 'guest').slice(0, 24),
+      status: VALID_FB_STATUS.has(f.status) ? f.status : 'unread',
+      founderNote: String(f.founderNote || '').slice(0, 500),
+      createdAt: f.createdAt || now,
+      updatedAt: f.updatedAt || f.createdAt || now,
+    }));
+
   // Keep legacy top-level mirrors synced to founder-demo for backward-compatible disk reads
   const founder = state.users[founderId];
   state.player = {
@@ -1737,6 +1760,7 @@ export function createInitialState() {
     deviceAuthorizations: {},
     reviewQueue: createInitialReviewQueue(),
     reviewHistory: [],
+    feedbacks: [],
     antiSlopTreasuryGold: 0,
     settings: {
       strictDeviceReview: false,

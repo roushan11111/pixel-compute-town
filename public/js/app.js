@@ -149,12 +149,12 @@ const app = {
   certExported: false,
   onboardingCollapsed: (() => {
     try {
-      return localStorage.getItem(ONBOARDING_STORAGE_KEY) === '1';
+      return localStorage.getItem(ONBOARDING_STORAGE_KEY) !== '0';
     } catch {
-      return false;
+      return true;
     }
   })(),
-  adminPanelCollapsed: false,
+  adminPanelCollapsed: true,
   seenUnlockedAchievements: new Set(),
   // Auth modal runtime state
   authModalMode: 'login',
@@ -1497,26 +1497,33 @@ function renderFactoryTab() {
           <div class="card-head">
             <div>
               <h3 class="card-title">${escapeHtml(lt.title)}</h3>
-              <p class="card-subtitle">${escapeHtml(lt.description || '')}</p>
+              <p class="card-subtitle clamp-2">${escapeHtml(lt.description || '')}</p>
             </div>
             ${statusBadge}
           </div>
           ${workerChipHtml}
           <div class="badge-row">
             ${renderAudienceBadge(task)}
-            ${bucketBadge}
             <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
-            <span class="badge cyan">🤖 ${escapeHtml(lt.modelSuggestion || task.modelSuggestion || 'gemini-2.5-flash')}</span>
-            <span class="badge">⚡ ${(task.tokenCostEst || 0).toLocaleString()} tok / -${task.staminaCost || 12}</span>
-            <span class="badge gold">🪙 +${task.goldReward}G</span>
-            <span class="badge pink">✨ +${task.contributionPoints} pt</span>
-            ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
-            ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
-            ${task.cashBountyUsd > 0 ? renderCashBountyBadge(task.cashBountyUsd, 'factory') : ''}
+            ${task.cashBountyUsd > 0 ? renderCashBountyBadge(task.cashBountyUsd, 'factory') : bucketBadge}
           </div>
+          <details class="card-details">
+            <summary>${escapeHtml(t('card.detailsToggle'))}</summary>
+            <div class="card-details-body">
+              <div class="badge-row">
+                ${bucketBadge}
+                <span class="badge cyan">🤖 ${escapeHtml(lt.modelSuggestion || task.modelSuggestion || 'gemini-2.5-flash')}</span>
+                <span class="badge">⚡ ${(task.tokenCostEst || 0).toLocaleString()} tok / -${task.staminaCost || 12}</span>
+                ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
+                ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
+                <span class="badge">${escapeHtml(task.category)} ｜ +${task.progressWeight || 15}%</span>
+              </div>
+            </div>
+          </details>
           <div class="card-footer">
-            <span class="mono" style="font-size: 11px; color: var(--text-muted);">
-              ${escapeHtml(task.category)} ｜ +${task.progressWeight || 15}%
+            <span class="card-reward-line">
+              <span style="color: var(--accent-gold);">🪙 +${task.goldReward}G</span>
+              <span style="color: var(--accent-pink);">✨ +${task.contributionPoints} pt</span>
             </span>
             <div class="toolbar-group">
               ${
@@ -1549,6 +1556,11 @@ function renderReviewQueuePanel() {
   if (badgeEl) {
     badgeEl.textContent = t('review.pendingBadge', { count: pendingItems.length });
     badgeEl.className = `badge ${pendingItems.length > 0 ? 'red review-badge-pulse has-items' : 'green'}`;
+  }
+
+  const reviewDetailsEl = $('review-queue-details');
+  if (reviewDetailsEl && !reviewDetailsEl.dataset.userToggled) {
+    reviewDetailsEl.open = pendingItems.length > 0;
   }
 
   if (pendingItems.length === 0) {
@@ -1829,7 +1841,7 @@ function renderGuildTab() {
           <div class="card-head">
             <div>
               <h3 class="card-title">${escapeHtml(lt.title)}</h3>
-              <p class="card-subtitle">${escapeHtml(lt.description || '')}</p>
+              <p class="card-subtitle clamp-2">${escapeHtml(lt.description || '')}</p>
             </div>
             ${
               isCompleted
@@ -1844,22 +1856,30 @@ function renderGuildTab() {
           ${workerChipHtml}
           <div class="badge-row">
             ${renderAudienceBadge(task)}
-            <span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>
-            ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
-            ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
             <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
-            <span class="badge amber">🖥️ ${escapeHtml(lt.modelSuggestion || task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
-            <span class="badge gold">🪙 +${task.goldReward}G</span>
-            <span class="badge pink">✨ +${task.contributionPoints} pt</span>
             ${
               task.cashBountyUsd > 0
                 ? renderCashBountyBadge(task.cashBountyUsd, 'guild')
-                : `<span class="badge cyan">${escapeHtml(t('guild.poolBadge'))}</span>`
+                : `<span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>`
             }
           </div>
+          <details class="card-details">
+            <summary>${escapeHtml(t('card.detailsToggle'))}</summary>
+            <div class="card-details-body">
+              <div class="badge-row">
+                <span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>
+                <span class="badge amber">🖥️ ${escapeHtml(lt.modelSuggestion || task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
+                ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
+                ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
+                <span class="badge">${escapeHtml(task.category)} ｜ -${task.staminaCost || 20}⚡ ｜ +${task.progressWeight || 20}%</span>
+              </div>
+            </div>
+          </details>
           <div class="card-footer">
-            <span class="mono" style="font-size: 11px; color: var(--text-muted);">
-              ${escapeHtml(task.category)} ｜ -${task.staminaCost || 20} ｜ +${task.progressWeight || 20}%
+            <span class="card-reward-line">
+              <span style="color: var(--accent-gold);">🪙 +${task.goldReward}G</span>
+              <span style="color: var(--accent-pink);">✨ +${task.contributionPoints} pt</span>
+              ${stakeGold > 0 ? `<span style="color: var(--accent-amber);">🔒 ${stakeGold}G</span>` : ''}
             </span>
             <div class="toolbar-group">
               ${
@@ -1940,7 +1960,7 @@ function renderIncubatorTab() {
                 ${escapeHtml(lp.name)}
                 ${p.sponsoredBillboard ? `<span class="badge pink" style="margin-left: 6px;">${escapeHtml(t('incubator.sponsoredBadge'))}</span>` : ''}
               </h3>
-              <p class="card-subtitle">${escapeHtml(lp.tagline || lp.description || '')}</p>
+              <p class="card-subtitle clamp-2">${escapeHtml(lp.tagline || lp.description || '')}</p>
             </div>
             ${
               isVoting
@@ -1951,53 +1971,19 @@ function renderIncubatorTab() {
             }
           </div>
 
-          <!-- 🔖 創意溯源條 (Proof of First Spark + 5/85/10 透明分紅條) -->
-          <div class="provenance-strip">
-            <div class="prov-strip-top">
-              <div class="prov-strip-meta">
-                <span>${escapeHtml(t('incubator.originatorPrefix', { name: lp.originatorName || lp.creatorName }))}</span>
-                <span class="mono">🕒 ${escapeHtml(originatedStr)}</span>
-                <span class="badge green">${escapeHtml(t('incubator.coBuildersCount', { count: coBuildersCount }))}</span>
-              </div>
-              <button
-                type="button"
-                class="prov-hash-btn"
-                data-open-provenance="${escapeHtml(p.id)}"
-                title="${escapeHtml(t('incubator.hashVerifyTitle'))}"
-              >
-                🔐 #${escapeHtml(ideaHashShort)}
-              </button>
-            </div>
-            <div class="split-mini-bar" title="${escapeHtml(`${sparkPct}% / ${meritPct}% / ${platformPct}%`)}">
-              <div class="split-mini-seg spark" style="width: 19%;">${escapeHtml(t('incubator.splitSpark'))}</div>
-              <div class="split-mini-seg merit" style="width: 65%;">${escapeHtml(t('incubator.splitMerit'))}</div>
-              <div class="split-mini-seg platform" style="width: 16%;">${escapeHtml(t('incubator.splitPlatform'))}</div>
-            </div>
-            <!-- 🛡️ 防稀釋配額條（核心實幹池 70% vs 週邊微任務池 ≤30%） -->
-            <div class="bucket-quota-box">
-              <div class="bucket-quota-head">
-                <span>${escapeHtml(t('gov.quotaHeader'))}</span>
-                <span class="mono" style="color: var(--accent-cyan);">${escapeHtml(t('gov.quotaProofHint'))}</span>
-              </div>
-              <div class="bucket-mini-bar" title="${escapeHtml(`${coreCapPct}% Core (${corePts} pt) / <=${periphCapPct}% Peripheral (${periphPts} pt)`)}">
-                <div class="bucket-mini-seg core" style="width: ${coreCapPct}%;">${escapeHtml(t('gov.coreBarLabel', { cap: coreCapPct, pts: corePts }))}</div>
-                <div class="bucket-mini-seg peripheral" style="width: ${periphCapPct}%;">${escapeHtml(t('gov.periphBarLabel', { cap: periphCapPct, pts: periphPts }))}</div>
-              </div>
-            </div>
-          </div>
-
           <div class="badge-row">
             <span class="badge cyan">${escapeHtml(
               isOriginator
                 ? t('incubator.myPointsSpark', { pts: myPts, pct: myTotalSharePct })
                 : t('incubator.myPoints', { pts: myPts, pct: myMeritSharePct.toFixed(1) }),
             )}</span>
+            <span class="badge green">${escapeHtml(t('incubator.coBuildersCount', { count: coBuildersCount }))}</span>
             ${
               p.bountyPoolUsd > 0
                 ? `<span class="badge ${isLiveProductionMode() ? 'bounty-live' : 'bounty-demo'}">${escapeHtml(t('incubator.bountyPool', { amount: p.bountyPoolUsd }))} <span class="bounty-mode-chip">${escapeHtml(isLiveProductionMode() ? t('bounty.liveEscrowTag') : t('bounty.demoTag'))}</span></span>`
                 : ''
             }
-            ${p.totalRevenueUsd > 0 ? `<span class="badge green">${escapeHtml(t('incubator.totalRev', { amount: fmtUsd(p.totalRevenueUsd) }))}</span>` : ''}
+            ${p.totalRevenueUsd > 0 ? `<span class="badge gold">${escapeHtml(t('incubator.totalRev', { amount: fmtUsd(p.totalRevenueUsd) }))}</span>` : ''}
           </div>
 
           ${
@@ -2022,52 +2008,91 @@ function renderIncubatorTab() {
                 </div>`
           }
 
-          ${
-            isBuilding
-              ? `<div class="auto-split-box" data-auto-split-wrap="${escapeHtml(p.id)}">
-                  <div class="auto-split-head">
-                    <span>${escapeHtml(t('incubator.autoSplitTitle'))}</span>
-                    <span class="badge cyan">${escapeHtml(t('incubator.autoSplitBadge'))}</span>
+          <!-- 收合次要細節：5/85/10、70/30 防稀釋配額、AI 拆單、公開頁與看板 -->
+          <details class="card-details">
+            <summary>${escapeHtml(t('incubator.moreDetails'))}</summary>
+            <div class="card-details-body">
+              <div class="provenance-strip">
+                <div class="prov-strip-top">
+                  <div class="prov-strip-meta">
+                    <span>${escapeHtml(t('incubator.originatorPrefix', { name: lp.originatorName || lp.creatorName }))}</span>
+                    <span class="mono">🕒 ${escapeHtml(originatedStr)}</span>
                   </div>
-                  <div class="auto-split-row">
-                    <input
-                      type="text"
-                      class="input auto-split-input"
-                      data-auto-split-input="${escapeHtml(p.id)}"
-                      maxlength="160"
-                      placeholder="${escapeHtml(t('incubator.autoSplitPlaceholder'))}"
-                    />
-                    <button type="button" class="btn btn-sm btn-primary" data-auto-split-btn="${escapeHtml(p.id)}">
-                      ${escapeHtml(t('incubator.autoSplitBtn'))}
-                    </button>
+                  <button
+                    type="button"
+                    class="prov-hash-btn"
+                    data-open-provenance="${escapeHtml(p.id)}"
+                    title="${escapeHtml(t('incubator.hashVerifyTitle'))}"
+                  >
+                    🔐 #${escapeHtml(ideaHashShort)}
+                  </button>
+                </div>
+                <div class="split-mini-bar" title="${escapeHtml(`${sparkPct}% / ${meritPct}% / ${platformPct}%`)}">
+                  <div class="split-mini-seg spark" style="width: 19%;">${escapeHtml(t('incubator.splitSpark'))}</div>
+                  <div class="split-mini-seg merit" style="width: 65%;">${escapeHtml(t('incubator.splitMerit'))}</div>
+                  <div class="split-mini-seg platform" style="width: 16%;">${escapeHtml(t('incubator.splitPlatform'))}</div>
+                </div>
+                <div class="bucket-quota-box">
+                  <div class="bucket-quota-head">
+                    <span>${escapeHtml(t('gov.quotaHeader'))}</span>
+                    <span class="mono" style="color: var(--accent-cyan);">${escapeHtml(t('gov.quotaProofHint'))}</span>
                   </div>
-                </div>`
-              : ''
-          }
+                  <div class="bucket-mini-bar" title="${escapeHtml(`${coreCapPct}% Core (${corePts} pt) / <=${periphCapPct}% Peripheral (${periphPts} pt)`)}">
+                    <div class="bucket-mini-seg core" style="width: ${coreCapPct}%;">${escapeHtml(t('gov.coreBarLabel', { cap: coreCapPct, pts: corePts }))}</div>
+                    <div class="bucket-mini-seg peripheral" style="width: ${periphCapPct}%;">${escapeHtml(t('gov.periphBarLabel', { cap: periphCapPct, pts: periphPts }))}</div>
+                  </div>
+                </div>
+              </div>
+              ${
+                isBuilding
+                  ? `<div class="auto-split-box" data-auto-split-wrap="${escapeHtml(p.id)}">
+                      <div class="auto-split-head">
+                        <span>${escapeHtml(t('incubator.autoSplitTitle'))}</span>
+                        <span class="badge cyan">${escapeHtml(t('incubator.autoSplitBadge'))}</span>
+                      </div>
+                      <div class="auto-split-row">
+                        <input
+                          type="text"
+                          class="input auto-split-input"
+                          data-auto-split-input="${escapeHtml(p.id)}"
+                          maxlength="160"
+                          placeholder="${escapeHtml(t('incubator.autoSplitPlaceholder'))}"
+                        />
+                        <button type="button" class="btn btn-sm btn-primary" data-auto-split-btn="${escapeHtml(p.id)}">
+                          ${escapeHtml(t('incubator.autoSplitBtn'))}
+                        </button>
+                      </div>
+                    </div>`
+                  : ''
+              }
+              <div class="toolbar-group" style="flex-wrap: wrap;">
+                <button type="button" class="btn btn-sm btn-amber" data-open-provenance="${escapeHtml(p.id)}">
+                  ${escapeHtml(t('incubator.certBtn'))}
+                </button>
+                <a class="btn btn-sm" href="${publicPageHref}" target="_blank" rel="noopener noreferrer">
+                  ${escapeHtml(t('incubator.publicPageBtn'))}
+                </a>
+                <a class="btn btn-sm" href="${publicVerifyHref}" target="_blank" rel="noopener noreferrer">
+                  ${escapeHtml(t('incubator.publicVerifyBtn'))}
+                </a>
+                ${
+                  !p.sponsoredBillboard
+                    ? `<button type="button" class="btn btn-sm" data-billboard-project="${escapeHtml(p.id)}">${escapeHtml(t('incubator.billboardBtn', { price: billboardPrice }))}</button>`
+                    : `<span class="mono" style="font-size: 11px; color: var(--accent-pink);">${escapeHtml(t('incubator.billboardActive'))}</span>`
+                }
+              </div>
+            </div>
+          </details>
 
           <div class="card-footer">
             <div class="toolbar-group">
-              <button
-                type="button"
-                class="btn btn-sm ${hasJoined ? '' : 'btn-primary'}"
-                data-join-project="${escapeHtml(p.id)}"
-                ${hasJoined ? 'disabled' : ''}
-              >
-                ${escapeHtml(hasJoined ? t('incubator.joinedBtn') : t('incubator.joinBtn'))}
+              <button type="button" class="prov-hash-btn" data-open-provenance="${escapeHtml(p.id)}" title="${escapeHtml(t('incubator.hashVerifyTitle'))}">
+                🔐 #${escapeHtml(ideaHashShort)}
               </button>
-              <button type="button" class="btn btn-sm btn-amber" data-open-provenance="${escapeHtml(p.id)}">
-                ${escapeHtml(t('incubator.certBtn'))}
-              </button>
-              <a class="btn btn-sm" href="${publicPageHref}" target="_blank" rel="noopener noreferrer">
-                ${escapeHtml(t('incubator.publicPageBtn'))}
-              </a>
-              <a class="btn btn-sm" href="${publicVerifyHref}" target="_blank" rel="noopener noreferrer">
-                ${escapeHtml(t('incubator.publicVerifyBtn'))}
-              </a>
               ${
-                !p.sponsoredBillboard
-                  ? `<button type="button" class="btn btn-sm" data-billboard-project="${escapeHtml(p.id)}">${escapeHtml(t('incubator.billboardBtn', { price: billboardPrice }))}</button>`
-                  : `<span class="mono" style="font-size: 11px; color: var(--accent-pink);">${escapeHtml(t('incubator.billboardActive'))}</span>`
+                !hasJoined
+                  ? `<button type="button" class="btn btn-sm btn-primary" data-join-project="${escapeHtml(p.id)}">${escapeHtml(t('incubator.joinBtn'))}</button>`
+                  : ''
               }
             </div>
             <div class="toolbar-group">
@@ -3675,6 +3700,61 @@ function bindEvents() {
     if (e.key === 'Escape') closeAllModals();
   });
 
+  // HUD Popover Menus (🎵 Audio & ☰ More)
+  const audioWrap = $('hud-audio-popover-wrap');
+  const moreWrap = $('hud-more-popover-wrap');
+  const audioTrigger = $('btn-hud-audio-menu');
+  const moreTrigger = $('btn-hud-more-menu');
+  const closeHudPopovers = () => {
+    audioWrap?.classList.remove('open');
+    moreWrap?.classList.remove('open');
+    audioTrigger?.setAttribute('aria-expanded', 'false');
+    moreTrigger?.setAttribute('aria-expanded', 'false');
+  };
+  audioTrigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const nextOpen = !audioWrap?.classList.contains('open');
+    closeHudPopovers();
+    if (nextOpen && audioWrap) {
+      audioWrap.classList.add('open');
+      audioTrigger.setAttribute('aria-expanded', 'true');
+    }
+    soundFX.playClick();
+  });
+  moreTrigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const nextOpen = !moreWrap?.classList.contains('open');
+    closeHudPopovers();
+    if (nextOpen && moreWrap) {
+      moreWrap.classList.add('open');
+      moreTrigger.setAttribute('aria-expanded', 'true');
+    }
+    soundFX.playClick();
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.hud-popover-wrap')) {
+      closeHudPopovers();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeHudPopovers();
+  });
+  $('hud-more-popover')?.addEventListener('click', (e) => {
+    if (e.target.closest('button:not(.lang-btn):not(#btn-day-night), a')) {
+      closeHudPopovers();
+    }
+  });
+  $('btn-menu-feedback')?.addEventListener('click', () => {
+    closeHudPopovers();
+    window.openFeedbackModal?.();
+  });
+
+  // Track manual toggle on review queue details
+  $('review-queue-details')?.addEventListener('toggle', () => {
+    const el = $('review-queue-details');
+    if (el) el.dataset.userToggled = '1';
+  });
+
   // HUD controls: logged-in users open Personal Profile & Project History; Demo guests open Auth modal
   $('hud-user-badge').addEventListener('click', () => {
     soundFX.playClick();
@@ -3744,6 +3824,7 @@ function bindEvents() {
       const tooltipParts = [trackName, bpm, mood].filter(Boolean);
 
       bgmControls.classList.toggle('playing', isPlaying);
+      $('btn-hud-audio-menu')?.classList.toggle('playing', isPlaying);
 
       const toggleBtn = $('btn-bgm-toggle');
       if (toggleBtn) {
@@ -4602,6 +4683,8 @@ function bindEvents() {
   $('btn-incubator-jump-import').addEventListener('click', () => {
     soundFX.playClick();
     switchTab('guild');
+    const details = $('guild-import-details');
+    if (details) details.open = true;
     $('gh-import-repo')?.focus();
   });
 

@@ -292,6 +292,7 @@
       <div class="tabs" role="tablist">
         <button type="button" class="tab-btn active" data-tab="users">👥 註冊用戶名冊 (<span id="tab-count-users">0</span>)</button>
         <button type="button" class="tab-btn" data-tab="finance">💳 訂單與穩定幣提領 (<span id="tab-count-payouts">0</span>)</button>
+        <button type="button" class="tab-btn" data-tab="feedback">📮 每日意見箱 <span class="pill muted" id="tab-badge-feedback">0</span></button>
         <button type="button" class="tab-btn" data-tab="codes">🎟️ 卡密兌換碼工廠 (<span id="tab-count-codes">0</span>)</button>
         <button type="button" class="tab-btn" data-tab="governance">🛡️ 裝置審核與治理 (<span id="tab-count-pending">0</span>)</button>
         <button type="button" class="tab-btn" data-tab="audit">📜 SQLite 稽核日誌</button>
@@ -402,6 +403,47 @@
               </table>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Tab 2.5: Daily Feedback Box -->
+      <div class="panel" id="panel-feedback">
+        <div class="panel-head">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <h2>📮 鎮民每日意見箱（即時收件＋每日摘要）</h2>
+            <span class="pill green" id="fb-stats-pill">今日 0 筆 · 未讀 0 筆</span>
+          </div>
+          <div class="toolbar">
+            <button type="button" class="btn" id="btn-fb-today">📅 只看今日</button>
+            <select class="select" id="fb-status-filter">
+              <option value="all">全部狀態</option>
+              <option value="unread">🔴 未讀 (unread)</option>
+              <option value="read">👁️ 已讀 (read)</option>
+              <option value="planned">📌 列入計劃 (planned)</option>
+              <option value="resolved">✅ 已解決 (resolved)</option>
+            </select>
+            <select class="select" id="fb-category-filter">
+              <option value="all">全部分類</option>
+              <option value="suggestion">💡 功能建議</option>
+              <option value="ui">🎨 介面體驗</option>
+              <option value="bug">🐛 Bug 回報</option>
+              <option value="other">💬 其他</option>
+            </select>
+            <button type="button" class="btn gold" id="btn-fb-copy-digest">📋 複製今日意見摘要</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:155px;">時間 / 頁面 / 評分</th>
+                <th style="width:170px;">分類 / 提交者 / 聯絡</th>
+                <th>意見內容與鎮長備註</th>
+                <th style="width:210px;">狀態與快速操作</th>
+              </tr>
+            </thead>
+            <tbody id="feedback-tbody"></tbody>
+          </table>
         </div>
       </div>
 
@@ -527,6 +569,8 @@
     (function () {
       let cachedData = null;
       let cachedBatchData = null;
+      let cachedFeedbackData = null;
+      let fbTodayOnly = false;
       let adminKey = sessionStorage.getItem('pct_admin_key') || '';
 
       function esc(str) {
@@ -572,9 +616,10 @@
 
       async function loadOverview() {
         try {
-          const [res, batchRes] = await Promise.all([
+          const [res, batchRes, fbRes] = await Promise.all([
             fetch('/api/admin/overview', { headers: apiHeaders() }),
             fetch('/api/admin/payouts/batch', { headers: apiHeaders() }),
+            fetch('/api/admin/feedback', { headers: apiHeaders() }),
           ]);
           const data = await res.json();
           if (res.status === 403 || !data.ok) {
@@ -591,6 +636,12 @@
             cachedBatchData = bData && bData.ok ? bData : null;
           } catch {
             cachedBatchData = null;
+          }
+          try {
+            const fData = await fbRes.json();
+            cachedFeedbackData = fData && fData.ok ? fData : null;
+          } catch {
+            cachedFeedbackData = null;
           }
           document.getElementById('auth-gate').style.display = 'none';
           document.getElementById('dashboard').style.display = 'block';
@@ -635,6 +686,11 @@
             <div class="kpi-value mono">${s.pendingDevicesCount + s.pendingReviewsCount + s.pendingPayoutsCount}</div>
             <div class="kpi-sub">待審裝置 ${s.pendingDevicesCount} · 待審 PR ${s.pendingReviewsCount} · 待出款 ${s.pendingPayoutsCount} ($${Number(s.pendingPayoutsUsd || 0).toFixed(2)})</div>
           </div>
+          <div class="kpi-card" style="--accent: ${(s.unreadFeedbackCount || 0) > 0 ? 'var(--red)' : 'var(--cyan)'}; cursor: pointer;" id="kpi-card-feedback">
+            <div class="kpi-label"><span>📮 每日鎮民意見</span><span class="pill ${(s.unreadFeedbackCount || 0) > 0 ? 'red' : 'green'}">${s.unreadFeedbackCount || 0} 未讀</span></div>
+            <div class="kpi-value mono">${s.todayFeedbackCount || 0} 今日</div>
+            <div class="kpi-sub">累計 ${s.totalFeedbackCount || 0} 筆 · 點此閱讀並複製今日意見摘要</div>
+          </div>
           <div class="kpi-card" style="--accent: var(--emerald);">
             <div class="kpi-label"><span>🗄️ 資料庫與系統健康</span><span class="pill green">${esc(String(s.dbDriver || 'sqlite').toUpperCase())}</span></div>
             <div class="kpi-value mono">${s.provenanceValid ? '✅ HEALTHY' : '⚠️ CHECK'}</div>
@@ -644,12 +700,19 @@
 
         document.getElementById('tab-count-users').textContent = s.totalUsers;
         document.getElementById('tab-count-payouts').textContent = s.pendingPayoutsCount;
+        const fbBadge = document.getElementById('tab-badge-feedback');
+        if (fbBadge) {
+          const unread = Number(s.unreadFeedbackCount || 0);
+          fbBadge.textContent = unread > 0 ? `${unread} 未讀` : String(s.totalFeedbackCount || 0);
+          fbBadge.className = unread > 0 ? 'pill red' : 'pill muted';
+        }
         document.getElementById('tab-count-codes').textContent = (data.redeemCodes || []).filter((c) => !c.usedByUserId).length;
         document.getElementById('tab-count-pending').textContent = s.pendingDevicesCount + s.pendingReviewsCount;
         document.getElementById('gov-review-count').textContent = s.pendingReviewsCount;
 
         renderUsers();
         renderFinance();
+        renderFeedback();
         renderCodes();
         renderGovernance();
         renderAudit();
@@ -820,6 +883,70 @@
         }
       }
 
+      function renderFeedback() {
+        const fbData = cachedFeedbackData || { todayDate: new Date().toISOString().slice(0, 10), todayCount: 0, unreadCount: 0, totalCount: 0, feedbacks: [] };
+        const statsPill = document.getElementById('fb-stats-pill');
+        if (statsPill) {
+          statsPill.textContent = `今日 ${fbData.todayCount} 筆 · 未讀 ${fbData.unreadCount} 筆 · 累計 ${fbData.totalCount} 筆`;
+          statsPill.className = fbData.unreadCount > 0 ? 'pill red' : 'pill green';
+        }
+        const todayBtn = document.getElementById('btn-fb-today');
+        if (todayBtn) {
+          todayBtn.className = fbTodayOnly ? 'btn primary' : 'btn';
+          todayBtn.textContent = fbTodayOnly ? `📅 只看今日 (${fbData.todayDate})` : '📅 只看今日';
+        }
+
+        const statusFilter = document.getElementById('fb-status-filter')?.value || 'all';
+        const catFilter = document.getElementById('fb-category-filter')?.value || 'all';
+        let rows = fbData.feedbacks || [];
+        if (fbTodayOnly) rows = rows.filter((f) => String(f.createdAt || '').slice(0, 10) === fbData.todayDate);
+        if (statusFilter !== 'all') rows = rows.filter((f) => f.status === statusFilter);
+        if (catFilter !== 'all') rows = rows.filter((f) => f.category === catFilter);
+
+        const tbody = document.getElementById('feedback-tbody');
+        if (!tbody) return;
+        if (!rows.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">目前沒有符合篩選條件的鎮民意見。</td></tr>';
+          return;
+        }
+        const catLabels = { suggestion: '💡 功能建議', ui: '🎨 介面體驗', bug: '🐛 Bug 回報', other: '💬 其他' };
+        const statusPills = {
+          unread: '<span class="pill red">🔴 未讀</span>',
+          read: '<span class="pill">👁️ 已讀</span>',
+          planned: '<span class="pill gold">📌 列入計劃</span>',
+          resolved: '<span class="pill green">✅ 已解決</span>',
+        };
+        tbody.innerHTML = rows.map((f) => `
+          <tr>
+            <td class="mono" style="font-size:11px;">
+              <div>${esc(fmtTime(f.createdAt))}</div>
+              <div style="color:var(--cyan);">${esc(f.page || '/app')}</div>
+              <div style="color:var(--gold);margin-top:2px;">${'★'.repeat(f.rating || 5)}${'☆'.repeat(Math.max(0, 5 - (f.rating || 5)))} (${f.rating || 5}/5)</div>
+            </td>
+            <td>
+              <div><span class="pill">${esc(catLabels[f.category] || f.category)}</span></div>
+              <div style="margin-top:4px;font-weight:700;">${esc(f.userName || 'Guest')}</div>
+              <div class="mono" style="font-size:10.5px;color:var(--muted);">${esc(f.contact || '（匿名未留聯絡）')}</div>
+            </td>
+            <td>
+              <div style="white-space:pre-wrap;line-height:1.55;margin-bottom:8px;">${esc(f.message)}</div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input class="input" type="text" data-fb-note-input="${esc(f.id)}" value="${esc(f.founderNote || '')}" placeholder="鎮長備註 / 處理記錄..." style="flex:1;font-size:11.5px;padding:4px 8px;" />
+                <button type="button" class="btn" style="padding:4px 8px;font-size:11px;" data-fb-save-note="${esc(f.id)}">💾 儲存</button>
+              </div>
+            </td>
+            <td>
+              <div style="margin-bottom:6px;">${statusPills[f.status] || esc(f.status)}</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <button type="button" class="btn" style="padding:3px 7px;font-size:11px;" data-fb-status="${esc(f.id)}" data-status="read">👁️ 已讀</button>
+                <button type="button" class="btn gold" style="padding:3px 7px;font-size:11px;" data-fb-status="${esc(f.id)}" data-status="planned">📌 計劃</button>
+                <button type="button" class="btn green" style="padding:3px 7px;font-size:11px;" data-fb-status="${esc(f.id)}" data-status="resolved">✅ 解決</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }
+
       function renderCodes() {
         if (!cachedData) return;
         const codes = cachedData.redeemCodes || [];
@@ -933,6 +1060,26 @@
       document.getElementById('user-search').addEventListener('input', renderUsers);
       document.getElementById('user-filter').addEventListener('change', renderUsers);
       document.getElementById('audit-search').addEventListener('input', renderAudit);
+      document.getElementById('fb-status-filter').addEventListener('change', renderFeedback);
+      document.getElementById('fb-category-filter').addEventListener('change', renderFeedback);
+      document.getElementById('btn-fb-today').addEventListener('click', () => {
+        fbTodayOnly = !fbTodayOnly;
+        renderFeedback();
+      });
+      document.getElementById('btn-fb-copy-digest').addEventListener('click', () => {
+        const fbData = cachedFeedbackData || { todayDate: new Date().toISOString().slice(0, 10), feedbacks: [] };
+        const todayItems = (fbData.feedbacks || []).filter((f) => String(f.createdAt || '').slice(0, 10) === fbData.todayDate);
+        const list = todayItems.length ? todayItems : (fbData.feedbacks || []).slice(0, 10);
+        if (!list.length) return showToast('目前沒有可複製的意見紀錄', true);
+        const avg = (list.reduce((s, f) => s + (Number(f.rating) || 5), 0) / list.length).toFixed(1);
+        const lines = [
+          `# 📮 PixelCompute Town 鎮民意見日報 (${fbData.todayDate})`,
+          `- 摘要筆數：${list.length} 筆（今日 ${todayItems.length} 筆 · 未讀 ${fbData.unreadCount || 0} 筆 · 平均 ★${avg}）`,
+          '',
+          ...list.map((f, i) => `${i + 1}. [${f.category} ★${f.rating} | ${f.status}] ${f.userName} (${f.page}): ${f.message}${f.contact ? ` | 聯絡: ${f.contact}` : ''}${f.founderNote ? ` | 鎮長備註: ${f.founderNote}` : ''}`),
+        ];
+        copyText(lines.join('\n'));
+      });
 
       document.getElementById('btn-unlock-key').addEventListener('click', () => {
         adminKey = (document.getElementById('admin-key-input').value || '').trim();
@@ -1037,6 +1184,39 @@
       });
 
       document.addEventListener('click', async (ev) => {
+        if (ev.target.closest('#kpi-card-feedback')) {
+          document.querySelector('.tab-btn[data-tab="feedback"]')?.click();
+          return;
+        }
+        const fbStatusBtn = ev.target.closest('[data-fb-status]');
+        if (fbStatusBtn) {
+          const fid = fbStatusBtn.getAttribute('data-fb-status');
+          const status = fbStatusBtn.getAttribute('data-status');
+          const res = await fetch(`/api/admin/feedback/${encodeURIComponent(fid)}`, {
+            method: 'PATCH',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ status }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) return showToast(data.error || '更新失敗', true);
+          showToast(`✅ 意見狀態已更新為：${status}`);
+          return loadOverview();
+        }
+        const fbNoteBtn = ev.target.closest('[data-fb-save-note]');
+        if (fbNoteBtn) {
+          const fid = fbNoteBtn.getAttribute('data-fb-save-note');
+          const input = document.querySelector(`[data-fb-note-input="${CSS.escape(fid)}"]`);
+          const founderNote = (input?.value || '').trim();
+          const res = await fetch(`/api/admin/feedback/${encodeURIComponent(fid)}`, {
+            method: 'PATCH',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ founderNote }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) return showToast(data.error || '儲存備註失敗', true);
+          showToast('💾 鎮長備註已儲存！');
+          return loadOverview();
+        }
         const copyBtn = ev.target.closest('[data-copy]');
         if (copyBtn) {
           return copyText(copyBtn.getAttribute('data-copy') || '');
@@ -1132,6 +1312,16 @@
 
       loadOverview();
       setInterval(loadOverview, 15000);
+      try {
+        const es = new EventSource('/api/events');
+        es.addEventListener('feedback_received', () => {
+          showToast('📮 收到一筆新的鎮民意見！');
+          loadOverview();
+        });
+        es.addEventListener('feedback_updated', () => {
+          loadOverview();
+        });
+      } catch {}
     })();
   </script>
 </body>
