@@ -69,8 +69,11 @@ import {
 import {
   PAYMENT_PRODUCTS,
   getPaymentConfig,
+  handleAdminBatchMarkPaid,
+  handleAdminConfirmOrder,
   handleAdminGenerateCodes,
   handleAdminMarkPayoutPaid,
+  handleAdminPayoutBatch,
   handleFiatCheckout,
   handlePaymentWebhook,
   handlePayoutRequest,
@@ -1198,6 +1201,15 @@ export function createAppServer(options = {}) {
             rateLimitBlockedCount,
           },
           users: usersTable,
+          projects: projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            shortName: p.shortName || p.name,
+            status: p.status,
+            progressPct: Number(p.progressPct || 0),
+            totalRevenueUsd: round2(p.totalRevenueUsd || 0),
+            bountyPoolUsd: round2(p.bountyPoolUsd || 0),
+          })),
           paymentOrders: (state.paymentOrders || []).slice(0, 60),
           payouts: payouts.slice(0, 60),
           devices: devices.slice(0, 60).map((d) => ({
@@ -1516,7 +1528,7 @@ export function createAppServer(options = {}) {
         const ctx = getActiveUserContext(req, state);
         const user = sanitizeUserForClient(ctx.user);
         const projected = projectClientState(state, ctx.userId);
-        const isAdmin = ctx.user.role === 'founder';
+        const isAdmin = isFounderAdmin(req, ctx);
         const { pendingDevices, allDevices } = getAdminDevicesData(state);
         const peerReviewRequired = Boolean(state.settings?.peerReviewRequired);
         const liveProductionMode = Boolean(state.settings?.liveProductionMode);
@@ -2033,6 +2045,66 @@ export function createAppServer(options = {}) {
         const body = await parseJsonBody(req);
         return await handlePayoutRequest(req, res, body, store, sseHub);
       }
+      if (pathname === '/api/admin/payouts/batch' && method === 'GET') {
+        return await handleAdminPayoutBatch(req, res, url, store);
+      }
+      if (pathname === '/api/admin/payouts/batch-mark-paid' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleAdminBatchMarkPaid(req, res, body, store, sseHub);
+      }
+      const adminOrderConfirmMatch = pathname.match(/^\/api\/admin\/orders\/([^/]+)\/confirm$/);
+      if (adminOrderConfirmMatch && method === 'POST') {
+        const orderId = decodeURIComponent(adminOrderConfirmMatch[1]);
+        const body = await parseJsonBody(req);
+        return await handleAdminConfirmOrder(req, res, orderId, body, store, sseHub);
+      }
+      const adminRecordRevMatch = pathname.match(/^\/api\/admin\/projects\/([^/]+)\/record-revenue$/);
+      if (adminRecordRevMatch && method === 'POST') {
+        const projectId = decodeURIComponent(adminRecordRevMatch[1]);
+        const body = await parseJsonBody(req);
+        const amountUsd = round2(Number(body?.amountUsd));
+        if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+          throw new HttpError(400, '請輸入大於 0 的真實入帳營收金額（USD）');
+        }
+        const note = sanitizeText(body?.note || body?.txHash || '鎮長核實真實產品營收', 80);
+
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          if (!isFounderAdmin(req, ctx)) {
+            throw new HttpError(403, '僅限創始鎮長錄入項目真實營收並觸發分紅', { code: 'ADMIN_ONLY' });
+          }
+          const proj = (s.projects || []).find((p) => p.id === projectId);
+          if (!proj) {
+            throw new HttpError(404, `找不到項目：${projectId}`);
+          }
+          const dividend = distributeProjectRevenue(s, ctx.user, proj, amountUsd, note);
+          pushActivity(s, {
+            type: 'dividend',
+            icon: '💰',
+            message: `鎮長錄入《${proj.shortName || proj.name}》真實入帳營收 $${dividend.grossRevenueUsd}（${note}）！系統已自動按 5/85/10（核心70%/週邊≤30%）發放分紅到各貢獻者帳戶！`,
+            projectId: proj.id,
+          });
+          return { project: proj, dividend, user: ctx.user, note };
+        });
+
+        store.appendAudit(
+          'real_revenue_recorded',
+          `Founder ${result.user.displayName} recorded real revenue $${result.dividend.grossRevenueUsd} on ${result.project.id} (${result.note})`,
+        );
+        sseHub.broadcast('revenue_distributed', {
+          project: result.project,
+          dividend: result.dividend,
+        });
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        return sendJson(res, 200, {
+          ok: true,
+          project: result.project,
+          dividend: result.dividend,
+          founderRevenue: state.founderRevenue,
+          state: projectClientState(state, result.user.id),
+        });
+      }
       const adminPayoutPaidMatch = pathname.match(/^\/api\/admin\/payouts\/([^/]+)\/mark-paid$/);
       if (adminPayoutPaidMatch && method === 'POST') {
         const payoutId = decodeURIComponent(adminPayoutPaidMatch[1]);
@@ -2070,7 +2142,7 @@ export function createAppServer(options = {}) {
         const { state, result } = await store.mutate((s) => {
           ensureStateSchema(s);
           const ctx = getActiveUserContext(req, s);
-          if (ctx.user.role !== 'founder') {
+          if (!isFounderAdmin(req, ctx)) {
             throw new HttpError(403, '僅限創始鎮長修改管理設定');
           }
 
@@ -2692,6 +2764,11 @@ export function createAppServer(options = {}) {
 
         const { state, result } = await store.mutate((s) => {
           const ctx = getActiveUserContext(req, s);
+          if (s.settings?.liveProductionMode && !isFounderAdmin(req, ctx)) {
+            throw new HttpError(403, '正式營運模式已停用模擬營收，請由鎮長在 /admin 後臺錄入真實入帳營收', {
+              code: 'LIVE_MODE_LOCKED',
+            });
+          }
           const user = ctx.user;
           const proj = s.projects.find((p) => p.id === projectId);
           if (!proj) {

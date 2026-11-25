@@ -318,6 +318,18 @@ function isLiveProductionMode() {
   );
 }
 
+function shouldHideSandboxControls() {
+  return isLiveProductionMode() && !app.adminData?.isAdmin;
+}
+
+function syncLiveModeSandboxControls() {
+  const hide = shouldHideSandboxControls();
+  ['btn-pay-sim-tx', 'btn-pay-sandbox-complete', 'btn-request-payout-instant'].forEach((id) => {
+    const el = $(id);
+    if (el) el.style.display = hide ? 'none' : '';
+  });
+}
+
 function getTaskAudienceSafe(task) {
   if (task?.audience === 'beginner' || task?.audience === 'dev') {
     return task.audience;
@@ -877,6 +889,7 @@ function renderAll() {
   renderWorkersAndShopTab();
   renderRevenueAndLeaderboardTab();
   renderAuthModalStatus();
+  syncLiveModeSandboxControls();
 }
 
 function renderOnboardingBar() {
@@ -1764,7 +1777,7 @@ function renderIncubatorTab() {
                   : ''
               }
               ${
-                isLaunched
+                isLaunched && !shouldHideSandboxControls()
                   ? `<button type="button" class="btn btn-sm btn-green" data-sim-revenue="${escapeHtml(p.id)}">${escapeHtml(t('btn.simRevenue'))}</button>`
                   : ''
               }

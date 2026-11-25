@@ -2,7 +2,7 @@
 
 import crypto from 'node:crypto';
 import { ensureStateSchema, PLATFORM_BOUNTY_FEE_PCT, round2 } from './seed.mjs';
-import { getActiveUserContext, projectStateForUser, syncUserLeaderboard } from './auth.mjs';
+import { getActiveUserContext, isFounderAdmin, projectStateForUser, syncUserLeaderboard } from './auth.mjs';
 
 export const STABLECOIN_CHAINS = Object.freeze(['base', 'bnb', 'ethereum', 'polygon', 'arbitrum', 'solana', 'tron']);
 export const STABLECOIN_TOKENS = Object.freeze(['USDC', 'USDT']);
@@ -440,11 +440,18 @@ export async function handleStablecoinConfirm(req, res, body, store, sseHub) {
 
   const simulate = Boolean(body?.simulate);
   let errStatus = null;
+  let errCode = null;
   let errMessage = null;
 
   const { state, result } = await store.mutate((s) => {
     ensureStateSchema(s);
     const ctx = getActiveUserContext(req, s);
+    if (s.settings?.liveProductionMode && simulate && !isFounderAdmin(req, ctx)) {
+      errStatus = 403;
+      errCode = 'LIVE_MODE_LOCKED';
+      errMessage = '正式營運模式已停用沙盒模擬上鏈，請填寫真實鏈上 TxHash';
+      return null;
+    }
     const order = s.paymentOrders.find((o) => o.id === orderId);
     if (!order) {
       errStatus = 404;
@@ -498,7 +505,7 @@ export async function handleStablecoinConfirm(req, res, body, store, sseHub) {
   });
 
   if (errStatus) {
-    return sendJson(res, errStatus, { ok: false, error: errMessage });
+    return sendJson(res, errStatus, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMessage });
   }
 
   sseHub?.broadcast('payment_confirmed', { order: result.order });
@@ -561,11 +568,19 @@ export async function handlePayoutRequest(req, res, body, store, sseHub) {
   }
 
   const simulateInstant = Boolean(body?.simulateInstant);
+  let errStatus = 400;
+  let errCode = null;
   let errMsg = null;
 
   const { state, result } = await store.mutate((s) => {
     ensureStateSchema(s);
     const ctx = getActiveUserContext(req, s);
+    if (s.settings?.liveProductionMode && simulateInstant && !isFounderAdmin(req, ctx)) {
+      errStatus = 403;
+      errCode = 'LIVE_MODE_LOCKED';
+      errMsg = '正式營運模式已停用沙盒即時出款，所有提領均由鎮長批次打帳發放';
+      return null;
+    }
     const user = ctx.user;
 
     const chain = String(body?.chain || user.walletChain || '').toLowerCase();
@@ -610,7 +625,7 @@ export async function handlePayoutRequest(req, res, body, store, sseHub) {
   });
 
   if (errMsg || !result) {
-    return sendJson(res, 400, { ok: false, error: errMsg || '提領申請失敗' });
+    return sendJson(res, errStatus || 400, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMsg || '提領申請失敗' });
   }
 
   sseHub?.broadcast('payout_requested', { payout: result.payout });
@@ -624,12 +639,13 @@ export async function handlePayoutRequest(req, res, body, store, sseHub) {
 
 export async function handleAdminMarkPayoutPaid(req, res, payoutId, body, store, sseHub) {
   let errStatus = null;
+  let errCode = null;
   let errMessage = null;
 
   const { state, result } = await store.mutate((s) => {
     ensureStateSchema(s);
     const ctx = getActiveUserContext(req, s);
-    if (ctx.user.role !== 'founder') {
+    if (!isFounderAdmin(req, ctx)) {
       errStatus = 403;
       errMessage = '僅限創始鎮長執行打款確認操作';
       return null;
@@ -675,7 +691,7 @@ export async function handleAdminMarkPayoutPaid(req, res, payoutId, body, store,
   });
 
   if (errStatus) {
-    return sendJson(res, errStatus, { ok: false, error: errMessage });
+    return sendJson(res, errStatus, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMessage });
   }
 
   sseHub?.broadcast('payout_paid', { payout: result.payout });
@@ -786,11 +802,18 @@ export async function handleSandboxComplete(req, res, body, store, sseHub) {
   }
 
   let errStatus = null;
+  let errCode = null;
   let errMessage = null;
 
   const { state, result } = await store.mutate((s) => {
     ensureStateSchema(s);
     const ctx = getActiveUserContext(req, s);
+    if (s.settings?.liveProductionMode && !isFounderAdmin(req, ctx)) {
+      errStatus = 403;
+      errCode = 'LIVE_MODE_LOCKED';
+      errMessage = '正式營運模式已停用沙盒刷卡測試，請使用正式結帳或兌換碼';
+      return null;
+    }
     const order = s.paymentOrders.find((o) => o.id === orderId);
     if (!order) {
       errStatus = 404;
@@ -823,7 +846,7 @@ export async function handleSandboxComplete(req, res, body, store, sseHub) {
   });
 
   if (errStatus) {
-    return sendJson(res, errStatus, { ok: false, error: errMessage });
+    return sendJson(res, errStatus, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMessage });
   }
 
   sseHub?.broadcast('payment_confirmed', { order: result.order });
@@ -917,6 +940,7 @@ export async function handleRedeemCode(req, res, body, store, sseHub) {
   }
 
   let errStatus = null;
+  let errCode = null;
   let errMessage = null;
 
   const { state, result } = await store.mutate((s) => {
@@ -981,7 +1005,7 @@ export async function handleRedeemCode(req, res, body, store, sseHub) {
   });
 
   if (errStatus) {
-    return sendJson(res, errStatus, { ok: false, error: errMessage });
+    return sendJson(res, errStatus, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMessage });
   }
 
   sseHub?.broadcast('code_redeemed', { code: result.code, rewardType: result.rewardType });
@@ -1009,13 +1033,15 @@ export async function handleAdminGenerateCodes(req, res, body, store, sseHub) {
   const note = sanitizeText(body?.note, 80) || `鎮長生成 (${rewardType})`;
 
   let errStatus = null;
+  let errCode = null;
   let errMessage = null;
 
   const { state, result } = await store.mutate((s) => {
     ensureStateSchema(s);
     const ctx = getActiveUserContext(req, s);
-    if (ctx.user.role !== 'founder') {
+    if (!isFounderAdmin(req, ctx)) {
       errStatus = 403;
+      errCode = 'ADMIN_ONLY';
       errMessage = '僅限創始鎮長生成兌換碼';
       return null;
     }
@@ -1049,7 +1075,7 @@ export async function handleAdminGenerateCodes(req, res, body, store, sseHub) {
   });
 
   if (errStatus) {
-    return sendJson(res, errStatus, { ok: false, error: errMessage });
+    return sendJson(res, errStatus, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMessage });
   }
 
   sseHub?.broadcast('state_sync', { updatedAt: state.updatedAt });
@@ -1057,6 +1083,263 @@ export async function handleAdminGenerateCodes(req, res, body, store, sseHub) {
     ok: true,
     codes: result.codes,
     redeemCodes: state.redeemCodes,
+    state: projectStateForUser(state, result.userId),
+  });
+}
+
+// ============================================================================
+// Batch Payout Reconciliation & Founder Manual Order Confirmation
+// ============================================================================
+
+export async function handleAdminPayoutBatch(req, res, url, store) {
+  const state = await store.load();
+  ensureStateSchema(state);
+  const ctx = getActiveUserContext(req, state);
+  if (!isFounderAdmin(req, ctx)) {
+    return sendJson(res, 403, { ok: false, code: 'ADMIN_ONLY', error: '僅限創始鎮長檢視批次打帳對帳單' });
+  }
+
+  const filterChain = String(url?.searchParams?.get('chain') || '').trim().toLowerCase();
+  const filterToken = String(url?.searchParams?.get('token') || '').trim().toUpperCase();
+
+  const pending = (state.payouts || []).filter((p) => {
+    if (p.status !== 'pending') return false;
+    if (filterChain && String(p.chain || '').toLowerCase() !== filterChain) return false;
+    if (filterToken && String(p.token || '').toUpperCase() !== filterToken) return false;
+    return true;
+  });
+
+  const groups = new Map();
+  for (const p of pending) {
+    const chain = String(p.chain || 'base').toLowerCase();
+    const token = String(p.token || 'USDC').toUpperCase();
+    const key = `${chain}:${token}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        chain,
+        token,
+        payoutIds: [],
+        recipientMap: new Map(),
+      });
+    }
+    const grp = groups.get(key);
+    grp.payoutIds.push(p.id);
+
+    const addr = String(p.address || '').trim();
+    const addrKey = chain === 'solana' || chain === 'tron' ? addr : addr.toLowerCase();
+    if (!grp.recipientMap.has(addrKey)) {
+      grp.recipientMap.set(addrKey, {
+        address: addr,
+        totalAmountUsd: 0,
+        userNames: [],
+        payoutIds: [],
+        validAddress: validateWalletAddress(chain, addr),
+      });
+    }
+    const rec = grp.recipientMap.get(addrKey);
+    rec.totalAmountUsd = round2(rec.totalAmountUsd + (Number(p.amountUsd) || 0));
+    rec.payoutIds.push(p.id);
+    if (p.userName && !rec.userNames.includes(p.userName)) {
+      rec.userNames.push(p.userName);
+    }
+  }
+
+  const batches = [];
+  for (const grp of groups.values()) {
+    const recipients = [...grp.recipientMap.values()].sort((a, b) => b.totalAmountUsd - a.totalAmountUsd);
+    const totalAmountUsd = round2(recipients.reduce((s, r) => s + r.totalAmountUsd, 0));
+    const reconciliationOk = recipients.every((r) => r.validAddress && r.totalAmountUsd >= MIN_PAYOUT_USD);
+    const disperseText = recipients
+      .map((r) => `${r.address},${r.totalAmountUsd.toFixed(2)}`)
+      .join('\n');
+    const csvHeader = 'address,amount,token,chain,users,payout_ids';
+    const csvRows = recipients.map((r) => [
+      r.address,
+      r.totalAmountUsd.toFixed(2),
+      grp.token,
+      grp.chain,
+      `"${r.userNames.join(' / ').replace(/"/g, '""')}"`,
+      `"${r.payoutIds.join('|')}"`,
+    ].join(','));
+    const csvText = [csvHeader, ...csvRows].join('\n');
+
+    batches.push({
+      key: grp.key,
+      chain: grp.chain,
+      token: grp.token,
+      payoutIds: grp.payoutIds,
+      payoutCount: grp.payoutIds.length,
+      recipientCount: recipients.length,
+      totalAmountUsd,
+      reconciliationOk,
+      recipients,
+      disperseText,
+      csvText,
+    });
+  }
+
+  const grandTotalUsd = round2(batches.reduce((s, b) => s + b.totalAmountUsd, 0));
+  return sendJson(res, 200, {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    pendingCount: pending.length,
+    batchCount: batches.length,
+    grandTotalUsd,
+    batches,
+  });
+}
+
+export async function handleAdminBatchMarkPaid(req, res, body, store, sseHub) {
+  const rawIds = Array.isArray(body?.payoutIds) ? body.payoutIds.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  if (rawIds.length === 0) {
+    return sendJson(res, 400, { ok: false, error: '請提供至少一筆待打款 payoutIds' });
+  }
+
+  const simulate = Boolean(body?.simulate);
+  const note = sanitizeText(body?.note, 80);
+  let errStatus = null;
+  let errCode = null;
+  let errMessage = null;
+
+  const { state, result } = await store.mutate((s) => {
+    ensureStateSchema(s);
+    const ctx = getActiveUserContext(req, s);
+    if (!isFounderAdmin(req, ctx)) {
+      errStatus = 403;
+      errCode = 'ADMIN_ONLY';
+      errMessage = '僅限創始鎮長執行批次打帳銷帳';
+      return null;
+    }
+
+    const targets = rawIds
+      .map((id) => (s.payouts || []).find((p) => p.id === id))
+      .filter((p) => p && p.status === 'pending');
+
+    if (targets.length === 0) {
+      errStatus = 404;
+      errMessage = '找不到對應的待打款提領單（可能均已完成打款）';
+      return null;
+    }
+
+    const primaryChain = String(body?.chain || targets[0].chain || 'base').toLowerCase();
+    const txHash = simulate
+      ? generateSandboxTxHash(primaryChain)
+      : sanitizeText(body?.txHash, 120);
+
+    if (!validateTxHash(primaryChain, txHash)) {
+      errStatus = 400;
+      errMessage = `無效的 ${primaryChain.toUpperCase()} 批次交易 TxHash 格式`;
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    let totalAmountUsd = 0;
+    const settledIds = [];
+    for (const p of targets) {
+      p.status = 'paid';
+      p.txHash = txHash;
+      p.sandboxSimulated = simulate;
+      p.paidAt = now;
+      p.batchNote = note || `Batch (${targets.length} payouts)`;
+      totalAmountUsd = round2(totalAmountUsd + (Number(p.amountUsd) || 0));
+      settledIds.push(p.id);
+    }
+
+    pushFeed(s, {
+      type: 'payout',
+      icon: '⚡',
+      message: `鎮長完成批次打帳：一次結算 ${settledIds.length} 筆提領（合計 $${totalAmountUsd.toFixed(2)} ${targets[0].token} · ${primaryChain.toUpperCase()}）`,
+    });
+
+    return {
+      settledCount: settledIds.length,
+      settledIds,
+      totalAmountUsd,
+      chain: primaryChain,
+      token: targets[0].token,
+      txHash,
+      userId: ctx.userId,
+    };
+  });
+
+  if (errStatus) {
+    return sendJson(res, errStatus, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMessage });
+  }
+
+  store.appendAudit?.('payout_batch_paid', `Batch paid ${result.settledCount} payouts ($${result.totalAmountUsd.toFixed(2)} ${result.token} on ${result.chain}) tx=${result.txHash.slice(0, 16)}`);
+  sseHub?.broadcast('payout_batch_paid', {
+    settledCount: result.settledCount,
+    totalAmountUsd: result.totalAmountUsd,
+    txHash: result.txHash,
+  });
+  sseHub?.broadcast('state_sync', { updatedAt: state.updatedAt });
+  return sendJson(res, 200, {
+    ok: true,
+    ...result,
+    state: projectStateForUser(state, result.userId),
+  });
+}
+
+export async function handleAdminConfirmOrder(req, res, orderId, body, store, sseHub) {
+  let errStatus = null;
+  let errCode = null;
+  let errMessage = null;
+
+  const { state, result } = await store.mutate((s) => {
+    ensureStateSchema(s);
+    const ctx = getActiveUserContext(req, s);
+    if (!isFounderAdmin(req, ctx)) {
+      errStatus = 403;
+      errCode = 'ADMIN_ONLY';
+      errMessage = '僅限創始鎮長核准到帳訂單';
+      return null;
+    }
+
+    const order = (s.paymentOrders || []).find((o) => o.id === orderId);
+    if (!order) {
+      errStatus = 404;
+      errMessage = `找不到訂單：${orderId}`;
+      return null;
+    }
+    if (order.status === 'confirmed') {
+      errStatus = 409;
+      errMessage = '此訂單已確認到帳';
+      return null;
+    }
+
+    const product = resolvePaymentProduct(order.productId);
+    const targetUser = s.users[order.userId] || ctx.user;
+    const txHash = sanitizeText(body?.txHash, 120) || order.txHash || `admin-verified-${crypto.randomBytes(6).toString('hex')}`;
+
+    order.status = 'confirmed';
+    order.txHash = txHash;
+    order.confirmedAt = new Date().toISOString();
+    order.adminVerified = true;
+
+    const rewardSummary = fulfillProductForUser(s, targetUser, {
+      product,
+      amountUsd: order.amountUsd,
+      targetProjectId: order.targetProjectId,
+      billboardText: order.billboardText,
+      channelLabel: `鎮長核實到帳 (${order.chain ? `${order.token}·${order.chain.toUpperCase()}` : order.provider})`,
+    });
+
+    return { order, rewardSummary, userId: ctx.userId };
+  });
+
+  if (errStatus) {
+    return sendJson(res, errStatus, { ok: false, ...(errCode ? { code: errCode } : {}), error: errMessage });
+  }
+
+  store.appendAudit?.('admin_order_confirmed', `Founder confirmed order ${result.order.id} ($${result.order.amountUsd})`);
+  sseHub?.broadcast('payment_confirmed', { order: result.order });
+  sseHub?.broadcast('state_sync', { updatedAt: state.updatedAt });
+  return sendJson(res, 200, {
+    ok: true,
+    order: result.order,
+    rewardSummary: result.rewardSummary,
+    founderRevenue: state.founderRevenue,
     state: projectStateForUser(state, result.userId),
   });
 }

@@ -333,10 +333,41 @@
 
       <!-- Tab 2: Finance -->
       <div class="panel" id="panel-finance">
+        <!-- Batch Payout & Reconciliation Center -->
+        <div class="subbox" style="margin-bottom:16px;border-width:2px;border-color:rgba(56, 189, 248, 0.55);background:linear-gradient(135deg, rgba(16, 26, 52, 0.96), rgba(14, 38, 52, 0.85));">
+          <div class="panel-head" style="margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <h2 style="margin:0;font-size:16px;">⚡ 一鍵批次打帳中心（不用一筆筆對！）</h2>
+              <span class="pill green" id="batch-summary-pill">對帳載入中...</span>
+            </div>
+            <span class="mono" style="font-size:12px;color:var(--gold);" id="batch-grand-total">待發放總計：$0.00</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:12px;">
+            <strong>三步驟 30 秒發完上百人：</strong>
+            ① 系統已自動按「公鏈 × 幣種」分組、合併同錢包多筆提領並驗證地址格式與 $5 門檻 →
+            ② 點 <strong>「📋 複製清單」</strong> 貼入 Disperse.app（EVM 1 次簽名批量轉帳）或 <strong>「⬇️ 下載交易所 CSV」</strong> 上傳幣安/OKX 批量提幣 →
+            ③ 貼上那 <strong>1 筆批次 TxHash</strong> 點 <strong>「✅ 全組自動銷帳」</strong>，所有人帳單自動標記已到帳！
+          </div>
+          <div id="batch-payout-container"></div>
+        </div>
+
+        <!-- Founder Real Revenue Entry -->
+        <div class="subbox" style="margin-bottom:16px;border-color:rgba(250, 204, 21, 0.45);">
+          <div class="panel-head" style="margin-bottom:8px;">
+            <h2>💰 鎮長錄入項目真實營收並自動分紅（5% 原創 / 85% 實幹[核心70%·週邊≤30%] / 10% 平臺）</h2>
+          </div>
+          <form id="record-revenue-form" class="toolbar" style="justify-content:flex-start;">
+            <select class="select" id="rev-project-id" style="min-width:220px;"></select>
+            <input class="input mono" id="rev-amount-usd" type="number" step="0.01" min="0.5" placeholder="實收美金 USD（例：200）" style="width:185px;" required />
+            <input class="input" id="rev-note" type="text" placeholder="入帳來源 / 單號備註（例：Polar 11月結算）" style="flex:1;min-width:220px;" />
+            <button type="submit" class="btn gold">💰 確認入帳並自動分紅</button>
+          </form>
+        </div>
+
         <div class="grid-2">
           <div class="subbox">
             <div class="panel-head">
-              <h2>💸 穩定幣分紅提領申請佇列</h2>
+              <h2>💸 穩定幣分紅提領明細佇列</h2>
             </div>
             <div class="table-wrap">
               <table>
@@ -364,7 +395,7 @@
                     <th>訂單 / 備註</th>
                     <th>商品 / 金額</th>
                     <th>管道</th>
-                    <th>狀態 / TxHash</th>
+                    <th>狀態 / 操作</th>
                   </tr>
                 </thead>
                 <tbody id="orders-tbody"></tbody>
@@ -495,6 +526,7 @@
   <script>
     (function () {
       let cachedData = null;
+      let cachedBatchData = null;
       let adminKey = sessionStorage.getItem('pct_admin_key') || '';
 
       function esc(str) {
@@ -540,7 +572,10 @@
 
       async function loadOverview() {
         try {
-          const res = await fetch('/api/admin/overview', { headers: apiHeaders() });
+          const [res, batchRes] = await Promise.all([
+            fetch('/api/admin/overview', { headers: apiHeaders() }),
+            fetch('/api/admin/payouts/batch', { headers: apiHeaders() }),
+          ]);
           const data = await res.json();
           if (res.status === 403 || !data.ok) {
             document.getElementById('dashboard').style.display = 'none';
@@ -551,6 +586,12 @@
             return;
           }
           cachedData = data;
+          try {
+            const bData = await batchRes.json();
+            cachedBatchData = bData && bData.ok ? bData : null;
+          } catch {
+            cachedBatchData = null;
+          }
           document.getElementById('auth-gate').style.display = 'none';
           document.getElementById('dashboard').style.display = 'block';
           const adm = data.currentAdmin || {};
@@ -661,8 +702,84 @@
         }).join('');
       }
 
+      function downloadTextFile(filename, text, mime = 'text/csv;charset=utf-8') {
+        const blob = new Blob([text], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
       function renderFinance() {
         if (!cachedData) return;
+        const isLive = Boolean(cachedData.settings?.liveProductionMode);
+
+        // 1) Batch Payout Reconciliation Center
+        const batchContainer = document.getElementById('batch-payout-container');
+        const batchPill = document.getElementById('batch-summary-pill');
+        const batchTotalEl = document.getElementById('batch-grand-total');
+        const batches = cachedBatchData?.batches || [];
+        const pendingCount = cachedBatchData?.pendingCount || 0;
+        const grandTotalUsd = Number(cachedBatchData?.grandTotalUsd || 0);
+
+        if (batchPill) {
+          batchPill.textContent = pendingCount > 0
+            ? `⚡ ${batches.length} 組待批次打帳（共 ${pendingCount} 筆）`
+            : '✅ 全部已結清（0 筆待打款）';
+          batchPill.className = pendingCount > 0 ? 'pill gold' : 'pill green';
+        }
+        if (batchTotalEl) {
+          batchTotalEl.textContent = `待發放總計：$${grandTotalUsd.toFixed(2)}`;
+        }
+        if (batchContainer) {
+          if (!batches.length) {
+            batchContainer.innerHTML = '<div style="padding:12px;border:1px dashed var(--border);border-radius:8px;color:var(--emerald);font-size:13px;">✅ 目前沒有待打款的穩定幣提領單！等玩家累積滿 $5 並申請提領後，系統會自動在此彙整成可直接複製 / 下載的批次對帳單。</div>';
+          } else {
+            const evmChains = new Set(['base', 'bnb', 'ethereum', 'polygon', 'arbitrum']);
+            batchContainer.innerHTML = batches.map((b) => `
+              <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;background:rgba(10,16,34,0.75);">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span class="pill">${esc(String(b.chain || '').toUpperCase())} · ${esc(b.token || 'USDC')}</span>
+                    <span class="pill ${b.reconciliationOk ? 'green' : 'red'}">${b.reconciliationOk ? '✅ 自動對帳無誤' : '⚠️ 請核對地址/金額'}</span>
+                    <span class="mono" style="font-size:12px;color:var(--muted);">合併 ${b.recipientCount} 個錢包（原 ${b.payoutCount} 筆提領）</span>
+                  </div>
+                  <div class="mono" style="font-size:16px;font-weight:900;color:var(--gold);">$${Number(b.totalAmountUsd || 0).toFixed(2)} ${esc(b.token || 'USDC')}</div>
+                </div>
+                <textarea readonly class="input mono" rows="${Math.min(6, Math.max(2, b.recipientCount))}" style="width:100%;font-size:11.5px;resize:vertical;margin-bottom:8px;">${esc(b.disperseText || '')}</textarea>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+                  <button type="button" class="btn primary" data-copy-batch="${esc(b.key)}">📋 複製批次清單（Disperse / 批量轉帳）</button>
+                  <button type="button" class="btn" data-download-csv="${esc(b.key)}">⬇️ 下載交易所 CSV</button>
+                  ${evmChains.has(String(b.chain || '').toLowerCase()) ? '<a class="btn gold" href="https://disperse.app/" target="_blank" rel="noopener">🚀 開啟 Disperse.app ↗</a>' : ''}
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                  <input class="input mono" type="text" data-batch-tx-input="${esc(b.key)}" placeholder="打完後貼上這 1 筆批次轉帳 TxHash..." style="flex:1;min-width:220px;" />
+                  <button type="button" class="btn green" data-batch-mark-paid="${esc(b.key)}">✅ 貼上這 1 筆 TxHash → 全組自動銷帳 (${b.payoutCount} 筆)</button>
+                  ${!isLive ? `<button type="button" class="btn" data-batch-mark-paid="${esc(b.key)}" data-batch-sim="1">🧪 沙盒批次測試</button>` : ''}
+                </div>
+              </div>
+            `).join('');
+          }
+        }
+
+        // 2) Project selector for Real Revenue Recording
+        const revSelect = document.getElementById('rev-project-id');
+        if (revSelect) {
+          const prevVal = revSelect.value;
+          const projects = cachedData.projects || [];
+          revSelect.innerHTML = projects.length
+            ? projects.map((p) => `<option value="${esc(p.id)}">${esc(p.shortName || p.name)}（${esc(p.status)} · 累計 $${Number(p.totalRevenueUsd || 0).toFixed(2)}）</option>`).join('')
+            : '<option value="">尚無可錄入項目</option>';
+          if (prevVal && projects.some((p) => p.id === prevVal)) {
+            revSelect.value = prevVal;
+          }
+        }
+
+        // 3) Individual Payout Queue
         const payouts = cachedData.payouts || [];
         const ptBody = document.getElementById('payouts-tbody');
         if (!payouts.length) {
@@ -670,18 +787,19 @@
         } else {
           ptBody.innerHTML = payouts.map((p) => `
             <tr>
-              <td><strong>${esc(p.displayName || p.userId)}</strong><div class="mono" style="font-size:10px;color:var(--muted);">${esc(fmtTime(p.createdAt))}</div></td>
+              <td><strong>${esc(p.userName || p.displayName || p.userId)}</strong><div class="mono" style="font-size:10px;color:var(--muted);">${esc(fmtTime(p.createdAt))}</div></td>
               <td class="mono"><strong>$${Number(p.amountUsd || 0).toFixed(2)}</strong> ${esc(p.token || 'USDC')}<div style="font-size:10px;color:var(--cyan);">${esc(String(p.chain || '').toUpperCase())}</div></td>
               <td><button type="button" class="btn" style="padding:3px 7px;font-size:11px;" data-copy="${esc(p.address || '')}">${esc((p.address || '').slice(0, 8))}... 📋</button></td>
               <td>
                 ${p.status === 'paid'
                   ? `<span class="pill green">✅ 已打款</span><div class="mono" style="font-size:10px;color:var(--muted);">${esc((p.txHash || '').slice(0, 12))}...</div>`
-                  : `<button type="button" class="btn green" data-mark-paid="${esc(p.id)}">✅ 標記已打款</button>`}
+                  : `<button type="button" class="btn green" data-mark-paid="${esc(p.id)}">✅ 單筆標記已打款</button>`}
               </td>
             </tr>
           `).join('');
         }
 
+        // 4) Payment Orders Table
         const orders = cachedData.paymentOrders || [];
         const ordBody = document.getElementById('orders-tbody');
         if (!orders.length) {
@@ -692,7 +810,11 @@
               <td class="mono" style="font-size:11px;"><strong>${esc(o.memoCode || o.id)}</strong><div style="color:var(--muted);">${esc(fmtTime(o.createdAt))}</div></td>
               <td>${esc(o.productName || o.productId)}<div class="mono" style="color:var(--gold);">$${Number(o.amountUsd || 0).toFixed(2)}</div></td>
               <td class="mono" style="font-size:11px;">${esc(o.method || o.provider || '')} ${o.chain ? `(${esc(o.chain)})` : ''}</td>
-              <td>${o.status === 'confirmed' ? '<span class="pill green">✅ 已到帳</span>' : '<span class="pill gold">⏳ 待付款</span>'}</td>
+              <td>
+                ${o.status === 'confirmed'
+                  ? `<span class="pill green">✅ 已到帳</span>${o.txHash ? `<div class="mono" style="font-size:10px;color:var(--muted);">${esc(String(o.txHash).slice(0, 12))}...</div>` : ''}`
+                  : `<button type="button" class="btn green" data-confirm-order="${esc(o.id)}">✅ 確認到帳開通</button>`}
+              </td>
             </tr>
           `).join('');
         }
@@ -893,10 +1015,89 @@
         await loadOverview();
       });
 
+      document.getElementById('record-revenue-form').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const projectId = document.getElementById('rev-project-id').value;
+        const amountUsd = Number(document.getElementById('rev-amount-usd').value || 0);
+        const note = document.getElementById('rev-note').value.trim();
+        if (!projectId || !Number.isFinite(amountUsd) || amountUsd <= 0) {
+          return showToast('請選擇項目並輸入大於 0 的實收金額', true);
+        }
+        const res = await fetch(`/api/admin/projects/${encodeURIComponent(projectId)}/record-revenue`, {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ amountUsd, note }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) return showToast(data.error || '錄入營收失敗', true);
+        showToast(`💰 已錄入 $${amountUsd.toFixed(2)} 真實營收，系統已按 5/85/10 自動分紅入帳！`);
+        document.getElementById('rev-amount-usd').value = '';
+        document.getElementById('rev-note').value = '';
+        await loadOverview();
+      });
+
       document.addEventListener('click', async (ev) => {
         const copyBtn = ev.target.closest('[data-copy]');
         if (copyBtn) {
           return copyText(copyBtn.getAttribute('data-copy') || '');
+        }
+        const copyBatchBtn = ev.target.closest('[data-copy-batch]');
+        if (copyBatchBtn) {
+          const key = copyBatchBtn.getAttribute('data-copy-batch');
+          const batch = (cachedBatchData?.batches || []).find((b) => b.key === key);
+          if (batch) return copyText(batch.disperseText || '');
+        }
+        const dlCsvBtn = ev.target.closest('[data-download-csv]');
+        if (dlCsvBtn) {
+          const key = dlCsvBtn.getAttribute('data-download-csv');
+          const batch = (cachedBatchData?.batches || []).find((b) => b.key === key);
+          if (batch) {
+            const stamp = new Date().toISOString().slice(0, 10);
+            downloadTextFile(`pixelcompute-payout-${batch.chain}-${batch.token}-${stamp}.csv`, batch.csvText || '');
+            showToast(`⬇️ 已下載 ${batch.chain.toUpperCase()} ${batch.token} 批次 CSV（${batch.recipientCount} 個錢包）`);
+          }
+          return;
+        }
+        const batchPaidBtn = ev.target.closest('[data-batch-mark-paid]');
+        if (batchPaidBtn) {
+          const key = batchPaidBtn.getAttribute('data-batch-mark-paid');
+          const isSim = batchPaidBtn.getAttribute('data-batch-sim') === '1';
+          const batch = (cachedBatchData?.batches || []).find((b) => b.key === key);
+          if (!batch) return;
+          const inputEl = document.querySelector(`[data-batch-tx-input="${CSS.escape(key)}"]`);
+          const txHash = (inputEl?.value || '').trim();
+          if (!isSim && !txHash) {
+            return showToast('請先貼上這 1 筆批次轉帳的 TxHash 再點全組銷帳！', true);
+          }
+          const res = await fetch('/api/admin/payouts/batch-mark-paid', {
+            method: 'POST',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              payoutIds: batch.payoutIds,
+              chain: batch.chain,
+              ...(isSim ? { simulate: true } : { txHash }),
+              note: `Admin batch ${batch.chain}/${batch.token}`,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) return showToast(data.error || '批次銷帳失敗', true);
+          showToast(`⚡ 批次銷帳完成！一次結算 ${data.settledCount} 筆提領（合計 $${Number(data.totalAmountUsd || 0).toFixed(2)}）！`);
+          return loadOverview();
+        }
+        const confirmOrdBtn = ev.target.closest('[data-confirm-order]');
+        if (confirmOrdBtn) {
+          const orderId = confirmOrdBtn.getAttribute('data-confirm-order');
+          const txHash = window.prompt('確認錢包已收到款項？可選填鏈上 TxHash（留空將標記為鎮長核實到帳）：', '');
+          if (txHash === null) return;
+          const res = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/confirm`, {
+            method: 'POST',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ txHash: txHash.trim() }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) return showToast(data.error || '訂單確認失敗', true);
+          showToast('✅ 已確認到帳並自動為用戶開通權益！');
+          return loadOverview();
         }
         const paidBtn = ev.target.closest('[data-mark-paid]');
         if (paidBtn) {

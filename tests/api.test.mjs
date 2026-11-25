@@ -2930,4 +2930,271 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('33. Batch payout reconciliation center, Live Mode anti-inflation locks, admin order confirm & real revenue entry', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-batch-payout-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      // 1. Register two real contributors (Alice on Base EVM, Bob on Solana)
+      const regAlice = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'alice-batch@pixelcompute.test',
+        password: 'alice-password-123',
+        displayName: 'Alice Batch',
+      });
+      assert.equal(regAlice.status, 201);
+      const aliceCookie = regAlice.cookie;
+
+      const regBob = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'bob-batch@pixelcompute.test',
+        password: 'bob-password-123',
+        displayName: 'Bob Batch',
+      });
+      assert.equal(regBob.status, 201);
+      const bobCookie = regBob.cookie;
+
+      // Have Alice and Bob earn real contributions on proj-meta so real revenue distributes to them
+      const aliceBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, aliceCookie);
+      const aliceApiWorker = aliceBoot.json.state.workers.find((w) => w.track === 'api');
+      const sloganTask = aliceBoot.json.state.tasks.find((t) => t.id === 'task-meta-slogan');
+      assert.ok(sloganTask);
+      await apiJson(isoUrl, 'POST', `/api/tasks/${sloganTask.id}/claim`, { workerId: aliceApiWorker.id }, aliceCookie);
+      const aliceSub = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${sloganTask.id}/submit`,
+        {
+          workerId: aliceApiWorker.id,
+          content: '# PixelCompute Town Slogans\n1. Turn idle AI into pixel dividends!\n2. Build open source together in 8-bit.\n3. Every spark earns permanent 5% royalty.',
+        },
+        aliceCookie,
+      );
+      assert.equal(aliceSub.status, 200);
+      assert.equal(aliceSub.json.passed, true);
+
+      const bobBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, bobCookie);
+      const bobQuotaWorker = bobBoot.json.state.workers.find((w) => w.track === 'quota');
+      const uxTask = bobBoot.json.state.tasks.find((t) => t.id === 'task-meta-ux');
+      assert.ok(uxTask);
+      await apiJson(isoUrl, 'POST', `/api/tasks/${uxTask.id}/claim`, { workerId: bobQuotaWorker.id }, bobCookie);
+      const bobSub = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${uxTask.id}/submit`,
+        {
+          workerId: bobQuotaWorker.id,
+          content: '# Beginner UX Review\n- Clear onboarding steps with pixel NPC guidance\n- Add batch payout CSV export for town mayor\n- Show live escrow tags on all bounties',
+        },
+        bobCookie,
+      );
+      assert.equal(bobSub.status, 200);
+      assert.equal(bobSub.json.passed, true);
+
+      // 2. Founder activates Live Production Mode
+      const liveRes = await apiJson(isoUrl, 'POST', '/api/admin/launch-clean-mode', {});
+      assert.equal(liveRes.status, 200);
+      assert.equal(liveRes.json.liveProductionMode, true);
+
+      // 3. Verify Live Production Mode anti-inflation locks block non-founder sandbox/simulate APIs with 403 LIVE_MODE_LOCKED
+      const blockedSimRev = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects/proj-meta/simulate-revenue',
+        { amountUsd: 500 },
+        aliceCookie,
+      );
+      assert.equal(blockedSimRev.status, 403);
+      assert.equal(blockedSimRev.json.code, 'LIVE_MODE_LOCKED');
+
+      const scOrderRes = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/create',
+        { productId: 'shop-pro-pass', chain: 'base', token: 'USDC' },
+        aliceCookie,
+      );
+      assert.equal(scOrderRes.status, 201);
+      const scOrderId = scOrderRes.json.order.id;
+
+      const blockedScSim = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/confirm',
+        { orderId: scOrderId, simulate: true },
+        aliceCookie,
+      );
+      assert.equal(blockedScSim.status, 403);
+      assert.equal(blockedScSim.json.code, 'LIVE_MODE_LOCKED');
+
+      const fiatOrderRes = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/checkout',
+        { productId: 'shop-pro-pass', provider: 'polar' },
+        bobCookie,
+      );
+      assert.equal(fiatOrderRes.status, 201);
+
+      const blockedFiatSim = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/sandbox/complete',
+        { orderId: fiatOrderRes.json.order.id },
+        bobCookie,
+      );
+      assert.equal(blockedFiatSim.status, 403);
+      assert.equal(blockedFiatSim.json.code, 'LIVE_MODE_LOCKED');
+
+      // 4. Founder manually confirms Alice's pending order via POST /api/admin/orders/:id/confirm
+      const confirmOrderBlocked = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/admin/orders/${scOrderId}/confirm`,
+        { txHash: '0x' + 'a'.repeat(64) },
+        aliceCookie,
+      );
+      assert.equal(confirmOrderBlocked.status, 403);
+      assert.equal(confirmOrderBlocked.json.code, 'ADMIN_ONLY');
+
+      const confirmOrderOk = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/admin/orders/${scOrderId}/confirm`,
+        { txHash: '0x' + 'a'.repeat(64) },
+      );
+      assert.equal(confirmOrderOk.status, 200);
+      assert.equal(confirmOrderOk.json.ok, true);
+      assert.equal(confirmOrderOk.json.order.status, 'confirmed');
+
+      const aliceAfterPro = await apiJson(isoUrl, 'GET', '/api/auth/me', undefined, aliceCookie);
+      assert.equal(aliceAfterPro.json.user.isPro, true);
+
+      // 5. Founder records real project revenue ($400 on proj-meta) -> credits Alice & Bob via 5/85/10 + 70/30
+      const recRevBlocked = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/admin/projects/proj-meta/record-revenue',
+        { amountUsd: 400, note: 'Polar Nov Settlement' },
+        aliceCookie,
+      );
+      assert.equal(recRevBlocked.status, 403);
+      assert.equal(recRevBlocked.json.code, 'ADMIN_ONLY');
+
+      const recRevOk = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/admin/projects/proj-meta/record-revenue',
+        { amountUsd: 1000, note: 'Polar Nov Settlement' },
+      );
+      assert.equal(recRevOk.status, 200);
+      assert.equal(recRevOk.json.ok, true);
+      assert.equal(recRevOk.json.dividend.grossRevenueUsd, 1000);
+
+      const aliceBalRes = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, aliceCookie);
+      const bobBalRes = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, bobCookie);
+      assert.ok(aliceBalRes.json.state.player.usdBalance >= 25, `Alice should receive >= $25 dividend, got ${aliceBalRes.json.state.player.usdBalance}`);
+      assert.ok(bobBalRes.json.state.player.usdBalance >= 20, `Bob should receive >= $20 dividend, got ${bobBalRes.json.state.player.usdBalance}`);
+
+      // 6. Bind wallets & test simulateInstant lockout + real pending payout requests
+      const aliceEvmAddr = '0x111122223333444455556666777788889999AaBb';
+      const bobSolAddr = '9XHM3Rtb7Ub7rrMUruN6jLYivryM3vxpAsZoiGcrXbi3';
+
+      const bindAlice = await apiJson(isoUrl, 'POST', '/api/wallet/bind', { chain: 'base', address: aliceEvmAddr }, aliceCookie);
+      assert.equal(bindAlice.status, 200);
+      const bindBob = await apiJson(isoUrl, 'POST', '/api/wallet/bind', { chain: 'solana', address: bobSolAddr }, bobCookie);
+      assert.equal(bindBob.status, 200);
+
+      const blockedInstant = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payouts/request',
+        { amountUsd: 10, chain: 'base', token: 'USDC', simulateInstant: true },
+        aliceCookie,
+      );
+      assert.equal(blockedInstant.status, 403);
+      assert.equal(blockedInstant.json.code, 'LIVE_MODE_LOCKED');
+
+      // Alice creates 2 pending payouts to the SAME wallet ($10 + $15 = $25 merged), Bob creates 1 ($20)
+      const p1 = await apiJson(isoUrl, 'POST', '/api/payouts/request', { amountUsd: 10, chain: 'base', token: 'USDC' }, aliceCookie);
+      assert.equal(p1.status, 201);
+      assert.equal(p1.json.payout.status, 'pending');
+
+      const p2 = await apiJson(isoUrl, 'POST', '/api/payouts/request', { amountUsd: 15, chain: 'base', token: 'USDC' }, aliceCookie);
+      assert.equal(p2.status, 201);
+      assert.equal(p2.json.payout.status, 'pending');
+
+      const p3 = await apiJson(isoUrl, 'POST', '/api/payouts/request', { amountUsd: 20, chain: 'solana', token: 'USDC' }, bobCookie);
+      assert.equal(p3.status, 201);
+      assert.equal(p3.json.payout.status, 'pending');
+
+      // 7. GET /api/admin/payouts/batch groups by (chain, token), merges duplicate wallets, validates & generates Disperse/CSV
+      const batchForbidden = await apiJson(isoUrl, 'GET', '/api/admin/payouts/batch', undefined, aliceCookie);
+      assert.equal(batchForbidden.status, 403);
+      assert.equal(batchForbidden.json.code, 'ADMIN_ONLY');
+
+      const batchRes = await apiJson(isoUrl, 'GET', '/api/admin/payouts/batch');
+      assert.equal(batchRes.status, 200);
+      assert.equal(batchRes.json.ok, true);
+      assert.equal(batchRes.json.pendingCount, 3);
+      assert.equal(batchRes.json.batchCount, 2);
+      assert.equal(batchRes.json.grandTotalUsd, 45);
+
+      const baseBatch = batchRes.json.batches.find((b) => b.chain === 'base' && b.token === 'USDC');
+      assert.ok(baseBatch, 'Must have base:USDC batch');
+      assert.equal(baseBatch.payoutCount, 2, 'Two pending payouts on Base');
+      assert.equal(baseBatch.recipientCount, 1, 'Duplicate wallet addresses must merge into 1 recipient');
+      assert.equal(baseBatch.totalAmountUsd, 25);
+      assert.equal(baseBatch.reconciliationOk, true);
+      assert.equal(baseBatch.disperseText, `${aliceEvmAddr},25.00`);
+      assert.ok(baseBatch.csvText.includes('address,amount,token,chain,users,payout_ids'));
+      assert.ok(baseBatch.csvText.includes(p1.json.payout.id));
+      assert.ok(baseBatch.csvText.includes(p2.json.payout.id));
+
+      const solBatch = batchRes.json.batches.find((b) => b.chain === 'solana' && b.token === 'USDC');
+      assert.ok(solBatch, 'Must have solana:USDC batch');
+      assert.equal(solBatch.payoutCount, 1);
+      assert.equal(solBatch.recipientCount, 1);
+      assert.equal(solBatch.totalAmountUsd, 20);
+      assert.equal(solBatch.reconciliationOk, true);
+      assert.equal(solBatch.disperseText, `${bobSolAddr},20.00`);
+
+      // 8. POST /api/admin/payouts/batch-mark-paid settles both Base payouts atomically with 1 shared TxHash
+      const sharedBatchTx = '0x' + 'f'.repeat(64);
+      const batchPayRes = await apiJson(isoUrl, 'POST', '/api/admin/payouts/batch-mark-paid', {
+        payoutIds: baseBatch.payoutIds,
+        chain: 'base',
+        txHash: sharedBatchTx,
+        note: 'Disperse batch #1',
+      });
+      assert.equal(batchPayRes.status, 200);
+      assert.equal(batchPayRes.json.ok, true);
+      assert.equal(batchPayRes.json.settledCount, 2);
+      assert.equal(batchPayRes.json.totalAmountUsd, 25);
+      assert.equal(batchPayRes.json.txHash, sharedBatchTx);
+
+      // Batch queue must now only contain the remaining Solana payout ($20)
+      const batchAfter = await apiJson(isoUrl, 'GET', '/api/admin/payouts/batch');
+      assert.equal(batchAfter.json.pendingCount, 1);
+      assert.equal(batchAfter.json.batchCount, 1);
+      assert.equal(batchAfter.json.grandTotalUsd, 20);
+
+      // Verify /admin HTML renders batch payout center & audit_log records all 3 financial events
+      const adminHtml = await (await fetch(`${isoUrl}/admin`)).text();
+      assert.ok(adminHtml.includes('一鍵批次打帳中心'));
+      assert.ok(adminHtml.includes('/api/admin/payouts/batch-mark-paid'));
+      assert.ok(adminHtml.includes('/api/admin/projects/'));
+
+      const overview = await apiJson(isoUrl, 'GET', '/api/admin/overview');
+      assert.equal(overview.status, 200);
+      assert.ok(Array.isArray(overview.json.projects) && overview.json.projects.length > 0);
+      const auditTypes = new Set(overview.json.auditLog.map((a) => a.eventType));
+      assert.ok(auditTypes.has('admin_order_confirmed'), 'Audit log must record admin_order_confirmed');
+      assert.ok(auditTypes.has('real_revenue_recorded'), 'Audit log must record real_revenue_recorded');
+      assert.ok(auditTypes.has('payout_batch_paid'), 'Audit log must record payout_batch_paid');
+    } finally {
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });
