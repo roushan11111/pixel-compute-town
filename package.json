@@ -1,7 +1,8 @@
 {
   "name": "pixel-compute-town",
   "version": "0.3.0",
-  "description": "像素算力鎮 (PixelCompute Town) — 閒置 API 與月/週 AI 額度雙軌協作像素風打工與項目孵化平臺 Alpha-Plus",
+  "license": "AGPL-3.0-or-later",
+  "description": "像素算力鎮 (PixelCompute Town) — 100% 免費開源（AGPL-3.0 · 0% 抽成 · 自願打賞）閒置 AI 算力協作與創意溯源像素小鎮",
   "type": "module",
   "bin": {
     "pixel-worker": "./bin/pixel-worker.mjs"

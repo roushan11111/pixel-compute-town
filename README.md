@@ -1,29 +1,29 @@
 <div align="center">
 
-# 👾 PixelCompute Town（像素算力鎮）v1.2
+# 👾 PixelCompute Town（像素算力鎮）v1.3
 
-**將開發者閒置的 AI API 額度與月／週 CLI 訂閱額度（BYOT），轉化為賽博像素小鎮裡的 32×32 HD 算力小人**<br>
-**原生 SQLite WAL 持久化 · 公開分享頁 `/p/:slug` & `/verify/:hash` · GitHub Webhook PR 合併自動結算 · 5% / 85% / 10% 多勞多得與 70/30 防稀釋治理**
+**100% 免費開源（AGPL-3.0）· 0% 平臺抽成 · 自願打賞支持｜將開發者閒置的 AI API 與月／週 CLI 額度化為 32×32 HD 算力小人**<br>
+**原生 SQLite WAL 持久化 · 公開分享頁 `/p/:slug` & `/verify/:hash` · GitHub Webhook 自動結算 · 5% / 95% / 0% 零抽成多勞多得與 70/30 防稀釋治理**
 
-*Turn idle AI API credits & monthly CLI quotas into HD pixel workers with native SQLite WAL persistence, public OG share & SHA-256 verification pages, GitHub PR merge auto-settlement, and 5% / 85% / 10% anti-dilution revenue sharing.*
+*100% Free Forever (AGPL-3.0, 0% Platform Fee, Tip-Supported). Turn idle AI API credits & CLI quotas into HD pixel workers with SHA-256 Proof of First Spark, 5% / 95% / 0% merit revenue sharing, and 70/30 anti-dilution governance.*
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=for-the-badge)](./LICENSE)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-34d399?style=for-the-badge)](./package.json)
 [![Node.js](https://img.shields.io/badge/Node.js-24%20Native%20SQLite-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![CI](https://img.shields.io/badge/GitHub%20Actions-CI%20Ready-2563eb?style=for-the-badge&logo=githubactions&logoColor=white)](./.github/workflows/ci.yml)
-[![Proof of First Spark](https://img.shields.io/badge/Protocol-5%25%20Spark%20%7C%2085%25%20Merit%20%7C%2010%25%20Platform-f43f5e?style=for-the-badge)](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議)
+[![Proof of First Spark](https://img.shields.io/badge/Protocol-5%25%20Spark%20%7C%2095%25%20Merit%20%7C%200%25%20Fee-f43f5e?style=for-the-badge)](#-創意是第一生產力創意溯源--反抄襲--5950-零抽成多勞多得協議)
 [![Zero-Trust BYOK](https://img.shields.io/badge/Security-Zero--Trust%20BYOK%20%2F%20BYOT-22d3ee?style=for-the-badge)](#零信任與合規安全架構)
 [![i18n](https://img.shields.io/badge/i18n-100%25%20繁中%20%7C%20简中%20%7C%20EN-f59e0b?style=for-the-badge)](#-核心特色一覽)
-[![Payments](https://img.shields.io/badge/Pay-USDC%20%7C%20Afdian%20%7C%20Polar%20%7C%20Stripe-a855f7?style=for-the-badge)](#-三合一收付與穩定幣分紅提領)
-[![Afdian](https://img.shields.io/badge/%E2%9A%A1%20%E6%84%9B%E7%99%BC%E9%9B%BB-ifdian.net%2Fa%2Fpixelcompute-946ce6?style=for-the-badge)](https://ifdian.net/a/pixelcompute)
+[![Afdian](https://img.shields.io/badge/%E2%98%95%20%E6%84%9B%E7%99%BC%E9%9B%BB%E9%9A%A8%E5%96%9C%E6%89%93%E8%B3%9E-ifdian.net%2Fa%2Fpixelcompute-946ce6?style=for-the-badge)](https://ifdian.net/a/pixelcompute)
 
-🌐 **線上官方站**：[https://pixel-compute-town.onrender.com](https://pixel-compute-town.onrender.com) · ⚡ **官方愛發電創作者主頁（贊助與卡密小舖）**：[https://ifdian.net/a/pixelcompute](https://ifdian.net/a/pixelcompute)
+🌐 **線上官方站**：[https://pixel-compute-town.onrender.com](https://pixel-compute-town.onrender.com) · ☕ **愛發電隨喜打賞（100% 全免平臺支持）**：[https://ifdian.net/a/pixelcompute](https://ifdian.net/a/pixelcompute)
 
-[💡 創意溯源與 5/85/10 協議](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議) ·
+[💡 創意溯源與 5/95/0 協議](#-創意是第一生產力創意溯源--反抄襲--5950-零抽成多勞多得協議) ·
 [🛡️ 4 層防垃圾 AI 稀釋協議](#️-防垃圾-ai-稀釋-4-層治理協議7030-分桶隔離--ai-盲審--實幹審閱團--押金沒收) ·
 [🔥 v1.2 生產級引擎與病毒分享](#-v12-生產強化原生-sqlite-wal--公開分享頁--github-webhook-自動結算--ai-智慧拆單) ·
 [🚀 3 秒快速啟動](#-3-秒快速啟動零依賴開箱即玩) ·
 [📦 一鍵安裝與 AI 對話安裝](#-一鍵安裝本機算力小人終端與-ai-對話) ·
-[💎 三合一支付與提現](#-三合一收付與穩定幣分紅提領) ·
+[⚖️ 開源授權（AGPL-3.0）](#️-開源授權license) ·
 [☁️ 一鍵公開部署](#️-一鍵公開上線部署) ·
 [📣 48 小時上線推廣手冊](./docs/DEPLOY_AND_PROMOTE.md)
 
@@ -41,9 +41,9 @@
 
 ---
 
-## 💡 創意是第一生產力：創意溯源 × 反抄襲 × 5%/85%/10% 多勞多得協議
+## 💡 創意是第一生產力：創意溯源 × 反抄襲 × 5%/95%/0% 零抽成多勞多得協議
 
-在 AI 時代，**「好創意是點燃一切的火種，實幹交付是決定價值的力量」**。PixelCompute Town 內建零依賴 **Proof of First Spark（首發創意溯源協議）**，用密碼學與透明帳本同時守護原創者與實幹者：
+在 AI 時代，**「好創意是點燃一切的火種，實幹交付是決定價值的力量」**。PixelCompute Town 內建零依賴 **Proof of First Spark（首發創意溯源協議）**，並且承諾 **100% 免費、0% 平臺抽成、純靠自願打賞維持**：
 
 1. **🔗 SHA-256 不可竄改創意溯源哈希鏈（`src/server/provenance.mjs`）**
    - 每個新提案上牆瞬間即自動記錄首發者（`originatorId` / `originatorName`）、UTC 時間戳（`originatedAt`）與前序創意雜湊（`prevIdeaHash`），以 Node.js 原生 `node:crypto` 計算 64 碼 SHA-256 指紋（`ideaHash`）。
@@ -51,17 +51,17 @@
 2. **🛡️ 即時反抄襲偵測 × 一鍵尊重原創加入共建**
    - 內建中英文雙語相似度引擎（中文 2-gram + 英文單詞正規化 Jaccard 相似度），前端提案視窗透過 `POST /api/projects/check-similarity` 即時預警。
    - 若送出與既有原創高度相似的提案（相似度 `>= 0.65`），伺服器直接攔截並回傳 HTTP **`409 POTENTIAL_COPYCAT`**，清楚列出原創首發者與 SHA-256 指紋，引導開發者呼叫 `POST /api/projects/:id/join` 直接加入原創意共建，徹底終結低質抄襲複製！
-3. **⚖️ 尊重創意但不獨佔：5% / 85% / 10% 多勞多得動態分紅公式**
+3. **⚖️ 尊重創意但不獨佔：5% / 95% / 0% 零抽成多勞多得動態分紅公式**
 
 | 分紅池 | 比例 | 分配規則與公平保障 |
 | :--- | :---: | :--- |
 | **💡 首發創意永久版稅** (`sparkRoyaltyPct`) | **5%** | 永久歸屬首發原創者（`originatorId`）。**即使發起人一行代碼都沒寫**，依然穩拿 5% 尊重版稅，致敬他踏出的第一步！ |
-| **🔥 實幹建設多勞多得池** (`meritPoolPct`) | **85%** | 嚴格依所有貢獻者通過驗收的實幹點數（`contributions`）佔比動態分配——**誰出力最多誰拿大頭**！ |
-| **🏛️ 平臺公證運營分成** (`platformSharePct`) | **10%** | 用於維護 SHA-256 溯源公證、驗收基礎設施、三合一收付與穩定幣分紅結算。 |
+| **🔥 實幹建設多勞多得池** (`meritPoolPct`) | **95%** | 嚴格依所有貢獻者通過驗收的實幹點數（`contributions`）佔比動態分配——**誰出力最多誰拿大頭**！ |
+| **☕ 平臺抽成** (`platformSharePct`) | **0%** | **永久 0% 抽成！** 懸賞與營收 100% 歸創作者與實幹者，伺服器成本純靠社群自願隨喜打賞（[愛發電](https://ifdian.net/a/pixelcompute) / USDC / USDT）。 |
 
 > **兩種實戰場景試算（以項目總營收 `$100` 為例）：**
-> - **場景 A（發起人只出點子、未動手實作）**：發起人穩拿 **`$5`（5%）** 創意版稅；真正把產品做出來的實幹貢獻者們獨拿 **`$85`（85%）**，平臺拿 `$10`（10%）。
-> - **場景 B（發起人提出創意＋自己也完成 40% 實幹貢獻）**：發起人拿 **`$5`（5% 版稅）+ `$34`（85% × 40%）= `$39`（39%）**；其餘實幹共建者分 `$51`（85% × 60%），平臺拿 `$10`（10%）。
+> - **場景 A（發起人只出點子、未動手實作）**：發起人穩拿 **`$5`（5%）** 創意版稅；真正把產品做出來的實幹貢獻者們獨拿 **`$95`（95%）**，平臺抽成 `$0`。
+> - **場景 B（發起人提出創意＋自己也完成 40% 實幹貢獻）**：發起人拿 **`$5`（5% 版稅）+ `$38`（95% × 40%）= `$43`（43%）**；其餘實幹共建者分 `$57`（95% × 60%），平臺抽成 `$0`。
 
 ---
 
@@ -308,8 +308,18 @@ npm run smoke
 
 ---
 
+## ⚖️ 開源授權（License）
+
+本專案採用 **[GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)](./LICENSE)** 開源授權：
+
+- ✅ **完全免費使用、修改、自架小鎮與商用**：歡迎任何個人與團隊自架屬於自己的像素算力鎮或貢獻 PR。
+- 🛡️ **網路服務回饋條款（Copyleft）**：若您修改本專案並架設為公開網站／雲端服務對外提供使用，您必須在相同 **AGPL-3.0** 條款下公開您的完整修改原始碼，共同守護開源透明精神。
+- 📜 完整法律條文請見根目錄 [LICENSE](./LICENSE)。
+
+---
+
 <div align="center">
 
-喜歡這個把閒置 AI 算力變成像素小鎮的想法？歡迎點一顆 ⭐ **Star**，或開啟 Issue 提案你的第一個創世項目！
+喜歡這個 100% 免費開源、把閒置 AI 算力變成像素小鎮的想法？歡迎點一顆 ⭐ **Star**，或 [☕ 請鎮長喝杯咖啡](https://ifdian.net/a/pixelcompute)！
 
 </div>
