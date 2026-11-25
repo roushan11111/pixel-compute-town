@@ -2738,4 +2738,31 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.ok(!fullDocHtml.includes('<b>BADGE</b>'), 'Doc badge XSS must be escaped');
     assert.ok(!/href\s*=\s*["']\s*javascript:/i.test(fullDocHtml), 'Full doc page must never emit javascript: href');
   });
+
+  it('30. Multilingual Whitepaper editions (/whitepaper?lang=zh-TW|zh-CN|en|ja & /whitepaper/en) render cleanly with 0 CJK in EN', async () => {
+    const cases = [
+      { url: '/whitepaper?lang=zh-TW', htmlLang: 'zh-Hant', mustInclude: ['白皮書 v1.0', '創意溯源', 'data-doc-lang="en"'] },
+      { url: '/whitepaper?lang=zh-CN', htmlLang: 'zh-Hans', mustInclude: ['白皮书 v1.0', '创意溯源', '$595.00', 'data-doc-lang="zh-CN"'] },
+      { url: '/whitepaper?lang=en', htmlLang: 'en', mustInclude: ['Whitepaper v1.0', 'Proof of First Spark', 'Anti-Dilution', '$595.00', 'Table of Contents'] },
+      { url: '/whitepaper/en', htmlLang: 'en', mustInclude: ['Whitepaper v1.0', 'Zero Native Token Policy', '$255.00'] },
+      { url: '/whitepaper?lang=ja', htmlLang: 'ja', mustInclude: ['ホワイトペーパー v1.0', '希薄化防止', '$595.00'] },
+    ];
+
+    for (const c of cases) {
+      const res = await fetch(`${baseUrl}${c.url}`);
+      assert.equal(res.status, 200, `GET ${c.url} must return 200`);
+      assert.match(res.headers.get('content-type') || '', /^text\/html/i);
+      const html = await res.text();
+      assert.ok(html.includes(`<html lang="${c.htmlLang}">`), `GET ${c.url} must set html lang="${c.htmlLang}"`);
+      for (const token of c.mustInclude) {
+        assert.ok(html.includes(token), `GET ${c.url} must include "${token}"`);
+      }
+
+      if (c.htmlLang === 'en') {
+        const articleMatch = html.match(/<article[^>]*id="doc-article"[^>]*>([\s\S]*?)<\/article>/i);
+        assert.ok(articleMatch && articleMatch[1].length > 5000, 'English Whitepaper article body must be non-empty');
+        assert.ok(!/[\u4e00-\u9fff]/.test(articleMatch[1]), 'English Whitepaper article body must contain 0 Chinese characters');
+      }
+    }
+  });
 });

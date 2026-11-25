@@ -3923,23 +3923,65 @@ export function createAppServer(options = {}) {
         }
       }
 
-      if (decodedPath === '/whitepaper' || decodedPath === '/whitepaper/') {
-        try {
-          const wpPath = path.join(__dirname, 'docs', 'WHITEPAPER.md');
-          const markdown = await fs.readFile(wpPath, 'utf8');
-          const html = renderDocPage({
+      if (
+        decodedPath === '/whitepaper'
+        || decodedPath === '/whitepaper/'
+        || /^\/whitepaper\/(zh-TW|zh-CN|en|ja)\/?$/i.test(decodedPath)
+      ) {
+        const WHITEPAPER_LOCALES = {
+          'zh-TW': {
+            file: 'WHITEPAPER.md',
             title: '📜 PixelCompute Town 白皮書 v1.0',
             subtitle: 'AI 時代的閒置算力協作、Proof of First Spark 創意溯源、70/30 防稀釋與 5/85/10 多勞多得協議',
-            badge: 'WHITEPAPER · v1.0',
+            badge: 'WHITEPAPER · v1.0 · 繁中',
+          },
+          'zh-CN': {
+            file: 'WHITEPAPER.zh-CN.md',
+            title: '📜 PixelCompute Town 白皮书 v1.0',
+            subtitle: 'AI 时代的闲置算力协作、Proof of First Spark 创意溯源、70/30 防稀释与 5/85/10 多劳多得协议',
+            badge: 'WHITEPAPER · v1.0 · 简中',
+          },
+          en: {
+            file: 'WHITEPAPER.en.md',
+            title: '📜 PixelCompute Town Whitepaper v1.0',
+            subtitle: 'Idle AI Compute Collaboration, Proof of First Spark Provenance, 70/30 Anti-Dilution & 5/85/10 Merit Protocol',
+            badge: 'WHITEPAPER · v1.0 · EN',
+          },
+          ja: {
+            file: 'WHITEPAPER.ja.md',
+            title: '📜 PixelCompute Town ホワイトペーパー v1.0',
+            subtitle: 'AI時代の余剰計算資源コラボレーション・Proof of First Spark・70/30希薄化防止および5/85/10成果分配プロトコル',
+            badge: 'WHITEPAPER · v1.0 · 日本語',
+          },
+        };
+        const pathLangMatch = decodedPath.match(/^\/whitepaper\/(zh-TW|zh-CN|en|ja)\/?$/i);
+        const rawLang = (pathLangMatch ? pathLangMatch[1] : (url.searchParams.get('lang') || 'zh-TW')).trim();
+        const langKey = Object.keys(WHITEPAPER_LOCALES).find((k) => k.toLowerCase() === rawLang.toLowerCase()) || 'zh-TW';
+        const wpMeta = WHITEPAPER_LOCALES[langKey];
+        const langOptions = [
+          { code: 'zh-TW', label: '繁中', href: '/whitepaper?lang=zh-TW', active: langKey === 'zh-TW' },
+          { code: 'zh-CN', label: '简中', href: '/whitepaper?lang=zh-CN', active: langKey === 'zh-CN' },
+          { code: 'en', label: 'EN', href: '/whitepaper?lang=en', active: langKey === 'en' },
+          { code: 'ja', label: '日本語', href: '/whitepaper?lang=ja', active: langKey === 'ja' },
+        ];
+        try {
+          const wpPath = path.join(__dirname, 'docs', wpMeta.file);
+          const markdown = await fs.readFile(wpPath, 'utf8');
+          const html = renderDocPage({
+            title: wpMeta.title,
+            subtitle: wpMeta.subtitle,
+            badge: wpMeta.badge,
             markdown,
             activePath: '/whitepaper',
             origin: requestOrigin,
+            lang: langKey,
+            langOptions,
           });
           return sendHtml(res, 200, html, method, 'public, max-age=60');
         } catch {
           const notFoundHtml = renderPublicNotFoundPage(
             '找不到白皮書文件',
-            '系統目前無法讀取 docs/WHITEPAPER.md，請稍後再試。',
+            `系統目前無法讀取 docs/${wpMeta.file}，請稍後再試。`,
             requestOrigin,
           );
           return sendHtml(res, 404, notFoundHtml, method, 'no-store');

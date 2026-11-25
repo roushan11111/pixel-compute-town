@@ -1653,26 +1653,127 @@ export function renderDocPage({
   markdown = '',
   activePath = '/docs',
   origin = 'http://localhost:3456',
+  lang = 'zh-TW',
+  langOptions = null,
 } = {}) {
   const safeOrigin = normalizeOrigin(origin);
   const safeActive = String(activePath || '/docs').trim() || '/docs';
-  const canonicalUrl = `${safeOrigin}${safeActive.startsWith('/') ? safeActive : `/${safeActive}`}`;
+  const normalizedLang = ['zh-TW', 'zh-CN', 'en', 'ja'].includes(lang) ? lang : 'zh-TW';
+  const langQuery = normalizedLang !== 'zh-TW' && Array.isArray(langOptions) && langOptions.length > 0
+    ? `?lang=${encodeURIComponent(normalizedLang)}`
+    : '';
+  const canonicalUrl = `${safeOrigin}${safeActive.startsWith('/') ? safeActive : `/${safeActive}`}${langQuery}`;
   const { html: articleHtml, toc } = renderMarkdownToHtml(markdown);
 
-  const plainChars = String(markdown || '').replace(/\s+/g, '').length;
-  const estMinutes = Math.max(1, Math.round(plainChars / 420));
+  const DOC_CHROME = {
+    'zh-TW': {
+      htmlLang: 'zh-Hant',
+      brandTitle: '🏮 PixelCompute Town 像素算力鎮',
+      navHome: '🏠 官方首頁',
+      navDocs: '📖 使用說明書',
+      navWp: '📜 白皮書',
+      navApp: '🎮 算力小鎮',
+      tocTitle: '📑 章節目錄 TOC',
+      tocCount: (n) => `${n} 節`,
+      tocTop: '文件頂端',
+      tocMobile: (n) => `📑 展開章節目錄（${n} 節）`,
+      printBtn: '🖨️ 列印 / 另存 PDF',
+      copyBtn: '🔗 複製連結',
+      copiedText: '✅ 已複製',
+      charsLabel: (n) => `📄 約 ${n.toLocaleString('en-US')} 字`,
+      readLabel: (m) => `⏱️ 預計閱讀 ${m} 分鐘`,
+      footerPrefix: 'PixelCompute Town · 5% 首發創意版稅 / 85% 實幹池 (70% 核心 · ≤30% 週邊防稀釋) / 10% 平臺 ·',
+      footerHome: '官網',
+      footerDocs: '使用說明書',
+      footerWp: '白皮書',
+      footerApp: '進入算力小鎮',
+    },
+    'zh-CN': {
+      htmlLang: 'zh-Hans',
+      brandTitle: '🏮 PixelCompute Town 像素算力镇',
+      navHome: '🏠 官方首页',
+      navDocs: '📖 使用说明书',
+      navWp: '📜 白皮书',
+      navApp: '🎮 算力小镇',
+      tocTitle: '📑 章节目录 TOC',
+      tocCount: (n) => `${n} 节`,
+      tocTop: '文档顶端',
+      tocMobile: (n) => `📑 展开章节目录（${n} 节）`,
+      printBtn: '🖨️ 打印 / 另存 PDF',
+      copyBtn: '🔗 复制链接',
+      copiedText: '✅ 已复制',
+      charsLabel: (n) => `📄 约 ${n.toLocaleString('en-US')} 字`,
+      readLabel: (m) => `⏱️ 预计阅读 ${m} 分钟`,
+      footerPrefix: 'PixelCompute Town · 5% 首发创意版税 / 85% 实干池 (70% 核心 · ≤30% 周边防稀释) / 10% 平台 ·',
+      footerHome: '官网',
+      footerDocs: '使用说明书',
+      footerWp: '白皮书',
+      footerApp: '进入算力小镇',
+    },
+    en: {
+      htmlLang: 'en',
+      brandTitle: '🏮 PixelCompute Town',
+      navHome: '🏠 Home',
+      navDocs: '📖 User Guide',
+      navWp: '📜 Whitepaper',
+      navApp: '🎮 Enter Town',
+      tocTitle: '📑 Table of Contents',
+      tocCount: (n) => `${n} sections`,
+      tocTop: 'Top of document',
+      tocMobile: (n) => `📑 Expand Table of Contents (${n} sections)`,
+      printBtn: '🖨️ Print / Save PDF',
+      copyBtn: '🔗 Copy Link',
+      copiedText: '✅ Copied',
+      charsLabel: (n) => `📄 ~${n.toLocaleString('en-US')} words`,
+      readLabel: (m) => `⏱️ ~${m} min read`,
+      footerPrefix: 'PixelCompute Town · 5% Originator Spark / 85% Merit Pool (70% Core · <=30% Peripheral) / 10% Platform ·',
+      footerHome: 'Home',
+      footerDocs: 'User Guide',
+      footerWp: 'Whitepaper',
+      footerApp: 'Enter Town',
+    },
+    ja: {
+      htmlLang: 'ja',
+      brandTitle: '🏮 PixelCompute Town',
+      navHome: '🏠 ホーム',
+      navDocs: '📖 ユーザーガイド',
+      navWp: '📜 ホワイトペーパー',
+      navApp: '🎮 タウンへ',
+      tocTitle: '📑 目次 TOC',
+      tocCount: (n) => `${n} セクション`,
+      tocTop: '先頭へ',
+      tocMobile: (n) => `📑 目次を開く（${n} セクション）`,
+      printBtn: '🖨️ 印刷 / PDF保存',
+      copyBtn: '🔗 リンクをコピー',
+      copiedText: '✅ コピー済み',
+      charsLabel: (n) => `📄 約 ${n.toLocaleString('en-US')} 文字`,
+      readLabel: (m) => `⏱️ 読了目安 ${m} 分`,
+      footerPrefix: 'PixelCompute Town · 5% 初出ロイヤリティ / 85% 成果プール (70% コア・≤30% 周辺) / 10% プラットフォーム ·',
+      footerHome: 'ホーム',
+      footerDocs: 'ガイド',
+      footerWp: 'ホワイトペーパー',
+      footerApp: 'タウンを開く',
+    },
+  };
+  const chrome = DOC_CHROME[normalizedLang] || DOC_CHROME['zh-TW'];
+
+  const isWordCountLang = normalizedLang === 'en';
+  const metricCount = isWordCountLang
+    ? String(markdown || '').trim().split(/\s+/).filter(Boolean).length
+    : String(markdown || '').replace(/\s+/g, '').length;
+  const estMinutes = Math.max(1, Math.round(metricCount / (isWordCountLang ? 220 : 420)));
 
   const tocItemsHtml = toc.length > 0
     ? toc.map((item) => (
       `<li class="doc-toc-item doc-toc-lvl-${item.level}"><a href="#${escapeHtml(item.id)}">${escapeHtml(item.text)}</a></li>`
     )).join('')
-    : '<li class="doc-toc-item"><a href="#top">文件頂端</a></li>';
+    : `<li class="doc-toc-item"><a href="#top">${escapeHtml(chrome.tocTop)}</a></li>`;
 
   const navLinks = [
-    { href: '/', label: '🏠 官方首頁', active: safeActive === '/' },
-    { href: '/docs', label: '📖 使用說明書', active: safeActive === '/docs' || safeActive === '/guide' },
-    { href: '/whitepaper', label: '📜 白皮書', active: safeActive === '/whitepaper' },
-    { href: '/app', label: '🎮 算力小鎮', active: safeActive === '/app', primary: true },
+    { href: '/', label: chrome.navHome, active: safeActive === '/' },
+    { href: '/docs', label: chrome.navDocs, active: safeActive === '/docs' || safeActive === '/guide' },
+    { href: `/whitepaper${langQuery}`, label: chrome.navWp, active: safeActive === '/whitepaper' },
+    { href: '/app', label: chrome.navApp, active: safeActive === '/app', primary: true },
   ];
 
   const navHtml = navLinks.map((item) => {
@@ -1682,20 +1783,29 @@ export function renderDocPage({
     return `<a class="${classes.join(' ')}" href="${escapeHtml(item.href)}"${item.active ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`;
   }).join('');
 
+  const langSwitcherHtml = Array.isArray(langOptions) && langOptions.length > 0
+    ? `<div class="doc-lang-switcher" role="group" aria-label="Language Switcher" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        ${langOptions.map((opt) => {
+          const isActive = opt.code === normalizedLang || Boolean(opt.active);
+          return `<a class="btn btn-sm${isActive ? ' doc-nav-active' : ''}" data-doc-lang="${escapeHtml(opt.code)}" href="${escapeHtml(opt.href)}"${isActive ? ' aria-current="true"' : ''}>${escapeHtml(opt.label)}</a>`;
+        }).join('')}
+      </div>`
+    : '';
+
   const safeTitle = escapeHtml(title);
   const safeSubtitle = escapeHtml(subtitle);
   const safeBadge = escapeHtml(badge);
   const fullPageTitle = `${title} — PixelCompute Town`;
 
   return `<!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="${escapeHtml(chrome.htmlLang)}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(fullPageTitle)}</title>
   <meta name="description" content="${safeSubtitle || safeTitle}" />
   <meta property="og:type" content="article" />
-  <meta property="og:site_name" content="PixelCompute Town 像素算力鎮" />
+  <meta property="og:site_name" content="PixelCompute Town" />
   <meta property="og:title" content="${escapeHtml(fullPageTitle)}" />
   <meta property="og:description" content="${safeSubtitle || safeTitle}" />
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
@@ -1705,7 +1815,7 @@ export function renderDocPage({
   <header class="topbar">
     <div class="topbar-inner" style="max-width:1240px;">
       <a class="brand" href="/">
-        <span>🏮 PixelCompute Town 像素算力鎮</span>
+        <span>${escapeHtml(chrome.brandTitle)}</span>
         <span class="brand-badge">${safeBadge}</span>
       </a>
       <nav class="nav-links" aria-label="Documentation Navigation">
@@ -1717,8 +1827,8 @@ export function renderDocPage({
   <div class="doc-shell">
     <aside class="doc-toc-sidebar" aria-label="Table of Contents">
       <div class="doc-toc-title">
-        <span>📑 章節目錄 TOC</span>
-        <span class="mono" style="font-size:11px;color:var(--muted);">${toc.length} 節</span>
+        <span>${escapeHtml(chrome.tocTitle)}</span>
+        <span class="mono" style="font-size:11px;color:var(--muted);">${escapeHtml(chrome.tocCount(toc.length))}</span>
       </div>
       <ul class="doc-toc-list" id="doc-toc-list">
         ${tocItemsHtml}
@@ -1727,7 +1837,7 @@ export function renderDocPage({
 
     <main class="doc-main-col">
       <details class="doc-mobile-toc">
-        <summary>📑 展開章節目錄（${toc.length} 節）</summary>
+        <summary>${escapeHtml(chrome.tocMobile(toc.length))}</summary>
         <ul class="doc-toc-list" style="margin-top:10px;">
           ${tocItemsHtml}
         </ul>
@@ -1741,13 +1851,14 @@ export function renderDocPage({
             ${subtitle ? `<p class="tagline" style="margin-bottom:0;">${safeSubtitle}</p>` : ''}
           </div>
           <div class="doc-hero-actions">
-            <button type="button" class="btn btn-sm btn-gold" id="btn-doc-print">🖨️ 列印 / 另存 PDF</button>
-            <button type="button" class="btn btn-sm" data-copy-text="${escapeHtml(canonicalUrl)}">🔗 複製連結</button>
+            ${langSwitcherHtml}
+            <button type="button" class="btn btn-sm btn-gold" id="btn-doc-print">${escapeHtml(chrome.printBtn)}</button>
+            <button type="button" class="btn btn-sm" data-copy-text="${escapeHtml(canonicalUrl)}">${escapeHtml(chrome.copyBtn)}</button>
           </div>
         </div>
         <div class="doc-meta-strip mono">
-          <span>📄 約 ${plainChars.toLocaleString('en-US')} 字</span>
-          <span>⏱️ 預計閱讀 ${estMinutes} 分鐘</span>
+          <span>${escapeHtml(chrome.charsLabel(metricCount))}</span>
+          <span>${escapeHtml(chrome.readLabel(estMinutes))}</span>
           <span>🛡️ Zero-Trust BYOK + BYOT · 5% / 85% / 10%</span>
         </div>
       </section>
@@ -1757,14 +1868,38 @@ export function renderDocPage({
       </article>
 
       <footer>
-        PixelCompute Town · 5% 首發創意版稅 / 85% 實幹池 (70% 核心 · ≤30% 週邊防稀釋) / 10% 平臺 ·
-        <a href="/">官網</a> · <a href="/docs">使用說明書</a> · <a href="/whitepaper">白皮書</a> · <a href="/app">進入算力小鎮</a>
+        ${escapeHtml(chrome.footerPrefix)}
+        <a href="/">${escapeHtml(chrome.footerHome)}</a> · <a href="/docs">${escapeHtml(chrome.footerDocs)}</a> · <a href="/whitepaper${escapeHtml(langQuery)}">${escapeHtml(chrome.footerWp)}</a> · <a href="/app">${escapeHtml(chrome.footerApp)}</a>
       </footer>
     </main>
   </div>
 
   <script>
     (function () {
+      var copiedLabel = ${JSON.stringify(chrome.copiedText)};
+      var hasLangSwitcher = ${JSON.stringify(Boolean(Array.isArray(langOptions) && langOptions.length > 0))};
+      if (hasLangSwitcher) {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (!params.get('lang') && window.location.pathname === '/whitepaper') {
+            var saved = localStorage.getItem('pct_locale') || localStorage.getItem('pixel_compute_town_lang_v1');
+            if (saved === 'en' || saved === 'zh-CN') {
+              window.location.replace('/whitepaper?lang=' + encodeURIComponent(saved) + (window.location.hash || ''));
+              return;
+            }
+          }
+          var langBtns = document.querySelectorAll('[data-doc-lang]');
+          for (var k = 0; k < langBtns.length; k++) {
+            langBtns[k].addEventListener('click', function (ev) {
+              var code = ev.currentTarget.getAttribute('data-doc-lang');
+              if (code === 'zh-TW' || code === 'zh-CN' || code === 'en') {
+                localStorage.setItem('pct_locale', code);
+                localStorage.setItem('pixel_compute_town_lang_v1', code);
+              }
+            });
+          }
+        } catch (e) {}
+      }
       var printBtn = document.getElementById('btn-doc-print');
       if (printBtn) {
         printBtn.addEventListener('click', function () { window.print(); });
@@ -1777,7 +1912,7 @@ export function renderDocPage({
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(function () {
               var orig = btn.textContent;
-              btn.textContent = '✅ 已複製';
+              btn.textContent = copiedLabel;
               setTimeout(function () { btn.textContent = orig; }, 1600);
             });
           }
@@ -1792,7 +1927,7 @@ export function renderDocPage({
           if (codeEl && navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(codeEl.textContent || '').then(function () {
               var orig = btn.textContent;
-              btn.textContent = '✅ 已複製';
+              btn.textContent = copiedLabel;
               setTimeout(function () { btn.textContent = orig; }, 1500);
             });
           }
