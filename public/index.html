@@ -41,7 +41,17 @@
 
     <div class="hud-actions">
       <a class="btn btn-sm" id="btn-hud-home" href="/" data-i18n="hud.homeBtn">🏠 官網</a>
+      <a class="btn btn-sm" id="btn-hud-docs" href="/docs" data-i18n="hud.docsBtn">📖 說明書</a>
+      <a class="btn btn-sm" id="btn-hud-whitepaper" href="/whitepaper" data-i18n="hud.whitepaperBtn">📜 白皮書</a>
       <a class="btn btn-sm btn-primary" id="btn-hud-install" href="/#install" data-i18n="hud.installBtn">📦 安裝小人</a>
+      <div class="bgm-controls" id="bgm-controls" role="region" aria-label="8-bit BGM Player">
+        <button type="button" class="bgm-btn bgm-play-btn" id="btn-bgm-toggle" aria-pressed="false" data-i18n-title="bgm.toggleTitle" title="播放 / 暫停 8-bit 原創配樂">🎵</button>
+        <button type="button" class="bgm-btn" id="btn-bgm-prev" data-i18n-title="bgm.prevTitle" title="上一首 8-bit 配樂">⏮</button>
+        <span class="bgm-track-name mono" id="bgm-track-name" title="像素晨光・廣場序曲">像素晨光・廣場序曲</span>
+        <button type="button" class="bgm-btn" id="btn-bgm-next" data-i18n-title="bgm.nextTitle" title="下一首 8-bit 配樂">⏭</button>
+        <button type="button" class="bgm-btn bgm-auto-btn active" id="btn-bgm-auto" aria-pressed="true" data-i18n="bgm.autoLabel" data-i18n-title="bgm.autoTitle" title="切換 HD 像素房間時自動切換對應配樂">自動</button>
+        <input type="range" class="bgm-volume" id="bgm-volume" min="0" max="100" step="1" value="32" aria-label="BGM Volume" data-i18n-title="bgm.volumeTitle" title="調整 8-bit 背景音樂音量" />
+      </div>
       <div class="lang-switch" id="lang-switch" role="group" aria-label="Language Switcher">
         <button type="button" class="lang-btn active" data-lang="zh-TW">繁中</button>
         <button type="button" class="lang-btn" data-lang="zh-CN">简中</button>

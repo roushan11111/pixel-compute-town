@@ -21,6 +21,7 @@ import {
   drawGoldPile,
   ROOM_PROPS,
 } from '/js/sprites.js';
+import { bgmPlayer } from '/js/bgm.js';
 
 const LOCALE_KEY = 'pct_locale';
 const LEGACY_LOCALE_KEY = 'pixel_compute_town_lang_v1';
@@ -40,6 +41,10 @@ const I18N = {
     'nav.rooms': 'HD 場景',
     'nav.pricing': '透明定價',
     'nav.faq': '常見問題',
+    'nav.docs': '📖 說明書',
+    'nav.whitepaper': '📜 白皮書',
+    'nav.bgmOff': '🎵 8-bit BGM',
+    'nav.bgmOn': '⏸️ 像素晨光',
     'nav.onboardDemo': '裝置綁定',
     'nav.enterTown': '進入小鎮 →',
     'hero.kicker': 'CYBER PIXEL COMPUTE CO-OP · 零信任雙軌算力孵化平臺',
@@ -249,6 +254,10 @@ const I18N = {
     'footer.tagline': '把閒置算力變成熱血的開源像素經濟體 · Zero-Dependency · Open Source',
     'footer.app': '進入小鎮 (/app)',
     'footer.onboard': '裝置審核 (/onboard)',
+    'footer.docs': '📖 使用說明書 (/docs)',
+    'footer.whitepaper': '📜 白皮書 (/whitepaper)',
+    'toast.bgmOn': '🎵 開始播放 8-bit 原創配樂《像素晨光・廣場序曲》',
+    'toast.bgmOff': '⏸️ 已暫停 8-bit 背景配樂',
     'toast.copied': '✅ 已複製到剪貼簿！直接貼上即可開始安裝',
     'toast.boosted': '⚡ 小隊爆單慶祝模式啟動！+130G & +$9.00 USDC 入帳中',
     'toast.langSwitched': '🌐 語系已切換為：繁體中文',
@@ -264,6 +273,10 @@ const I18N = {
     'nav.rooms': 'HD 场景',
     'nav.pricing': '透明定价',
     'nav.faq': '常见问题',
+    'nav.docs': '📖 说明书',
+    'nav.whitepaper': '📜 白皮书',
+    'nav.bgmOff': '🎵 8-bit BGM',
+    'nav.bgmOn': '⏸️ 像素晨光',
     'nav.onboardDemo': '设备绑定',
     'nav.enterTown': '进入小镇 →',
     'hero.kicker': 'CYBER PIXEL COMPUTE CO-OP · 零信任双轨算力孵化平台',
@@ -473,6 +486,10 @@ const I18N = {
     'footer.tagline': '把闲置算力变成热血的开源像素经济体 · Zero-Dependency · Open Source',
     'footer.app': '进入小镇 (/app)',
     'footer.onboard': '设备审核 (/onboard)',
+    'footer.docs': '📖 使用说明书 (/docs)',
+    'footer.whitepaper': '📜 白皮书 (/whitepaper)',
+    'toast.bgmOn': '🎵 开始播放 8-bit 原创配乐《像素晨光・广场序曲》',
+    'toast.bgmOff': '⏸️ 已暂停 8-bit 背景配乐',
     'toast.copied': '✅ 已复制到剪贴板！直接粘贴即可开始安装',
     'toast.boosted': '⚡ 小队爆单庆祝模式启动！+130G & +$9.00 USDC 入账中',
     'toast.langSwitched': '🌐 语言已切换为：简体中文',
@@ -488,6 +505,10 @@ const I18N = {
     'nav.rooms': 'HD Rooms',
     'nav.pricing': 'Pricing',
     'nav.faq': 'FAQ',
+    'nav.docs': '📖 Guide',
+    'nav.whitepaper': '📜 Whitepaper',
+    'nav.bgmOff': '🎵 8-bit BGM',
+    'nav.bgmOn': '⏸️ Pixel Horizon',
     'nav.onboardDemo': 'Device Auth',
     'nav.enterTown': 'Enter Town →',
     'hero.kicker': 'CYBER PIXEL COMPUTE CO-OP · ZERO-TRUST DUAL-TRACK INCUBATOR',
@@ -697,6 +718,10 @@ const I18N = {
     'footer.tagline': 'Turning idle AI quotas into a thriving open-source pixel economy · Zero-Dependency · Open Source',
     'footer.app': 'Launch App (/app)',
     'footer.onboard': 'Device Onboard (/onboard)',
+    'footer.docs': '📖 User Guide (/docs)',
+    'footer.whitepaper': '📜 Whitepaper (/whitepaper)',
+    'toast.bgmOn': '🎵 Now Playing 8-bit BGM: Pixel Horizon',
+    'toast.bgmOff': '⏸️ 8-bit BGM Paused',
     'toast.copied': '✅ Copied to clipboard! Paste it to start installing.',
     'toast.boosted': '⚡ Payout celebration triggered! +130G & +$9.00 USDC incoming!',
     'toast.langSwitched': '🌐 Language switched to: English',
@@ -765,9 +790,20 @@ function setLocale(locale, silent = false) {
   });
 
   renderInstallPlatform(activePlatform);
+  renderLandingBgmBtn();
   if (latestStats) renderFeaturedProjects(latestStats);
   if (latestChainData) renderProvenanceChainStatus(latestChainData);
   if (!silent) showToast(t('toast.langSwitched'));
+}
+
+function renderLandingBgmBtn(bgmState) {
+  const btn = document.getElementById('btn-landing-bgm');
+  if (!btn || !bgmPlayer) return;
+  const st = bgmState || bgmPlayer.getState();
+  const isPlaying = Boolean(st?.playing);
+  btn.classList.toggle('playing', isPlaying);
+  btn.setAttribute('aria-pressed', isPlaying ? 'true' : 'false');
+  btn.textContent = isPlaying ? t('nav.bgmOn') : t('nav.bgmOff');
 }
 
 // ============================================================================
@@ -1523,6 +1559,27 @@ function boot() {
       setLocale(btn.dataset.lang);
     });
   });
+
+  // Landing 8-bit BGM toggle (plays Pixel Horizon / plaza track)
+  const bgmBtn = document.getElementById('btn-landing-bgm');
+  if (bgmBtn && bgmPlayer) {
+    if (typeof bgmPlayer.subscribe === 'function') {
+      bgmPlayer.subscribe((nextState) => renderLandingBgmBtn(nextState));
+    }
+    bgmBtn.addEventListener('click', () => {
+      const wasPlaying = Boolean(bgmPlayer.getState()?.playing);
+      if (!wasPlaying) {
+        bgmPlayer.setTrack('plaza');
+        bgmPlayer.play();
+        renderLandingBgmBtn(bgmPlayer.getState());
+        showToast(t('toast.bgmOn'));
+      } else {
+        bgmPlayer.pause();
+        renderLandingBgmBtn(bgmPlayer.getState());
+        showToast(t('toast.bgmOff'));
+      }
+    });
+  }
 
   // Install platform tabs
   document.querySelectorAll('.install-tab').forEach((tab) => {

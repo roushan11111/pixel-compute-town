@@ -11,6 +11,7 @@ import http from 'node:http';
 
 import { createAppServer } from '../server.mjs';
 import { computeAntiDilutionMeritSplit } from '../src/server/governance.mjs';
+import { renderDocPage, renderMarkdownToHtml } from '../src/server/publicPages.mjs';
 
 function round2(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -2627,5 +2628,114 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await stopServer(started.server);
       await fs.rm(isoDir, { recursive: true, force: true });
     }
+  });
+
+  it('29. Online User Guide (/docs, /guide) & Whitepaper (/whitepaper) reader endpoints return 200 HTML with TOC, full chapters & XSS safety', async () => {
+    // 1. GET /docs returns 200 HTML with full User Guide chapters, TOC & top navigation
+    const docsRes = await fetch(`${baseUrl}/docs`);
+    assert.equal(docsRes.status, 200, 'GET /docs must return 200');
+    assert.match(docsRes.headers.get('content-type') || '', /^text\/html/i);
+    const docsHtml = await docsRes.text();
+    assert.ok(docsHtml.length > 8000, `GET /docs HTML unexpectedly short (${docsHtml.length} chars)`);
+
+    for (const marker of [
+      'id="doc-toc-list"',
+      'id="btn-doc-print"',
+      'href="/"',
+      'href="/docs"',
+      'href="/whitepaper"',
+      'href="/app"',
+      '第一章',
+      '第二章',
+      '第三章',
+      '第四章',
+      '第五章',
+      'BYOK',
+      'BYOT',
+      'pixel-worker',
+      '/onboard',
+      '70/30',
+      'USDC',
+      'doc-table',
+      'doc-code-block',
+    ]) {
+      assert.ok(docsHtml.includes(marker), `GET /docs HTML must contain "${marker}"`);
+    }
+
+    // 2. GET /guide alias returns equivalent 200 HTML
+    const guideRes = await fetch(`${baseUrl}/guide`);
+    assert.equal(guideRes.status, 200, 'GET /guide alias must return 200');
+    assert.match(guideRes.headers.get('content-type') || '', /^text\/html/i);
+    const guideHtml = await guideRes.text();
+    assert.ok(guideHtml.includes('第一章') && guideHtml.includes('id="doc-toc-list"'), 'GET /guide must render User Guide with TOC');
+
+    // 3. GET /whitepaper returns 200 HTML with full Whitepaper chapters, math tables & TOC
+    const wpRes = await fetch(`${baseUrl}/whitepaper`);
+    assert.equal(wpRes.status, 200, 'GET /whitepaper must return 200');
+    assert.match(wpRes.headers.get('content-type') || '', /^text\/html/i);
+    const wpHtml = await wpRes.text();
+    assert.ok(wpHtml.length > 8000, `GET /whitepaper HTML unexpectedly short (${wpHtml.length} chars)`);
+
+    for (const marker of [
+      'id="doc-toc-list"',
+      'id="btn-doc-print"',
+      'href="/"',
+      'href="/docs"',
+      'href="/whitepaper"',
+      'href="/app"',
+      'Abstract',
+      'Proof of First Spark',
+      'PCT-POFS-v1',
+      '70/30',
+      '$595.00',
+      '$255.00',
+      'Howey Test',
+      'doc-table',
+      'doc-code-block',
+    ]) {
+      assert.ok(wpHtml.includes(marker), `GET /whitepaper HTML must contain "${marker}"`);
+    }
+
+    // 4. HEAD requests on /docs, /guide, /whitepaper return 200 with empty body
+    for (const route of ['/docs', '/guide', '/whitepaper']) {
+      const headRes = await fetch(`${baseUrl}${route}`, { method: 'HEAD' });
+      assert.equal(headRes.status, 200, `HEAD ${route} must return 200`);
+      assert.equal(await headRes.text(), '', `HEAD ${route} must return empty body`);
+    }
+
+    // 5. XSS safety verification on renderMarkdownToHtml() & renderDocPage()
+    const maliciousMd = [
+      '# Title <script>alert(1)</script>',
+      '## Section <img src=x onerror=alert(2)>',
+      'Dangerous link: [click me](javascript:alert(3)) and [ok](https://example.com)',
+      '',
+      '> <svg onload=alert(4)> quote',
+      '',
+      '| Col <script>x</script> | Val |',
+      '| --- | --- |',
+      '| <img src=x onerror=alert(5)> | safe |',
+    ].join('\n');
+
+    const mdRendered = renderMarkdownToHtml(maliciousMd);
+    assert.ok(Array.isArray(mdRendered.toc) && mdRendered.toc.length >= 2, 'Markdown renderer must extract TOC entries');
+    assert.ok(!mdRendered.html.includes('<script>alert(1)</script>'), 'Raw <script> tag must be escaped');
+    assert.ok(!mdRendered.html.includes('<img src=x onerror=alert(2)>'), 'Raw <img> onerror must be escaped');
+    assert.ok(!mdRendered.html.includes('<svg onload=alert(4)>'), 'Raw <svg> onload must be escaped');
+    assert.ok(!mdRendered.html.includes('<img src=x onerror=alert(5)>'), 'Raw table <img> XSS must be escaped');
+    assert.ok(!/href\s*=\s*["']\s*javascript:/i.test(mdRendered.html), 'javascript: href must be blocked');
+    assert.ok(mdRendered.html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'), 'Escaped <script> text must render safely');
+
+    const fullDocHtml = renderDocPage({
+      title: 'Doc <script>alert(6)</script>',
+      subtitle: 'Sub <img src=x onerror=alert(7)>',
+      badge: '<b>BADGE</b>',
+      markdown: maliciousMd,
+      activePath: '/docs',
+      origin: baseUrl,
+    });
+    assert.ok(!fullDocHtml.includes('<script>alert(6)</script>'), 'Doc title XSS must be escaped');
+    assert.ok(!fullDocHtml.includes('<img src=x onerror=alert(7)>'), 'Doc subtitle XSS must be escaped');
+    assert.ok(!fullDocHtml.includes('<b>BADGE</b>'), 'Doc badge XSS must be escaped');
+    assert.ok(!/href\s*=\s*["']\s*javascript:/i.test(fullDocHtml), 'Full doc page must never emit javascript: href');
   });
 });

@@ -534,6 +534,8 @@ function renderLayout({ title, description, canonicalUrl, ogType = 'website', bo
       </a>
       <nav class="nav-links">
         <a class="btn btn-sm" href="/">🏠 官方首頁</a>
+        <a class="btn btn-sm" href="/docs">📖 說明書</a>
+        <a class="btn btn-sm" href="/whitepaper">📜 白皮書</a>
         <a class="btn btn-sm btn-primary" href="/app">🎮 進入像素小鎮</a>
       </nav>
     </div>
@@ -925,4 +927,902 @@ export function renderPublicNotFoundPage(title = '找不到頁面', message = '�
     canonicalUrl: `${safeOrigin}/`,
     bodyHtml,
   });
+}
+
+// ============================================================================
+// Cyber-Pixel Zero-Dependency Markdown -> HTML Reader (Docs & Whitepaper)
+// Strict HTML Entity Escaping (XSS-Safe) + Auto TOC + Print/PDF Styles
+// ============================================================================
+
+function safeDocHref(rawUrl) {
+  const cleaned = String(rawUrl || '').trim();
+  if (!cleaned) return '';
+  if (cleaned.startsWith('/') || cleaned.startsWith('#') || cleaned.startsWith('./') || cleaned.startsWith('../')) {
+    return cleaned;
+  }
+  try {
+    const u = new URL(cleaned);
+    if (u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'mailto:') {
+      return u.toString();
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+function makeHeadingId(rawText, usedIds) {
+  const plain = String(rawText || '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .trim();
+  let base = slugifyLoose(plain);
+  if (!base) base = 'section';
+  let id = `sec-${base}`;
+  let n = 2;
+  while (usedIds.has(id)) {
+    id = `sec-${base}-${n}`;
+    n += 1;
+  }
+  usedIds.add(id);
+  return { id, plain };
+}
+
+function renderInlineMarkdown(rawLine) {
+  const codeTokens = [];
+  // Extract inline code first so markdown chars inside backticks are preserved verbatim & escaped
+  let text = String(rawLine || '').replace(/`([^`\n]+)`/g, (_, code) => {
+    const idx = codeTokens.length;
+    codeTokens.push(`<code class="doc-inline-code">${escapeHtml(code)}</code>`);
+    return `\u0000CODE${idx}\u0000`;
+  });
+
+  // Escape all raw HTML strictly before applying safe inline formatting
+  text = escapeHtml(text);
+
+  // Markdown links: [label](url)
+  text = text.replace(/\[([^\]]+)\]\(([^)\s]+(?:\s+&quot;[^&]*&quot;)?)\)/g, (_, label, rawHrefPart) => {
+    const rawHref = rawHrefPart.split(/\s+/)[0]
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    const safeHref = safeDocHref(rawHref);
+    if (!safeHref) return label;
+    const isExternal = /^https?:\/\//i.test(safeHref);
+    const extra = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
+    return `<a href="${escapeHtml(safeHref)}"${extra}>${label}</a>`;
+  });
+
+  // Bold + italic
+  text = text.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+  // Bold
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  // Strikethrough
+  text = text.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  // Italic (avoid matching snake_case identifiers)
+  text = text.replace(/(^|[\s(「『（])\*([^*\n]+)\*(?=$|[\s.,;:!?」』）)])/g, '$1<em>$2</em>');
+
+  // Restore inline code tokens
+  text = text.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => codeTokens[Number(i)] || '');
+  return text;
+}
+
+function splitTableCells(line) {
+  let trimmed = String(line || '').trim();
+  if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+  const cells = [];
+  let cur = '';
+  let inCode = false;
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i];
+    if (ch === '\\' && i + 1 < trimmed.length && trimmed[i + 1] === '|') {
+      cur += '|';
+      i += 1;
+      continue;
+    }
+    if (ch === '`') {
+      inCode = !inCode;
+      cur += ch;
+      continue;
+    }
+    if (ch === '|' && !inCode) {
+      cells.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+function isTableSeparatorLine(line) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed.includes('|') && !trimmed.includes('-')) return false;
+  const cells = splitTableCells(trimmed);
+  if (cells.length === 0) return false;
+  return cells.every((c) => /^:?-{3,}:?$/.test(c));
+}
+
+function getTableAlignments(sepLine) {
+  return splitTableCells(sepLine).map((c) => {
+    const left = c.startsWith(':');
+    const right = c.endsWith(':');
+    if (left && right) return 'center';
+    if (right) return 'right';
+    return 'left';
+  });
+}
+
+export function renderMarkdownToHtml(markdown = '') {
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const htmlParts = [];
+  const toc = [];
+  const usedIds = new Set();
+
+  let i = 0;
+  const len = lines.length;
+
+  while (i < len) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Blank line
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+
+    // Fenced code block: ```lang
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})\s*([A-Za-z0-9_+.-]*)\s*$/);
+    if (fenceMatch) {
+      const fenceChar = fenceMatch[1][0];
+      const fenceLen = fenceMatch[1].length;
+      const lang = fenceMatch[2] || '';
+      const codeLines = [];
+      i += 1;
+      while (i < len) {
+        const curTrim = lines[i].trim();
+        if (curTrim.startsWith(fenceChar.repeat(fenceLen)) && curTrim.replaceAll(fenceChar, '').trim() === '') {
+          i += 1;
+          break;
+        }
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      const escapedCode = escapeHtml(codeLines.join('\n'));
+      const langBadge = lang ? `<span class="doc-code-lang">${escapeHtml(lang)}</span>` : '<span class="doc-code-lang">CODE</span>';
+      htmlParts.push(
+        `<div class="doc-code-block"><div class="doc-code-head">${langBadge}<button type="button" class="doc-code-copy" data-copy-code="1">📋 複製</button></div><pre><code>${escapedCode}</code></pre></div>`,
+      );
+      continue;
+    }
+
+    // ATX Headings (#, ##, ###, ####)
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+?)\s*#*$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const rawHeading = headingMatch[2].trim();
+      const { id, plain } = makeHeadingId(rawHeading, usedIds);
+      if (level <= 3) {
+        toc.push({ level, id, text: plain });
+      }
+      htmlParts.push(
+        `<h${level} id="${escapeHtml(id)}" class="doc-h${level}"><a class="doc-anchor" href="#${escapeHtml(id)}" aria-label="Section link">#</a>${renderInlineMarkdown(rawHeading)}</h${level}>`,
+      );
+      i += 1;
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(?:[-*_]\s*){3,}$/.test(trimmed)) {
+      htmlParts.push('<hr class="doc-hr" />');
+      i += 1;
+      continue;
+    }
+
+    // Blockquote / Callout
+    if (trimmed.startsWith('>')) {
+      const quoteLines = [];
+      while (i < len && lines[i].trim().startsWith('>')) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, ''));
+        i += 1;
+      }
+      let variant = 'note';
+      let calloutLabel = '';
+      if (quoteLines.length > 0) {
+        const alertMatch = quoteLines[0].match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i);
+        if (alertMatch) {
+          variant = alertMatch[1].toLowerCase();
+          calloutLabel = alertMatch[1].toUpperCase();
+          quoteLines[0] = alertMatch[2] || '';
+          if (!quoteLines[0]) quoteLines.shift();
+        } else if (/^(?:⚠️|🚨|❌)/.test(quoteLines[0])) {
+          variant = 'warning';
+        } else if (/^(?:💡|✨|🚀|✅)/.test(quoteLines[0])) {
+          variant = 'tip';
+        } else if (/^(?:🔐|🛡️|🔒|📜)/.test(quoteLines[0])) {
+          variant = 'important';
+        }
+      }
+      const innerHtml = quoteLines
+        .map((ql) => (ql.trim() ? `<p>${renderInlineMarkdown(ql)}</p>` : ''))
+        .join('');
+      const badgeHtml = calloutLabel ? `<div class="doc-callout-label">${escapeHtml(calloutLabel)}</div>` : '';
+      htmlParts.push(`<blockquote class="doc-callout doc-callout-${escapeHtml(variant)}">${badgeHtml}${innerHtml}</blockquote>`);
+      continue;
+    }
+
+    // Markdown Table
+    if (trimmed.includes('|') && i + 1 < len && isTableSeparatorLine(lines[i + 1])) {
+      const headerCells = splitTableCells(trimmed);
+      const alignments = getTableAlignments(lines[i + 1]);
+      const bodyRows = [];
+      i += 2;
+      while (i < len) {
+        const rowLine = lines[i].trim();
+        if (!rowLine || !rowLine.includes('|')) break;
+        bodyRows.push(splitTableCells(rowLine));
+        i += 1;
+      }
+      const theadHtml = headerCells
+        .map((cell, idx) => `<th style="text-align:${alignments[idx] || 'left'};">${renderInlineMarkdown(cell)}</th>`)
+        .join('');
+      const tbodyHtml = bodyRows
+        .map((row) => {
+          const cols = headerCells.map((_, idx) => {
+            const val = row[idx] !== undefined ? row[idx] : '';
+            return `<td style="text-align:${alignments[idx] || 'left'};">${renderInlineMarkdown(val)}</td>`;
+          }).join('');
+          return `<tr>${cols}</tr>`;
+        })
+        .join('');
+      htmlParts.push(
+        `<div class="doc-table-wrap"><table class="doc-table"><thead><tr>${theadHtml}</tr></thead><tbody>${tbodyHtml}</tbody></table></div>`,
+      );
+      continue;
+    }
+
+    // Unordered list
+    if (/^[-*+]\s+/.test(trimmed)) {
+      const items = [];
+      while (i < len) {
+        const cur = lines[i];
+        const m = cur.match(/^(\s*)[-*+]\s+(.*)$/);
+        if (!m) break;
+        const indent = m[1].length;
+        const itemLines = [m[2]];
+        i += 1;
+        while (i < len && /^\s{2,}[^\s-*+]/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i])) {
+          itemLines.push(lines[i].trim());
+          i += 1;
+        }
+        const subCls = indent >= 2 ? ' class="doc-li-nested"' : '';
+        items.push(`<li${subCls}>${renderInlineMarkdown(itemLines.join(' '))}</li>`);
+      }
+      htmlParts.push(`<ul class="doc-list">${items.join('')}</ul>`);
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items = [];
+      while (i < len) {
+        const cur = lines[i];
+        const m = cur.match(/^(\s*)\d+\.\s+(.*)$/);
+        if (!m) break;
+        const indent = m[1].length;
+        const itemLines = [m[2]];
+        i += 1;
+        while (i < len && /^\s{2,}[^\s]/.test(lines[i]) && !/^\s*(?:[-*+]|\d+\.)\s+/.test(lines[i])) {
+          itemLines.push(lines[i].trim());
+          i += 1;
+        }
+        const subCls = indent >= 2 ? ' class="doc-li-nested"' : '';
+        items.push(`<li${subCls}>${renderInlineMarkdown(itemLines.join(' '))}</li>`);
+      }
+      htmlParts.push(`<ol class="doc-list doc-ol">${items.join('')}</ol>`);
+      continue;
+    }
+
+    // Regular paragraph
+    const paraLines = [];
+    while (i < len) {
+      const cur = lines[i];
+      const curTrim = cur.trim();
+      if (
+        !curTrim
+        || /^#{1,4}\s+/.test(curTrim)
+        || /^(`{3,}|~{3,})/.test(curTrim)
+        || curTrim.startsWith('>')
+        || /^(?:[-*_]\s*){3,}$/.test(curTrim)
+        || /^[-*+]\s+/.test(curTrim)
+        || /^\d+\.\s+/.test(curTrim)
+        || (curTrim.includes('|') && i + 1 < len && isTableSeparatorLine(lines[i + 1]))
+      ) {
+        break;
+      }
+      paraLines.push(curTrim);
+      i += 1;
+    }
+    if (paraLines.length > 0) {
+      htmlParts.push(`<p class="doc-p">${renderInlineMarkdown(paraLines.join(' '))}</p>`);
+    } else {
+      i += 1;
+    }
+  }
+
+  return {
+    html: htmlParts.join('\n'),
+    toc,
+  };
+}
+
+const DOC_READER_CSS = `
+  .doc-nav-active {
+    border-color: var(--cyan) !important;
+    background: rgba(56, 189, 248, 0.2) !important;
+    color: #fff !important;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+  }
+  .doc-shell {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 24px 20px 64px;
+    display: grid;
+    grid-template-columns: 270px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .doc-toc-sidebar {
+    position: sticky;
+    top: 74px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    background: var(--panel);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 14px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  }
+  .doc-toc-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .doc-toc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .doc-toc-item a {
+    display: block;
+    padding: 5px 8px;
+    border-radius: 5px;
+    font-size: 13px;
+    line-height: 1.38;
+    color: var(--muted);
+    border-left: 2px solid transparent;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    text-decoration: none;
+  }
+  .doc-toc-item a:hover,
+  .doc-toc-item a.active {
+    color: #fff;
+    background: rgba(56, 189, 248, 0.12);
+    border-left-color: var(--cyan);
+  }
+  .doc-toc-lvl-1 a {
+    font-weight: 800;
+    color: #e2ecff;
+  }
+  .doc-toc-lvl-2 a {
+    font-weight: 700;
+    color: #c7d6f5;
+    padding-left: 10px;
+  }
+  .doc-toc-lvl-3 a {
+    font-size: 12px;
+    padding-left: 22px;
+  }
+  .doc-main-col {
+    min-width: 0;
+  }
+  .doc-hero {
+    background: linear-gradient(135deg, rgba(16, 23, 43, 0.96), rgba(24, 34, 68, 0.92));
+    border: 2px solid rgba(56, 189, 248, 0.55);
+    border-radius: 12px;
+    padding: 24px 26px;
+    margin-bottom: 20px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.38);
+  }
+  .doc-hero-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .doc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    color: var(--gold);
+    border: 1px solid rgba(250, 204, 21, 0.55);
+    background: rgba(250, 204, 21, 0.12);
+  }
+  .doc-hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .doc-meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .doc-article {
+    background: var(--panel);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px 36px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+    overflow-wrap: break-word;
+  }
+  .doc-h1 {
+    font-size: clamp(24px, 3.2vw, 30px);
+    color: #fff;
+    margin: 0 0 18px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+    scroll-margin-top: 84px;
+  }
+  .doc-h2 {
+    font-size: 21px;
+    color: var(--cyan);
+    margin: 34px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.3);
+    scroll-margin-top: 84px;
+    display: block;
+  }
+  .doc-h3 {
+    font-size: 17px;
+    color: var(--gold);
+    margin: 24px 0 10px;
+    scroll-margin-top: 84px;
+  }
+  .doc-h4 {
+    font-size: 15px;
+    color: var(--emerald);
+    margin: 18px 0 8px;
+    scroll-margin-top: 84px;
+  }
+  .doc-anchor {
+    color: rgba(147, 166, 204, 0.45);
+    margin-right: 8px;
+    font-weight: 700;
+    text-decoration: none !important;
+  }
+  .doc-h1:hover .doc-anchor,
+  .doc-h2:hover .doc-anchor,
+  .doc-h3:hover .doc-anchor,
+  .doc-h4:hover .doc-anchor {
+    color: var(--cyan);
+  }
+  .doc-p {
+    margin: 0 0 14px;
+    color: #dbe6ff;
+    font-size: 15px;
+    line-height: 1.78;
+  }
+  .doc-list {
+    margin: 0 0 16px;
+    padding-left: 22px;
+    color: #dbe6ff;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  .doc-list li {
+    margin-bottom: 6px;
+  }
+  .doc-li-nested {
+    margin-left: 18px;
+    list-style-type: circle;
+  }
+  .doc-inline-code {
+    background: rgba(56, 189, 248, 0.12);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+  }
+  .doc-code-block {
+    margin: 16px 0 20px;
+    background: #070b15;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .doc-code-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: rgba(22, 32, 59, 0.9);
+    border-bottom: 1px solid var(--border);
+  }
+  .doc-code-lang {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+  .doc-code-copy {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .doc-code-copy:hover {
+    border-color: var(--cyan);
+    color: #fff;
+  }
+  .doc-code-block pre {
+    margin: 0;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #c5f7ff;
+  }
+  .doc-callout {
+    margin: 16px 0 18px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    border-left: 4px solid var(--cyan);
+    background: rgba(56, 189, 248, 0.08);
+    color: #d8e7ff;
+  }
+  .doc-callout p {
+    margin: 0 0 6px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .doc-callout p:last-child {
+    margin-bottom: 0;
+  }
+  .doc-callout-label {
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+    color: var(--cyan);
+  }
+  .doc-callout-tip {
+    border-left-color: var(--emerald);
+    background: rgba(52, 211, 153, 0.09);
+  }
+  .doc-callout-tip .doc-callout-label { color: var(--emerald); }
+  .doc-callout-important {
+    border-left-color: var(--violet);
+    background: rgba(167, 139, 250, 0.1);
+  }
+  .doc-callout-important .doc-callout-label { color: var(--violet); }
+  .doc-callout-warning,
+  .doc-callout-caution {
+    border-left-color: var(--gold);
+    background: rgba(250, 204, 21, 0.1);
+  }
+  .doc-callout-warning .doc-callout-label,
+  .doc-callout-caution .doc-callout-label { color: var(--gold); }
+  .doc-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    margin: 16px 0 20px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .doc-table thead th {
+    background: var(--panel-2);
+    color: var(--cyan);
+    font-weight: 800;
+    font-size: 12px;
+    padding: 10px 12px;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  .doc-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(40, 58, 102, 0.55);
+    color: #dbe6ff;
+    vertical-align: top;
+  }
+  .doc-table tbody tr:nth-child(even) {
+    background: rgba(22, 32, 59, 0.35);
+  }
+  .doc-hr {
+    border: 0;
+    border-top: 1px dashed var(--border);
+    margin: 26px 0;
+  }
+  .doc-mobile-toc {
+    display: none;
+    margin-bottom: 16px;
+    background: var(--panel);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .doc-mobile-toc summary {
+    cursor: pointer;
+    font-weight: 800;
+    color: var(--cyan);
+    font-size: 14px;
+  }
+  @media (max-width: 960px) {
+    .doc-shell {
+      grid-template-columns: 1fr;
+    }
+    .doc-toc-sidebar {
+      display: none;
+    }
+    .doc-mobile-toc {
+      display: block;
+    }
+    .doc-article {
+      padding: 20px 18px 28px;
+    }
+  }
+  @media print {
+    html, body {
+      background: #fff !important;
+      color: #111827 !important;
+    }
+    .topbar, .doc-toc-sidebar, .doc-mobile-toc, .doc-hero-actions, .doc-code-copy, .doc-anchor {
+      display: none !important;
+    }
+    .doc-shell {
+      display: block !important;
+      max-width: 100% !important;
+      padding: 0 !important;
+    }
+    .doc-hero, .doc-article {
+      background: #fff !important;
+      color: #111827 !important;
+      border: 1px solid #d1d5db !important;
+      box-shadow: none !important;
+    }
+    .doc-h1, .doc-h2, .doc-h3, .doc-h4, .doc-p, .doc-list, .doc-table tbody td {
+      color: #111827 !important;
+    }
+    .doc-code-block {
+      background: #f8fafc !important;
+      border-color: #cbd5e1 !important;
+    }
+    .doc-code-block pre {
+      color: #0f172a !important;
+      white-space: pre-wrap;
+    }
+    .doc-callout {
+      background: #f8fafc !important;
+      color: #111827 !important;
+    }
+  }
+`;
+
+export function renderDocPage({
+  title = 'PixelCompute Town 文件中心',
+  subtitle = '',
+  badge = 'DOCUMENTATION',
+  markdown = '',
+  activePath = '/docs',
+  origin = 'http://localhost:3456',
+} = {}) {
+  const safeOrigin = normalizeOrigin(origin);
+  const safeActive = String(activePath || '/docs').trim() || '/docs';
+  const canonicalUrl = `${safeOrigin}${safeActive.startsWith('/') ? safeActive : `/${safeActive}`}`;
+  const { html: articleHtml, toc } = renderMarkdownToHtml(markdown);
+
+  const plainChars = String(markdown || '').replace(/\s+/g, '').length;
+  const estMinutes = Math.max(1, Math.round(plainChars / 420));
+
+  const tocItemsHtml = toc.length > 0
+    ? toc.map((item) => (
+      `<li class="doc-toc-item doc-toc-lvl-${item.level}"><a href="#${escapeHtml(item.id)}">${escapeHtml(item.text)}</a></li>`
+    )).join('')
+    : '<li class="doc-toc-item"><a href="#top">文件頂端</a></li>';
+
+  const navLinks = [
+    { href: '/', label: '🏠 官方首頁', active: safeActive === '/' },
+    { href: '/docs', label: '📖 使用說明書', active: safeActive === '/docs' || safeActive === '/guide' },
+    { href: '/whitepaper', label: '📜 白皮書', active: safeActive === '/whitepaper' },
+    { href: '/app', label: '🎮 算力小鎮', active: safeActive === '/app', primary: true },
+  ];
+
+  const navHtml = navLinks.map((item) => {
+    const classes = ['btn', 'btn-sm'];
+    if (item.primary) classes.push('btn-primary');
+    if (item.active) classes.push('doc-nav-active');
+    return `<a class="${classes.join(' ')}" href="${escapeHtml(item.href)}"${item.active ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`;
+  }).join('');
+
+  const safeTitle = escapeHtml(title);
+  const safeSubtitle = escapeHtml(subtitle);
+  const safeBadge = escapeHtml(badge);
+  const fullPageTitle = `${title} — PixelCompute Town`;
+
+  return `<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(fullPageTitle)}</title>
+  <meta name="description" content="${safeSubtitle || safeTitle}" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="PixelCompute Town 像素算力鎮" />
+  <meta property="og:title" content="${escapeHtml(fullPageTitle)}" />
+  <meta property="og:description" content="${safeSubtitle || safeTitle}" />
+  <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+  <style>${SHARED_CSS}${DOC_READER_CSS}</style>
+</head>
+<body id="top">
+  <header class="topbar">
+    <div class="topbar-inner" style="max-width:1240px;">
+      <a class="brand" href="/">
+        <span>🏮 PixelCompute Town 像素算力鎮</span>
+        <span class="brand-badge">${safeBadge}</span>
+      </a>
+      <nav class="nav-links" aria-label="Documentation Navigation">
+        ${navHtml}
+      </nav>
+    </div>
+  </header>
+
+  <div class="doc-shell">
+    <aside class="doc-toc-sidebar" aria-label="Table of Contents">
+      <div class="doc-toc-title">
+        <span>📑 章節目錄 TOC</span>
+        <span class="mono" style="font-size:11px;color:var(--muted);">${toc.length} 節</span>
+      </div>
+      <ul class="doc-toc-list" id="doc-toc-list">
+        ${tocItemsHtml}
+      </ul>
+    </aside>
+
+    <main class="doc-main-col">
+      <details class="doc-mobile-toc">
+        <summary>📑 展開章節目錄（${toc.length} 節）</summary>
+        <ul class="doc-toc-list" style="margin-top:10px;">
+          ${tocItemsHtml}
+        </ul>
+      </details>
+
+      <section class="doc-hero">
+        <div class="doc-hero-top">
+          <div>
+            <span class="doc-badge">${safeBadge}</span>
+            <h1>${safeTitle}</h1>
+            ${subtitle ? `<p class="tagline" style="margin-bottom:0;">${safeSubtitle}</p>` : ''}
+          </div>
+          <div class="doc-hero-actions">
+            <button type="button" class="btn btn-sm btn-gold" id="btn-doc-print">🖨️ 列印 / 另存 PDF</button>
+            <button type="button" class="btn btn-sm" data-copy-text="${escapeHtml(canonicalUrl)}">🔗 複製連結</button>
+          </div>
+        </div>
+        <div class="doc-meta-strip mono">
+          <span>📄 約 ${plainChars.toLocaleString('en-US')} 字</span>
+          <span>⏱️ 預計閱讀 ${estMinutes} 分鐘</span>
+          <span>🛡️ Zero-Trust BYOK + BYOT · 5% / 85% / 10%</span>
+        </div>
+      </section>
+
+      <article class="doc-article" id="doc-article">
+        ${articleHtml}
+      </article>
+
+      <footer>
+        PixelCompute Town · 5% 首發創意版稅 / 85% 實幹池 (70% 核心 · ≤30% 週邊防稀釋) / 10% 平臺 ·
+        <a href="/">官網</a> · <a href="/docs">使用說明書</a> · <a href="/whitepaper">白皮書</a> · <a href="/app">進入算力小鎮</a>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var printBtn = document.getElementById('btn-doc-print');
+      if (printBtn) {
+        printBtn.addEventListener('click', function () { window.print(); });
+      }
+      var copyBtns = document.querySelectorAll('[data-copy-text]');
+      for (var i = 0; i < copyBtns.length; i++) {
+        copyBtns[i].addEventListener('click', function (ev) {
+          var btn = ev.currentTarget;
+          var text = btn.getAttribute('data-copy-text') || window.location.href;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+              var orig = btn.textContent;
+              btn.textContent = '✅ 已複製';
+              setTimeout(function () { btn.textContent = orig; }, 1600);
+            });
+          }
+        });
+      }
+      var codeCopies = document.querySelectorAll('[data-copy-code]');
+      for (var j = 0; j < codeCopies.length; j++) {
+        codeCopies[j].addEventListener('click', function (ev) {
+          var btn = ev.currentTarget;
+          var block = btn.closest('.doc-code-block');
+          var codeEl = block ? block.querySelector('code') : null;
+          if (codeEl && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(codeEl.textContent || '').then(function () {
+              var orig = btn.textContent;
+              btn.textContent = '✅ 已複製';
+              setTimeout(function () { btn.textContent = orig; }, 1500);
+            });
+          }
+        });
+      }
+      var tocLinks = Array.prototype.slice.call(document.querySelectorAll('#doc-toc-list a'));
+      if (tocLinks.length > 0 && typeof IntersectionObserver === 'function') {
+        var map = {};
+        var headings = [];
+        tocLinks.forEach(function (a) {
+          var id = (a.getAttribute('href') || '').slice(1);
+          var el = id ? document.getElementById(id) : null;
+          if (el) {
+            map[id] = a;
+            headings.push(el);
+          }
+        });
+        var setActive = function (id) {
+          tocLinks.forEach(function (a) { a.classList.remove('active'); });
+          if (map[id]) map[id].classList.add('active');
+        };
+        var obs = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) setActive(entry.target.id);
+          });
+        }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+        headings.forEach(function (h) { obs.observe(h); });
+      }
+    })();
+  </script>
+</body>
+</html>`;
 }

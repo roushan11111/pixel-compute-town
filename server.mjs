@@ -94,6 +94,7 @@ import {
 import { createSseHub } from './src/server/sse.mjs';
 import {
   findProjectBySlugOrId,
+  renderDocPage,
   renderPublicNotFoundPage,
   renderPublicProjectPage,
   renderPublicVerifyPage,
@@ -3897,6 +3898,52 @@ export function createAppServer(options = {}) {
           requestOrigin,
         );
         return sendHtml(res, 200, okHtml, method, 'public, max-age=60');
+      }
+
+      if (decodedPath === '/docs' || decodedPath === '/docs/' || decodedPath === '/guide' || decodedPath === '/guide/') {
+        try {
+          const guidePath = path.join(__dirname, 'docs', 'USER_GUIDE.md');
+          const markdown = await fs.readFile(guidePath, 'utf8');
+          const html = renderDocPage({
+            title: '📖 PixelCompute Town 完整使用說明書',
+            subtitle: '從 30 秒遊客試玩、帳號註冊與本機一鍵安裝，到 BYOK 自動工坊、BYOT 懸賞工會、創意溯源與穩定幣提領全攻略',
+            badge: 'USER GUIDE · v1.2',
+            markdown,
+            activePath: '/docs',
+            origin: requestOrigin,
+          });
+          return sendHtml(res, 200, html, method, 'public, max-age=60');
+        } catch {
+          const notFoundHtml = renderPublicNotFoundPage(
+            '找不到使用說明書',
+            '系統目前無法讀取 docs/USER_GUIDE.md，請稍後再試。',
+            requestOrigin,
+          );
+          return sendHtml(res, 404, notFoundHtml, method, 'no-store');
+        }
+      }
+
+      if (decodedPath === '/whitepaper' || decodedPath === '/whitepaper/') {
+        try {
+          const wpPath = path.join(__dirname, 'docs', 'WHITEPAPER.md');
+          const markdown = await fs.readFile(wpPath, 'utf8');
+          const html = renderDocPage({
+            title: '📜 PixelCompute Town 白皮書 v1.0',
+            subtitle: 'AI 時代的閒置算力協作、Proof of First Spark 創意溯源、70/30 防稀釋與 5/85/10 多勞多得協議',
+            badge: 'WHITEPAPER · v1.0',
+            markdown,
+            activePath: '/whitepaper',
+            origin: requestOrigin,
+          });
+          return sendHtml(res, 200, html, method, 'public, max-age=60');
+        } catch {
+          const notFoundHtml = renderPublicNotFoundPage(
+            '找不到白皮書文件',
+            '系統目前無法讀取 docs/WHITEPAPER.md，請稍後再試。',
+            requestOrigin,
+          );
+          return sendHtml(res, 404, notFoundHtml, method, 'no-store');
+        }
       }
 
       if (decodedPath === '/') {

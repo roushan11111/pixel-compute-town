@@ -295,12 +295,31 @@ async function main() {
     for (const v12id of requiredV12AppIds) {
       assert.ok(htmlIds.has(v12id), `Missing required v1.2 DOM ID #${v12id} in public/index.html`);
     }
-    assert.ok(
-      landingIds.has('anti-dilution-moat'),
-      'Missing required Anti-Dilution 4-layer moat DOM ID #anti-dilution-moat in public/landing.html',
-    );
+    const requiredBgmDocsAppIds = [
+      'bgm-controls',
+      'btn-bgm-toggle',
+      'btn-bgm-prev',
+      'btn-bgm-next',
+      'bgm-track-name',
+      'btn-bgm-auto',
+      'bgm-volume',
+      'btn-hud-docs',
+      'btn-hud-whitepaper',
+    ];
+    for (const bid of requiredBgmDocsAppIds) {
+      assert.ok(htmlIds.has(bid), `Missing required BGM/Docs DOM ID #${bid} in public/index.html`);
+    }
+    const requiredLandingIds = [
+      'anti-dilution-moat',
+      'link-landing-docs',
+      'link-landing-whitepaper',
+      'btn-landing-bgm',
+    ];
+    for (const lid of requiredLandingIds) {
+      assert.ok(landingIds.has(lid), `Missing required landing DOM ID #${lid} in public/landing.html`);
+    }
 
-    return `index.html (${htmlIds.size} IDs / ${appQueriedCount} queries), landing.html (${landingIds.size} IDs / ${landingQueriedCount} queries) & onboard.html (${onboardIds.size} IDs / ${onboardQueriedCount} queries) — 0 dups, 0 missing (+ ${requiredGovAppIds.length + 1} gov & ${requiredV12AppIds.length} v1.2 IDs)`;
+    return `index.html (${htmlIds.size} IDs / ${appQueriedCount} queries), landing.html (${landingIds.size} IDs / ${landingQueriedCount} queries) & onboard.html (${onboardIds.size} IDs / ${onboardQueriedCount} queries) — 0 dups, 0 missing (+ ${requiredGovAppIds.length} gov, ${requiredV12AppIds.length} v1.2, ${requiredBgmDocsAppIds.length + requiredLandingIds.length} BGM/docs IDs)`;
   });
 
   // Start isolated temporary server for static MIME, install script & CLI E2E checks
@@ -325,8 +344,8 @@ async function main() {
         '.png': /^image\/png/i,
       };
 
-      // Key v1.0 HTML routes
-      for (const route of ['/', '/app', '/onboard']) {
+      // Key HTML routes (including online docs & whitepaper readers)
+      for (const route of ['/', '/app', '/onboard', '/docs', '/guide', '/whitepaper']) {
         const res = await fetch(`${baseUrl}${route}`);
         assert.equal(res.status, 200, `GET ${route} must return 200`);
         assert.match(res.headers.get('content-type') || '', /^text\/html/i, `Wrong MIME on ${route}`);
@@ -641,7 +660,54 @@ async function main() {
         `Missing i18n keys referenced in onboard.html: ${onboardMissingKeys.join(', ')}`,
       );
 
-      return `${baseKeys.length} app keys + ${onboardBaseKeys.length} onboard keys × 3 locales, ${totalHtmlI18n} HTML bindings & all ${requiredLocalizers.length} dynamic localizers verified (0 CJK in EN)`;
+      // Verify public/js/landing.js trilingual I18N dictionary alignment & ZERO CJK in EN
+      const landingSrc = await fs.readFile(path.join(ROOT_DIR, 'public', 'js', 'landing.js'), 'utf8');
+      const landingDictMatch = landingSrc.match(/const\s+I18N\s*=\s*(\{[\s\S]*?\n\});/);
+      assert.ok(landingDictMatch, 'Could not locate `const I18N = { ... };` dictionary in public/js/landing.js');
+      const landingDict = vm.runInNewContext(`(${landingDictMatch[1]})`);
+      const landingBaseKeys = Object.keys(landingDict['zh-TW']).sort();
+      assert.ok(landingBaseKeys.length >= 180, `Expected >= 180 landing.js i18n keys, found ${landingBaseKeys.length}`);
+      for (const lang of ['zh-TW', 'zh-CN', 'en']) {
+        assert.ok(landingDict[lang], `Missing landing.js dictionary for locale ${lang}`);
+        assert.deepEqual(
+          Object.keys(landingDict[lang]).sort(),
+          landingBaseKeys,
+          `landing.js key mismatch between zh-TW and ${lang}`,
+        );
+        for (const k of landingBaseKeys) {
+          assert.ok(
+            typeof landingDict[lang][k] === 'string' && landingDict[lang][k].trim().length > 0,
+            `Empty landing.js translation for ${lang}.${k}`,
+          );
+        }
+      }
+      const landingEnViolations = [];
+      for (const [k, v] of Object.entries(landingDict.en)) {
+        if (CJK_RE.test(v)) landingEnViolations.push(`landing.en.${k}: "${v}"`);
+      }
+      assert.deepEqual(
+        landingEnViolations,
+        [],
+        `Chinese leaked in landing.js EN dictionary: ${landingEnViolations.slice(0, 8).join('; ')}`,
+      );
+
+      // Check all data-i18n* attributes in public/landing.html exist in landing.js I18N
+      const landingHtml = await fs.readFile(path.join(ROOT_DIR, 'public', 'landing.html'), 'utf8');
+      const landingMissingKeys = [];
+      const landingAttrRx = /data-i18n(?:-[a-z]+)?\s*=\s*["']([^"']+)["']/g;
+      let lam;
+      while ((lam = landingAttrRx.exec(landingHtml)) !== null) {
+        if (!(lam[1] in landingDict['zh-TW'])) {
+          landingMissingKeys.push(lam[1]);
+        }
+      }
+      assert.deepEqual(
+        landingMissingKeys,
+        [],
+        `Missing i18n keys referenced in landing.html: ${landingMissingKeys.join(', ')}`,
+      );
+
+      return `${baseKeys.length} app + ${onboardBaseKeys.length} onboard + ${landingBaseKeys.length} landing keys × 3 locales, ${totalHtmlI18n} HTML bindings & all ${requiredLocalizers.length} dynamic localizers verified (0 CJK in EN)`;
     });
 
     // 7. Deployment, CI workflow & v1.2 documentation assets check
@@ -655,6 +721,8 @@ async function main() {
         '.github/workflows/ci.yml',
         'docs/PRD.md',
         'docs/DEPLOY_AND_PROMOTE.md',
+        'docs/USER_GUIDE.md',
+        'docs/WHITEPAPER.md',
         'README.md',
       ];
       for (const rel of requiredFiles) {
@@ -703,6 +771,52 @@ async function main() {
       assert.match(prd, /AI 盲審/);
       assert.match(prd, /實幹審閱/);
       assert.match(prd, /押金/);
+
+      // Verify docs/USER_GUIDE.md completeness (all 5 chapters + 6 role routes + BGM)
+      const userGuide = await fs.readFile(path.join(ROOT_DIR, 'docs', 'USER_GUIDE.md'), 'utf8');
+      assert.ok(userGuide.length >= 4000, `docs/USER_GUIDE.md unexpectedly short (${userGuide.length} chars)`);
+      for (const pat of [
+        /第一章/,
+        /第二章/,
+        /第三章/,
+        /第四章/,
+        /第五章/,
+        /路線 A/,
+        /路線 B/,
+        /路線 C/,
+        /路線 D/,
+        /路線 E/,
+        /路線 F/,
+        /\/onboard/,
+        /pixel-worker/,
+        /5%.*85%.*10%/,
+        /70\/30/,
+        /USDC/,
+        /SQLite/i,
+        /8-bit/,
+      ]) {
+        assert.match(userGuide, pat, `docs/USER_GUIDE.md missing expected section/keyword: ${pat}`);
+      }
+
+      // Verify docs/WHITEPAPER.md completeness (Abstract + 8 chapters + math proof + legal boundary)
+      const whitepaper = await fs.readFile(path.join(ROOT_DIR, 'docs', 'WHITEPAPER.md'), 'utf8');
+      assert.ok(whitepaper.length >= 4000, `docs/WHITEPAPER.md unexpectedly short (${whitepaper.length} chars)`);
+      for (const pat of [
+        /Abstract/,
+        /Proof of First Spark/,
+        /PCT-POFS-v1/,
+        /5%.*85%.*10%/,
+        /70\/30/,
+        /\$595\.00/,
+        /\$255\.00/,
+        /10,000/,
+        /runAiBlindReview/,
+        /USDC/,
+        /Howey Test/,
+        /SQLite/i,
+      ]) {
+        assert.match(whitepaper, pat, `docs/WHITEPAPER.md missing expected section/keyword: ${pat}`);
+      }
 
       const ciYaml = await fs.readFile(path.join(ROOT_DIR, '.github/workflows/ci.yml'), 'utf8');
       assert.match(ciYaml, /node-version:\s*["']?24["']?/);
@@ -825,6 +939,8 @@ async function main() {
         'renderPublicProjectPage',
         'renderPublicVerifyPage',
         'renderPublicNotFoundPage',
+        'renderMarkdownToHtml',
+        'renderDocPage',
       ];
       for (const fnName of requiredPageExports) {
         assert.equal(typeof pagesMod[fnName], 'function', `publicPages.mjs must export function ${fnName}()`);
@@ -883,6 +999,97 @@ async function main() {
       assert.match(pixelEngineSrc, /\btriggerReviewDecision\s*\(/, 'pixelEngine.js must define triggerReviewDecision()');
 
       return `publicPages.mjs (${requiredPageExports.length} exports + live /p & /verify), sound.js (${requiredSoundMethods.length} methods incl. playSlash/playApproveFanfare) & pixelEngine.triggerReviewDecision verified`;
+    });
+
+    // 11. public/js/bgm.js syntax, 4 original tracks trilingual contract, SCENE_TRACK_MAP & bgmPlayer API check
+    await runCheck('11. public/js/bgm.js syntax, 4 original 8-bit tracks (0 CJK in EN), SCENE_TRACK_MAP & bgmPlayer API verified', async () => {
+      const bgmPath = path.join(ROOT_DIR, 'public', 'js', 'bgm.js');
+      await execFileAsync(process.execPath, ['--check', bgmPath]);
+
+      const bgmMod = await import('../public/js/bgm.js');
+      assert.ok(Array.isArray(bgmMod.BGM_TRACKS), 'bgm.js must export BGM_TRACKS array');
+      assert.equal(bgmMod.BGM_TRACKS.length, 4, `Expected 4 original BGM tracks, found ${bgmMod.BGM_TRACKS.length}`);
+
+      const expectedTrackIds = ['plaza', 'factory', 'guild', 'vault'];
+      assert.deepEqual(
+        bgmMod.BGM_TRACKS.map((t) => t.id),
+        expectedTrackIds,
+        'BGM_TRACKS must contain plaza, factory, guild, vault',
+      );
+
+      for (const track of bgmMod.BGM_TRACKS) {
+        for (const field of ['nameZhTW', 'nameZhCN', 'nameEn', 'moodZhTW', 'moodZhCN', 'moodEn']) {
+          assert.ok(
+            typeof track[field] === 'string' && track[field].trim().length > 0,
+            `Track ${track.id} missing non-empty field ${field}`,
+          );
+        }
+        assert.ok(!CJK_RE.test(track.nameEn), `Track ${track.id}.nameEn contains CJK: "${track.nameEn}"`);
+        assert.ok(!CJK_RE.test(track.moodEn), `Track ${track.id}.moodEn contains CJK: "${track.moodEn}"`);
+        assert.ok(Number.isFinite(track.bpm) && track.bpm >= 80 && track.bpm <= 180, `Invalid BPM on ${track.id}`);
+        assert.ok(Array.isArray(track.scenes) && track.scenes.length >= 1, `Track ${track.id} must declare scenes[]`);
+      }
+
+      // Verify SCENE_TRACK_MAP covers all 6 HD rooms
+      assert.ok(bgmMod.SCENE_TRACK_MAP && typeof bgmMod.SCENE_TRACK_MAP === 'object');
+      const expectedSceneMap = {
+        town: 'plaza',
+        launchpad: 'plaza',
+        factory: 'factory',
+        guild: 'guild',
+        lounge: 'guild',
+        vault: 'vault',
+      };
+      for (const [scene, expectedTrack] of Object.entries(expectedSceneMap)) {
+        assert.equal(bgmMod.SCENE_TRACK_MAP[scene], expectedTrack, `SCENE_TRACK_MAP.${scene} must map to ${expectedTrack}`);
+      }
+
+      // Verify bgmPlayer singleton API contract in Node runtime
+      const player = bgmMod.bgmPlayer;
+      assert.ok(player, 'bgm.js must export bgmPlayer singleton');
+      const requiredPlayerMethods = [
+        'play',
+        'pause',
+        'toggle',
+        'setTrack',
+        'nextTrack',
+        'prevTrack',
+        'setVolume',
+        'setAutoScene',
+        'syncScene',
+        'getState',
+        'subscribe',
+      ];
+      for (const mName of requiredPlayerMethods) {
+        assert.equal(typeof player[mName], 'function', `bgmPlayer must expose method ${mName}()`);
+      }
+
+      const initState = player.getState();
+      assert.equal(initState.playing, false, 'bgmPlayer must default to playing=false for autoplay policy compliance');
+      assert.ok(expectedTrackIds.includes(initState.trackId), 'Initial trackId must be valid');
+      assert.ok(initState.volume > 0 && initState.volume <= 1, 'Initial volume must be in (0, 1]');
+
+      let notifyCount = 0;
+      const unsub = player.subscribe(() => { notifyCount += 1; });
+      assert.equal(typeof unsub, 'function', 'bgmPlayer.subscribe() must return unsubscribe function');
+
+      player.setAutoScene(true);
+      player.syncScene('vault');
+      assert.equal(player.getState().trackId, 'vault');
+      player.nextTrack();
+      assert.equal(player.getState().trackId, 'plaza');
+      player.prevTrack();
+      assert.equal(player.getState().trackId, 'vault');
+      player.setTrack('factory');
+      assert.equal(player.getState().trackId, 'factory');
+      player.setVolume(0.45);
+      assert.equal(player.getState().volume, 0.45);
+      player.pause();
+      assert.equal(player.getState().playing, false);
+      assert.ok(notifyCount > 0, 'bgmPlayer.subscribe listener should receive state updates');
+      unsub();
+
+      return `4 original tracks (plaza/factory/guild/vault, 0 CJK in EN), 6-scene SCENE_TRACK_MAP & ${requiredPlayerMethods.length} bgmPlayer methods verified`;
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));

@@ -2883,6 +2883,113 @@ body[data-theme='day'] .ops-metrics-box {
 }
 
 /* ==========================================================================
+   8-bit BGM Mini Player (Compact HUD Widget)
+   ========================================================================== */
+.bgm-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-pixel);
+  box-shadow: var(--shadow-pixel-sm);
+  max-width: 100%;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.bgm-controls.playing {
+  border-color: var(--accent-cyan);
+  box-shadow: var(--shadow-pixel-sm), 0 0 10px var(--accent-cyan-glow);
+}
+
+.bgm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--border-pixel);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.bgm-btn:hover {
+  border-color: var(--accent-cyan);
+  background: var(--bg-card-hover);
+}
+
+.bgm-play-btn {
+  min-width: 24px;
+  border-color: rgba(77, 238, 234, 0.45);
+}
+
+.bgm-controls.playing .bgm-play-btn {
+  background: rgba(77, 238, 234, 0.2);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  animation: bgmPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes bgmPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(77, 238, 234, 0); }
+  50% { box-shadow: 0 0 8px rgba(77, 238, 234, 0.45); }
+}
+
+.bgm-track-name {
+  display: inline-block;
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-sub);
+  padding: 0 3px;
+  user-select: none;
+}
+
+.bgm-controls.playing .bgm-track-name {
+  color: var(--accent-gold);
+}
+
+.bgm-auto-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 5px;
+  color: var(--text-muted);
+}
+
+.bgm-auto-btn.active {
+  border-color: rgba(82, 229, 154, 0.65);
+  background: rgba(82, 229, 154, 0.16);
+  color: var(--accent-green);
+}
+
+.bgm-volume {
+  width: 52px;
+  height: 6px;
+  margin: 0 2px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+@media (max-width: 760px) {
+  .bgm-track-name {
+    max-width: 82px;
+  }
+  .bgm-volume {
+    width: 42px;
+  }
+}
+
+/* ==========================================================================
    Responsive Design
    ========================================================================== */
 @media (max-width: 1280px) {

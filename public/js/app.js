@@ -7,6 +7,7 @@
 import { PixelTownEngine } from './pixelEngine.js';
 import { renderWorkerPortrait } from './sprites.js';
 import { soundFX } from './sound.js';
+import { BGM_TRACKS, SCENE_TRACK_MAP, bgmPlayer } from './bgm.js';
 import {
   renderWorkCertificate,
   downloadWorkCertificate,
@@ -629,6 +630,10 @@ function selectScene(sceneId, { syncTab = false, fromEngine = false, silent = fa
 
   if (syncTab && SCENE_TO_TAB[normalized] && app.activeTab !== SCENE_TO_TAB[normalized]) {
     switchTab(SCENE_TO_TAB[normalized], { skipSceneSync: true });
+  }
+
+  if (bgmPlayer && typeof bgmPlayer.syncScene === 'function' && SCENE_TRACK_MAP[normalized]) {
+    bgmPlayer.syncScene(normalized);
   }
 
   if (!silent) {
@@ -3270,6 +3275,124 @@ function bindEvents() {
     showToast(enabled ? t('toast.soundOn') : t('toast.soundOff'), 'info', 1800);
   });
 
+  // 8-bit BGM Mini Player controls
+  const bgmControls = $('bgm-controls');
+  if (bgmControls && bgmPlayer) {
+    const getLocalizedTrackName = (trackOrId) => {
+      const id = typeof trackOrId === 'string' ? trackOrId : trackOrId?.id;
+      const trackObj = typeof trackOrId === 'object' && trackOrId
+        ? trackOrId
+        : (BGM_TRACKS || []).find((tr) => tr.id === id);
+      if (id) {
+        const key = `bgm.track.${id}`;
+        const translated = t(key);
+        if (translated && translated !== key) return translated;
+      }
+      const loc = getLocale();
+      if (trackObj) {
+        if (loc === 'en') return trackObj.nameEn || trackObj.nameZhTW || id || '8-bit BGM';
+        if (loc === 'zh-CN') return trackObj.nameZhCN || trackObj.nameZhTW || id || '8-bit BGM';
+        return trackObj.nameZhTW || trackObj.nameEn || id || '8-bit BGM';
+      }
+      return id || '8-bit BGM';
+    };
+
+    const getLocalizedTrackMood = (trackObj) => {
+      if (!trackObj) return '';
+      const loc = getLocale();
+      if (loc === 'en') return trackObj.moodEn || '';
+      if (loc === 'zh-CN') return trackObj.moodZhCN || trackObj.moodZhTW || '';
+      return trackObj.moodZhTW || '';
+    };
+
+    app.renderBgmControls = (bgmState = bgmPlayer.getState()) => {
+      const stateObj = bgmState || bgmPlayer.getState();
+      const isPlaying = Boolean(stateObj?.playing);
+      const trackObj = stateObj?.track || (BGM_TRACKS || []).find((tr) => tr.id === stateObj?.trackId);
+      const trackName = getLocalizedTrackName(trackObj || stateObj?.trackId);
+      const mood = getLocalizedTrackMood(trackObj);
+      const bpm = trackObj?.bpm ? `${trackObj.bpm} BPM` : '';
+      const tooltipParts = [trackName, bpm, mood].filter(Boolean);
+
+      bgmControls.classList.toggle('playing', isPlaying);
+
+      const toggleBtn = $('btn-bgm-toggle');
+      if (toggleBtn) {
+        toggleBtn.textContent = isPlaying ? '⏸️' : '🎵';
+        toggleBtn.setAttribute('aria-pressed', isPlaying ? 'true' : 'false');
+      }
+
+      const nameEl = $('bgm-track-name');
+      if (nameEl) {
+        nameEl.textContent = trackName;
+        nameEl.title = tooltipParts.join(' · ');
+      }
+
+      const autoBtn = $('btn-bgm-auto');
+      if (autoBtn) {
+        const autoOn = Boolean(stateObj?.autoScene);
+        autoBtn.classList.toggle('active', autoOn);
+        autoBtn.setAttribute('aria-pressed', autoOn ? 'true' : 'false');
+      }
+
+      const volSlider = $('bgm-volume');
+      if (volSlider && Number.isFinite(Number(stateObj?.volume))) {
+        const pct = Math.round(Math.max(0, Math.min(1, Number(stateObj.volume))) * 100);
+        if (Number(volSlider.value) !== pct) {
+          volSlider.value = String(pct);
+        }
+      }
+    };
+
+    if (typeof bgmPlayer.subscribe === 'function') {
+      bgmPlayer.subscribe((nextState) => app.renderBgmControls(nextState));
+    }
+
+    $('btn-bgm-toggle')?.addEventListener('click', () => {
+      const wasPlaying = Boolean(bgmPlayer.getState()?.playing);
+      bgmPlayer.toggle();
+      const next = bgmPlayer.getState();
+      app.renderBgmControls(next);
+      if (!wasPlaying && next?.playing) {
+        showToast(t('bgm.toastPlay', { track: getLocalizedTrackName(next.track || next.trackId) }), 'info', 2200);
+      } else if (wasPlaying && !next?.playing) {
+        showToast(t('bgm.toastPause'), 'info', 1800);
+      }
+    });
+
+    $('btn-bgm-prev')?.addEventListener('click', () => {
+      bgmPlayer.prevTrack();
+      app.renderBgmControls(bgmPlayer.getState());
+      soundFX.playClick();
+    });
+
+    $('btn-bgm-next')?.addEventListener('click', () => {
+      bgmPlayer.nextTrack();
+      app.renderBgmControls(bgmPlayer.getState());
+      soundFX.playClick();
+    });
+
+    $('btn-bgm-auto')?.addEventListener('click', () => {
+      const curAuto = Boolean(bgmPlayer.getState()?.autoScene);
+      bgmPlayer.setAutoScene(!curAuto);
+      if (!curAuto) {
+        bgmPlayer.syncScene(app.activeScene);
+      }
+      app.renderBgmControls(bgmPlayer.getState());
+      soundFX.playClick();
+      showToast(!curAuto ? t('bgm.toastAutoOn') : t('bgm.toastAutoOff'), 'info', 2000);
+    });
+
+    $('bgm-volume')?.addEventListener('input', (e) => {
+      const raw = Number(e.target.value);
+      if (Number.isFinite(raw)) {
+        bgmPlayer.setVolume(Math.max(0, Math.min(1, raw / 100)));
+      }
+    });
+
+    app.renderBgmControls(bgmPlayer.getState());
+  }
+
   $('btn-open-cert').addEventListener('click', openCertModal);
   $('btn-workers-preview-cert').addEventListener('click', openCertModal);
   $('btn-workers-download-cert').addEventListener('click', triggerDownloadCert);
@@ -3894,6 +4017,9 @@ function bindEvents() {
       }
       updateSceneHint(app.activeScene);
       updateSseLabel();
+      if (typeof app.renderBgmControls === 'function') {
+        app.renderBgmControls();
+      }
       renderAll();
       if ($('provenance-modal')?.classList.contains('open') && app.provModal.projectId) {
         const proj = (app.state?.projects || []).find((p) => p.id === app.provModal.projectId);
@@ -4416,6 +4542,12 @@ async function init() {
     }
     syncSceneChipsUI(app.activeScene);
     updateSceneHint(app.activeScene);
+    if (bgmPlayer && typeof bgmPlayer.syncScene === 'function') {
+      bgmPlayer.syncScene(app.activeScene);
+    }
+    if (typeof app.renderBgmControls === 'function') {
+      app.renderBgmControls();
+    }
   }
 
   try {
