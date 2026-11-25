@@ -799,6 +799,10 @@ export function ensureStateSchema(state) {
     ensureProjectsProvenance(state.projects, state.users);
     for (const proj of state.projects) {
       ensureProjectBuckets(proj);
+      if (proj.visibility !== 'private') proj.visibility = 'public';
+      if (!Array.isArray(proj.teamMembers)) {
+        proj.teamMembers = proj.originatorId ? [proj.originatorId] : [];
+      }
     }
   }
 

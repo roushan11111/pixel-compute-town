@@ -205,6 +205,8 @@ export function sanitizeUserForClient(user) {
     isDemo,
     isPro: Boolean(user.isPro),
     title: user.title || '',
+    teamPlan: user.teamPlan || null,
+    teamPlanExpiresAt: user.teamPlanExpiresAt || null,
     walletAddress: user.walletAddress || '',
     walletChain: user.walletChain || '',
   };
@@ -226,6 +228,8 @@ export function projectPlayerForClient(user) {
     totalContribution: Number(user.totalContribution || 0),
     isPro: Boolean(user.isPro),
     title: user.title || '',
+    teamPlan: user.teamPlan || null,
+    teamPlanExpiresAt: user.teamPlanExpiresAt || null,
     ownedSkins: Array.isArray(user.ownedSkins) ? user.ownedSkins : ['default'],
     ownedDecor: Array.isArray(user.ownedDecor) ? user.ownedDecor : [],
     ownedItems: Array.isArray(user.ownedItems) ? user.ownedItems : [],

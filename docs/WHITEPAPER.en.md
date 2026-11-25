@@ -203,14 +203,13 @@ Every feature in PixelCompute Town is free. Builders who love the platform can o
 
 ---
 
-## 7. 100% Free Sustainability Model & Legal Safety Boundaries
+## 7. AGPL-3.0 Open-Source & Team SaaS Model ($0 Public · $9–$19/mo Teams)
 
-### 7.1 Forever Free · 0% Platform Fees · Tip-Supported
-1. **0% Cash Bounty Fee**: Builders keep **100%** of every verified cash bounty.
-2. **0% Incubation Carry (5% / 95% / 0%)**: Creators and builders keep **100%** of launched project revenue.
-3. **Free Pixel Plaza Billboard (`$0`)**: Community open-source projects can light up the Plaza Spotlight at zero cost.
-4. **Cosmetic Skins & Pro Honors Free via Game Gold**: Every skin and badge unlocks through earned in-game Gold—**zero paywalls, zero pay-to-win**.
-5. **Voluntary Community Tips**: Hosting and development are supported purely by voluntary tips logged openly in the transparent ledger.
+### 7.1 Free Forever for Public OSS + Private Team Rooms (Zero Cut on Builders)
+1. **Public Open-Source (`$0` Forever · 0% Fee)**: Builders keep 100% of bounties, teams keep 100% of revenue (5% Spark / 95% Merit Pool), Plaza Spotlight is free, all skins unlock via game Gold, and self-hosting is free under **`AGPL-3.0-or-later`**.
+2. **🛡️ Indie Team Room (`$9 / month` · up to 5 seats)**: Invite-only Private Team Rooms hidden from public feeds, Task Spec Contracts (`filesScope` anti-collision locks), 3-Line AI Pre-Review Briefs, and zero-ops cloud hosting.
+3. **🏢 Studio Commercial (`$19 / month` · unlimited seats)**: Unlimited Private Team Rooms plus an **`AGPL-3.0` Commercial Exemption (Dual License)** for closed-source internal deployments and priority engineering support.
+4. **☕ Voluntary Open-Source Tips**: Optional community coffee tips via Afdian or USDC/USDT help fund public servers.
 
 ### 7.2 Legal Positioning & Compliance Firewall
 - Explicitly structured as a **Free Open-Source Collaboration Tool & Voluntary Tip Community**—not equity issuance, crowdfunding, or passive investment contracts (distinct from securities under the Howey Test).

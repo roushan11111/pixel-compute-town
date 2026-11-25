@@ -4122,4 +4122,140 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('41. Open-Source + $9/$19 Private Team Rooms (402 gate, $9 Indie checkout, strict isolation, /p/:slug 404 & TEAM-XXXXXX invite join)', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-team-rooms-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+    try {
+      // Register Lead (creates private room) & Teammate (joins via invite) & Outsider (must NEVER see private room)
+      const regLead = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'lead-team@pixelcompute.test',
+        password: 'lead-password-123',
+        displayName: 'Team Lead',
+      });
+      assert.equal(regLead.status, 201);
+      const leadCookie = regLead.cookie;
+
+      const regMate = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'mate-team@pixelcompute.test',
+        password: 'mate-password-123',
+        displayName: 'Invited Teammate',
+      });
+      assert.equal(regMate.status, 201);
+      const mateCookie = regMate.cookie;
+
+      const regOutsider = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'outsider-team@pixelcompute.test',
+        password: 'outsider-password-123',
+        displayName: 'Random Outsider',
+      });
+      assert.equal(regOutsider.status, 201);
+      const outsiderCookie = regOutsider.cookie;
+
+      // 1. Free user attempting to create a Private Team Room MUST receive HTTP 402 TEAM_PLAN_REQUIRED
+      const blockedPrivate = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects',
+        {
+          name: 'Stealth AI Startup App',
+          tagline: 'Private closed-source product for our 3-person indie team',
+          visibility: 'private',
+        },
+        leadCookie,
+      );
+      assert.equal(blockedPrivate.status, 402);
+      assert.equal(blockedPrivate.json.code, 'TEAM_PLAN_REQUIRED');
+
+      // 2. Lead subscribes to $9/mo Indie Team Plan (team-indie-monthly) via stablecoin
+      const createPlan = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/create',
+        { productId: 'team-indie-monthly', chain: 'base', token: 'USDC' },
+        leadCookie,
+      );
+      assert.equal(createPlan.status, 201);
+      assert.equal(createPlan.json.order.amountUsd, 9);
+
+      const confirmPlan = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/confirm',
+        { orderId: createPlan.json.order.id, simulate: true },
+        leadCookie,
+      );
+      assert.equal(confirmPlan.status, 200);
+      assert.equal(confirmPlan.json.state.player.teamPlan, 'indie');
+      assert.ok(confirmPlan.json.state.player.teamPlanExpiresAt);
+
+      // 3. Lead creates Private Team Room -> succeeds (201), starts building immediately with TEAM-XXXXXX code & 3 starter scoped tasks
+      const privRes = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects',
+        {
+          name: 'Stealth AI Startup App',
+          tagline: 'Private closed-source product for our 3-person indie team',
+          visibility: 'private',
+        },
+        leadCookie,
+      );
+      assert.equal(privRes.status, 201);
+      const privProj = privRes.json.project;
+      assert.equal(privProj.visibility, 'private');
+      assert.equal(privProj.status, 'building');
+      assert.match(privProj.teamInviteCode, /^TEAM-[A-Z0-9]{6}$/);
+      assert.equal(privProj.teamMaxMembers, 5);
+      const privTasks = privRes.json.state.tasks.filter((t) => t.projectId === privProj.id);
+      assert.ok(privTasks.length >= 3, 'Private room must seed starter scoped tasks immediately');
+
+      // 4. Outsider strictly CANNOT see private project or its tasks in /api/bootstrap, CANNOT claim private tasks (403), and /p/:slug returns 404!
+      const outsiderBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, outsiderCookie);
+      assert.ok(!outsiderBoot.json.state.projects.some((p) => p.id === privProj.id), 'Private project must be hidden from outsiders');
+      assert.ok(!outsiderBoot.json.state.tasks.some((t) => t.projectId === privProj.id), 'Private tasks must be hidden from outsiders');
+
+      const outsiderQuota = outsiderBoot.json.state.workers.find((w) => w.track === 'quota');
+      const privCoreTask = privTasks.find((t) => t.track === 'guild_bounty');
+      const outsiderClaim = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${privCoreTask.id}/claim`,
+        { workerId: outsiderQuota.id },
+        outsiderCookie,
+      );
+      assert.equal(outsiderClaim.status, 403);
+      assert.equal(outsiderClaim.json.code, 'PRIVATE_ROOM_FORBIDDEN');
+
+      const pubShareRes = await fetch(`${isoUrl}/p/${encodeURIComponent(privProj.id)}`);
+      assert.equal(pubShareRes.status, 404, 'Private room must NEVER be exposed on public SSR /p/:slug');
+
+      // 5. Teammate joins via secret invite code TEAM-XXXXXX -> immediately unlocks visibility & can claim private task!
+      const joinRes = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects/join-invite',
+        { inviteCode: privProj.teamInviteCode },
+        mateCookie,
+      );
+      assert.equal(joinRes.status, 200);
+      assert.equal(joinRes.json.alreadyMember, false);
+      assert.ok(joinRes.json.state.projects.some((p) => p.id === privProj.id));
+      assert.ok(joinRes.json.state.tasks.some((t) => t.id === privCoreTask.id));
+
+      const mateQuota = joinRes.json.state.workers.find((w) => w.track === 'quota');
+      const mateClaim = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${privCoreTask.id}/claim`,
+        { workerId: mateQuota.id },
+        mateCookie,
+      );
+      assert.equal(mateClaim.status, 200);
+    } finally {
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });

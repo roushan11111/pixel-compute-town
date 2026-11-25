@@ -2192,6 +2192,7 @@ function renderIncubatorTab() {
             <div>
               <h3 class="card-title">
                 ${escapeHtml(lp.name)}
+                ${p.visibility === 'private' ? `<span class="badge cyan" style="margin-left: 6px;">${escapeHtml(t('team.privateBadge'))}</span>` : ''}
                 ${p.sponsoredBillboard ? `<span class="badge pink" style="margin-left: 6px;">${escapeHtml(t('incubator.sponsoredBadge'))}</span>` : ''}
               </h3>
               <p class="card-subtitle clamp-2">${escapeHtml(lp.tagline || lp.description || '')}</p>
@@ -2212,6 +2213,7 @@ function renderIncubatorTab() {
                 : t('incubator.myPoints', { pts: myPts, pct: myMeritSharePct.toFixed(1) }),
             )}</span>
             <span class="badge green">${escapeHtml(t('incubator.coBuildersCount', { count: coBuildersCount }))}</span>
+            ${p.visibility === 'private' && p.teamInviteCode ? `<span class="badge amber mono">${escapeHtml(t('team.inviteCodeChip', { code: p.teamInviteCode }))}</span>` : ''}
             ${
               p.bountyPoolUsd > 0
                 ? `<span class="badge ${isLiveProductionMode() ? 'bounty-live' : 'bounty-demo'}">${escapeHtml(t('incubator.bountyPool', { amount: p.bountyPoolUsd }))} <span class="bounty-mode-chip">${escapeHtml(isLiveProductionMode() ? t('bounty.liveEscrowTag') : t('bounty.demoTag'))}</span></span>`
@@ -4928,11 +4930,30 @@ function bindEvents() {
     await joinProject(match.projectId, { scrollToCard: true });
   });
 
+  $('btn-join-private-invite')?.addEventListener('click', async () => {
+    const code = window.prompt(t('team.invitePrompt'), '');
+    if (!code || !code.trim()) return;
+    try {
+      app.lastLocalMutationAt = Date.now();
+      const res = await apiFetch('/api/projects/join-invite', {
+        method: 'POST',
+        body: { inviteCode: code.trim() },
+      });
+      if (res.state) applyNewState(res.state);
+      soundFX.playCoin();
+      showToast(t('team.joinedToast', { name: res.project?.name || code.trim() }), 'success', 4500);
+    } catch (err) {
+      soundFX.playReject();
+      showToast(err.message, 'error');
+    }
+  });
+
   $('propose-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('propose-name').value.trim();
     const desc = $('propose-desc').value.trim();
     const category = $('propose-category').value;
+    const visibility = $('propose-visibility')?.value || 'public';
     const bountyPoolUsd = Number($('propose-bounty').value) || 0;
     const repoUrl = $('propose-repo').value.trim();
     const acknowledgeDerivative = Boolean($('propose-derivative-ack')?.checked);
@@ -4945,6 +4966,7 @@ function bindEvents() {
           name,
           tagline: desc,
           description: `[${category}] ${desc}`,
+          visibility,
           bountyPoolUsd,
           repoUrl,
           ...(acknowledgeDerivative ? { acknowledgeDerivative: true, inspiredByHash } : {}),
@@ -4958,6 +4980,17 @@ function bindEvents() {
       showToast(t('toast.proposed', { name: res.project.name }), 'success');
     } catch (err) {
       soundFX.playReject();
+      if (err.status === 402 && err.data?.code === 'TEAM_PLAN_REQUIRED') {
+        showToast(err.message, 'info', 5200);
+        closeModal('modal-propose');
+        openPaymentModal({
+          productId: 'team-indie-monthly',
+          displayName: t('pay.teamIndieBtn'),
+          priceUsd: 9,
+          initialTab: 'stablecoin',
+        });
+        return;
+      }
       if (err.status === 409 && err.data?.code === 'POTENTIAL_COPYCAT' && err.data?.copycatMatch) {
         const cm = err.data.copycatMatch;
         renderCopycatMatchBox(cm, { isHighRisk: true, isWarning: true });

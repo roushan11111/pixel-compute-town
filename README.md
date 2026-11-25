@@ -308,13 +308,14 @@ npm run smoke
 
 ---
 
-## ⚖️ 開源授權（License）
+## ⚖️ 開源授權與團隊方案（AGPL-3.0 Dual Licensing）
 
-本專案採用 **[GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)](./LICENSE)** 開源授權：
+本專案核心採用 **[GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)](./LICENSE)** 開源授權：
 
-- ✅ **完全免費使用、修改、自架小鎮與商用**：歡迎任何個人與團隊自架屬於自己的像素算力鎮或貢獻 PR。
-- 🛡️ **網路服務回饋條款（Copyleft）**：若您修改本專案並架設為公開網站／雲端服務對外提供使用，您必須在相同 **AGPL-3.0** 條款下公開您的完整修改原始碼，共同守護開源透明精神。
-- 📜 完整法律條文請見根目錄 [LICENSE](./LICENSE)。
+- ✅ **公開開源與個人使用永久免費（`$0` · 0% 抽成）**：歡迎任何個人與開源社群免費使用官方站或依 AGPL-3.0 自由自架。
+- 🛡️ **Indie 團隊私有房間（`$9 / 月` · 最多 5 人）**：專為 2–5 人獨立開發團隊提供邀請制私有房間、私有 Repo 規格契約、檔案範圍衝突鎖與 3 行 AI 預審簡報。
+- 🏢 **Studio 商業授權版（`$19 / 月` · 不限人數）**：不限人數私有房間＋**AGPL-3.0 商業閉源豁免授權（Dual License）**，適合企業內部私有部署。
+- 📜 完整法律條文請見根目錄 [LICENSE](./LICENSE)；開源首發宣傳包請見 [docs/X_LAUNCH_KIT.md](./docs/X_LAUNCH_KIT.md)。
 
 ---
 

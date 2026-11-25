@@ -22,6 +22,30 @@ const TRON_TXHASH_RE = /^(?:0x)?[a-fA-F0-9]{64}$/;
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 export const PAYMENT_PRODUCTS = Object.freeze({
+  'team-indie-monthly': {
+    id: 'team-indie-monthly',
+    shopItemId: null,
+    name: '🛡️ Indie 團隊私有房間方案（$9/月 · 最多 5 人）',
+    priceUsd: 9,
+    stream: 'pro_skin',
+    type: 'team_plan',
+    planTier: 'indie',
+    maxMembers: 5,
+    requiresProject: false,
+    customAmount: false,
+  },
+  'team-studio-monthly': {
+    id: 'team-studio-monthly',
+    shopItemId: null,
+    name: '🏢 Studio 團隊＋AGPL 商業授權方案（$19/月 · 不限人數）',
+    priceUsd: 19,
+    stream: 'pro_skin',
+    type: 'team_plan',
+    planTier: 'studio',
+    maxMembers: 999,
+    requiresProject: false,
+    customAmount: false,
+  },
   'tip-coffee': {
     id: 'tip-coffee',
     shopItemId: null,
@@ -115,6 +139,9 @@ const PRODUCT_ALIASES = Object.freeze({
   'billboard': 'billboard-ad',
   'tip': 'tip-coffee',
   'donate': 'tip-coffee',
+  'team': 'team-indie-monthly',
+  'team-indie': 'team-indie-monthly',
+  'team-studio': 'team-studio-monthly',
 });
 
 const REWARD_TYPE_PREFIX = Object.freeze({
@@ -331,7 +358,31 @@ function fulfillProductForUser(state, user, { product, amountUsd, targetProjectI
   const now = new Date().toISOString();
   let summary = '';
 
-  if (product.type === 'tip') {
+  if (product.type === 'team_plan') {
+    const planAmt = round2(amountUsd || product.priceUsd);
+    const tier = product.planTier === 'studio' ? 'studio' : 'indie';
+    user.teamPlan = tier;
+    user.teamPlanExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    user.isPro = true;
+    if (!Array.isArray(user.unlockedTitles)) user.unlockedTitles = [];
+    const tierTitle = tier === 'studio' ? '🏢 Studio 團隊主理人' : '🛡️ Indie 團隊主理人';
+    if (!user.unlockedTitles.includes(tierTitle)) user.unlockedTitles.push(tierTitle);
+    if (!user.title) user.title = tierTitle;
+    addRevenue(state, {
+      stream: 'pro_skin',
+      label: `${user.displayName} 透過 ${channelLabel} 開通「${product.name}」`,
+      amountUsd: planAmt,
+    });
+    syncUserLeaderboard(state, user);
+    summary = tier === 'studio'
+      ? `已開通 Studio 團隊方案（$${planAmt}/月 · 不限人數私有房間＋AGPL 商業豁免）！`
+      : `已開通 Indie 團隊方案（$${planAmt}/月 · 最多 5 人私有團隊房間）！`;
+    pushFeed(state, {
+      type: 'payment',
+      icon: tier === 'studio' ? '🏢' : '🛡️',
+      message: `${user.displayName} 開通了 ${tier === 'studio' ? 'Studio ($19/月)' : 'Indie Team ($9/月)'} 私有團隊方案！`,
+    });
+  } else if (product.type === 'tip') {
     const tipAmt = round2(amountUsd || product.priceUsd || 3);
     user.isPro = true;
     if (!Array.isArray(user.unlockedTitles)) user.unlockedTitles = [];

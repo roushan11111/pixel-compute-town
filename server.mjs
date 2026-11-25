@@ -780,6 +780,31 @@ function buildProjectBucketsMap(state) {
   return map;
 }
 
+function hasActiveTeamPlan(user, isFounder = false) {
+  if (isFounder) return true;
+  if (!user || typeof user !== 'object') return false;
+  if (user.teamPlan !== 'indie' && user.teamPlan !== 'studio') return false;
+  if (user.teamPlanExpiresAt && Date.parse(user.teamPlanExpiresAt) <= Date.now()) return false;
+  return true;
+}
+
+function canUserAccessProject(project, user) {
+  if (!project || project.visibility !== 'private') return true;
+  if (!user) return false;
+  if (user.role === 'founder') return true;
+  if (project.originatorId === user.id || project.creatorId === user.id) return true;
+  if (Array.isArray(project.teamMembers) && project.teamMembers.includes(user.id)) return true;
+  return false;
+}
+
+function generateTeamInviteCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.randomBytes(6);
+  let code = 'TEAM-';
+  for (let i = 0; i < 6; i += 1) code += chars[bytes[i] % chars.length];
+  return code;
+}
+
 function projectClientState(state, userId) {
   const projected = projectStateForUser(state, userId);
   const activeUser = state.users?.[userId] || state.users?.[FOUNDER_USER_ID];
@@ -787,19 +812,43 @@ function projectClientState(state, userId) {
     projected.player.tutorialBonusClaimed = Boolean(activeUser.tutorialBonusClaimed);
     projected.player.title = activeUser.title || '';
     projected.player.unlockedTitles = Array.isArray(activeUser.unlockedTitles) ? activeUser.unlockedTitles : [];
+    projected.player.teamPlan = activeUser.teamPlan || null;
+    projected.player.teamPlanExpiresAt = activeUser.teamPlanExpiresAt || null;
   }
-  projected.reviewQueue = Array.isArray(state.reviewQueue) ? state.reviewQueue : [];
-  projected.reviewHistory = Array.isArray(state.reviewHistory) ? state.reviewHistory : [];
+
+  // Strictly isolate private team rooms from non-members
+  const visibleProjectIds = new Set();
+  const hiddenPrivateIds = new Set();
+  if (Array.isArray(projected.projects)) {
+    projected.projects = projected.projects.filter((p) => {
+      if (canUserAccessProject(p, activeUser)) {
+        visibleProjectIds.add(p.id);
+        return true;
+      }
+      hiddenPrivateIds.add(p.id);
+      return false;
+    });
+  }
+
+  const rawReviewQueue = Array.isArray(state.reviewQueue) ? state.reviewQueue : [];
+  const rawReviewHistory = Array.isArray(state.reviewHistory) ? state.reviewHistory : [];
+  projected.reviewQueue = rawReviewQueue.filter((r) => !hiddenPrivateIds.has(r.projectId));
+  projected.reviewHistory = rawReviewHistory.filter((r) => !hiddenPrivateIds.has(r.projectId));
+  if (Array.isArray(projected.activityFeed) && hiddenPrivateIds.size > 0) {
+    projected.activityFeed = projected.activityFeed.filter((a) => !a?.projectId || !hiddenPrivateIds.has(a.projectId));
+  }
   projected.antiSlopTreasuryGold = Number(state.antiSlopTreasuryGold || 0);
   projected.projectBuckets = buildProjectBucketsMap(state);
   if (Array.isArray(projected.tasks)) {
-    projected.tasks = projected.tasks.map((t) => ({
-      ...t,
-      specContract: normalizeSpecContract(t.specContract, t),
-      scopeLock: t.status === 'open'
-        ? detectFileScopeConflicts(t, state.tasks)
-        : { locked: false, conflicts: [] },
-    }));
+    projected.tasks = projected.tasks
+      .filter((t) => !hiddenPrivateIds.has(t.projectId))
+      .map((t) => ({
+        ...t,
+        specContract: normalizeSpecContract(t.specContract, t),
+        scopeLock: t.status === 'open'
+          ? detectFileScopeConflicts(t, state.tasks)
+          : { locked: false, conflicts: [] },
+      }));
   }
   projected.settings = {
     ...(projected.settings || {}),
@@ -3124,14 +3173,27 @@ export function createAppServer(options = {}) {
           const inspiredByHash = sanitizeText(body.inspiredByHash, 64)
             || (body.acknowledgeDerivative === true && copycatMatch?.ideaHash ? copycatMatch.ideaHash : null);
 
+          const isPrivate = body.visibility === 'private';
+          if (isPrivate && !hasActiveTeamPlan(user, isFounderAdmin(req, ctx))) {
+            throw new HttpError(
+              402,
+              '建立「私有團隊房間（Private Team Room）」需開通 Indie 團隊方案（$9/月 · 5人）或 Studio 方案（$19/月 · 不限人數＋AGPL 商業授權）；公開開源項目永久免費！',
+              { code: 'TEAM_PLAN_REQUIRED' },
+            );
+          }
+
           const newProj = buildChainedProject(s, user, {
             id: uid('proj'),
             name,
             shortName,
             tagline: finalTagline,
             description: finalDescription,
-            status: 'voting',
-            votes: 1,
+            visibility: isPrivate ? 'private' : 'public',
+            teamMembers: [user.id],
+            teamInviteCode: isPrivate ? generateTeamInviteCode() : null,
+            teamMaxMembers: isPrivate ? (user.teamPlan === 'studio' || isFounderAdmin(req, ctx) ? 999 : 5) : null,
+            status: isPrivate ? 'building' : 'voting',
+            votes: isPrivate ? votesRequired : 1,
             votesRequired,
             progressPct: 0,
             repoUrl: sanitizeText(body.repoUrl, 200),
@@ -3147,10 +3209,16 @@ export function createAppServer(options = {}) {
           });
 
           s.projects.push(newProj);
+          if (isPrivate) {
+            const starterTasks = buildAutoSplitTasks(newProj, finalDescription.slice(0, 80), 3);
+            s.tasks.push(...starterTasks);
+          }
           pushActivity(s, {
             type: 'proposal',
-            icon: '💡',
-            message: `${user.displayName} 首發原創創意提案《${newProj.name}》（#${newProj.ideaHash.slice(0, 8)} ｜ 1/${newProj.votesRequired} 票）`,
+            icon: isPrivate ? '🔒' : '💡',
+            message: isPrivate
+              ? `${user.displayName} 開啟了私有團隊房間《${newProj.name}》（僅受邀團隊成員可見）`
+              : `${user.displayName} 首發原創創意提案《${newProj.name}》（#${newProj.ideaHash.slice(0, 8)} ｜ 1/${newProj.votesRequired} 票）`,
             projectId: newProj.id,
           });
           return { project: newProj, userId: user.id };
@@ -3160,10 +3228,66 @@ export function createAppServer(options = {}) {
           'project_proposed',
           `Proposed project ${result.project.id} "${result.project.name}" (#${result.project.ideaHash.slice(0, 12)})`,
         );
-        sseHub.broadcast('project_updated', { action: 'proposed', project: result.project });
+        if (result.project.visibility !== 'private') {
+          sseHub.broadcast('project_updated', { action: 'proposed', project: result.project });
+        }
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 201, {
           ok: true,
+          project: result.project,
+          state: projectClientState(state, result.userId),
+        });
+      }
+
+      // Projects: POST /api/projects/join-invite (Join a Private Team Room via TEAM-XXXXXX invite code)
+      if (pathname === '/api/projects/join-invite' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        const code = sanitizeText(body.inviteCode || body.code || '', 32).toUpperCase();
+        if (!code || !code.startsWith('TEAM-')) {
+          throw new HttpError(400, '請輸入有效的私有團隊邀請碼（格式如 TEAM-XXXXXX）');
+        }
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+          const proj = (s.projects || []).find((p) => p.visibility === 'private' && String(p.teamInviteCode || '').toUpperCase() === code);
+          if (!proj) {
+            throw new HttpError(404, '找不到對應的私有團隊邀請碼，請向主理人確認');
+          }
+          if (!Array.isArray(proj.teamMembers)) proj.teamMembers = [proj.originatorId];
+          if (!Array.isArray(proj.coBuilders)) proj.coBuilders = [];
+
+          const alreadyMember = proj.teamMembers.includes(user.id);
+          if (!alreadyMember) {
+            const maxMembers = Number(proj.teamMaxMembers || 5);
+            if (proj.teamMembers.length >= maxMembers) {
+              throw new HttpError(403, `此私有房間已達人數上限（${maxMembers} 人），請主理人升級至 Studio 方案（$19/月不限人數）`, {
+                code: 'TEAM_MEMBER_LIMIT',
+              });
+            }
+            proj.teamMembers.push(user.id);
+            if (!proj.coBuilders.some((b) => b.userId === user.id)) {
+              proj.coBuilders.push({
+                userId: user.id,
+                username: user.username || user.id,
+                displayName: user.displayName,
+                joinedAt: new Date().toISOString(),
+              });
+            }
+            pushActivity(s, {
+              type: 'co_build_join',
+              icon: '🔑',
+              message: `${user.displayName} 透過邀請碼加入私有團隊房間《${proj.shortName || proj.name}》！`,
+              projectId: proj.id,
+            });
+          }
+          return { project: proj, alreadyMember, userId: user.id };
+        });
+
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        return sendJson(res, 200, {
+          ok: true,
+          alreadyMember: result.alreadyMember,
           project: result.project,
           state: projectClientState(state, result.userId),
         });
@@ -3655,6 +3779,12 @@ export function createAppServer(options = {}) {
           if (!task) {
             throw new HttpError(404, `找不到任務：${taskId}`);
           }
+          const taskProj = s.projects.find((p) => p.id === task.projectId);
+          if (taskProj && !canUserAccessProject(taskProj, user)) {
+            throw new HttpError(403, '此任務屬於私有團隊房間，請先輸入主理人的團隊邀請碼加入', {
+              code: 'PRIVATE_ROOM_FORBIDDEN',
+            });
+          }
           if (task.status === 'completed') {
             throw new HttpError(409, '此任務已完成驗收');
           }
@@ -3824,6 +3954,12 @@ export function createAppServer(options = {}) {
           if (!task) {
             throw new HttpError(404, `找不到任務：${taskId}`);
           }
+          const taskProj = s.projects.find((p) => p.id === task.projectId);
+          if (taskProj && !canUserAccessProject(taskProj, user)) {
+            throw new HttpError(403, '此任務屬於私有團隊房間，請先輸入主理人的團隊邀請碼加入', {
+              code: 'PRIVATE_ROOM_FORBIDDEN',
+            });
+          }
           if (task.status === 'completed') {
             throw new HttpError(409, '此任務已完成驗收，無法釋放');
           }
@@ -3923,6 +4059,12 @@ export function createAppServer(options = {}) {
           const task = s.tasks.find((t) => t.id === taskId);
           if (!task) {
             throw new HttpError(404, `找不到任務：${taskId}`);
+          }
+          const taskProj = s.projects.find((p) => p.id === task.projectId);
+          if (taskProj && !canUserAccessProject(taskProj, user)) {
+            throw new HttpError(403, '此任務屬於私有團隊房間，請先輸入主理人的團隊邀請碼加入', {
+              code: 'PRIVATE_ROOM_FORBIDDEN',
+            });
           }
           if (task.status === 'completed') {
             throw new HttpError(409, '此任務已完成驗收，無法重複提交');
@@ -5165,7 +5307,7 @@ export function createAppServer(options = {}) {
         const state = await store.load();
         ensureStateSchema(state);
         const proj = findProjectBySlugOrId(state.projects, slugParam);
-        if (!proj) {
+        if (!proj || proj.visibility === 'private') {
           const notFoundHtml = renderPublicNotFoundPage(
             '找不到該公開項目',
             `查無對應「${slugParam}」的公開共建項目，請確認連結是否正確。`,
