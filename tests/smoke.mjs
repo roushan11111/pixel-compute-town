@@ -261,7 +261,26 @@ async function main() {
 
     const appQueriedCount = verifyJsQueriesAgainstHtml(appSrc, htmlIds, 'app.js', 'index.html');
 
-    return `index.html (${htmlIds.size} IDs / ${appQueriedCount} queries), landing.html (${landingIds.size} IDs / ${landingQueriedCount} queries) & onboard.html — 0 dups, 0 missing`;
+    // Explicitly verify all Anti-Dilution Governance DOM IDs exist in index.html & landing.html
+    const requiredGovAppIds = [
+      'review-queue-panel',
+      'review-queue-badge',
+      'btn-refresh-reviews',
+      'review-queue-list',
+      'review-history-wrap',
+      'review-history-list',
+      'guild-submit-for-review',
+      'toggle-peer-review-required',
+    ];
+    for (const gid of requiredGovAppIds) {
+      assert.ok(htmlIds.has(gid), `Missing required Anti-Dilution Governance DOM ID #${gid} in public/index.html`);
+    }
+    assert.ok(
+      landingIds.has('anti-dilution-moat'),
+      'Missing required Anti-Dilution 4-layer moat DOM ID #anti-dilution-moat in public/landing.html',
+    );
+
+    return `index.html (${htmlIds.size} IDs / ${appQueriedCount} queries), landing.html (${landingIds.size} IDs / ${landingQueriedCount} queries) & onboard.html — 0 dups, 0 missing (+ ${requiredGovAppIds.length + 1} governance IDs)`;
   });
 
   // Start isolated temporary server for static MIME, install script & CLI E2E checks
@@ -421,6 +440,7 @@ async function main() {
         'localizeShopItem',
         'localizeAchievement',
         'localizeLeaderboardEntry',
+        'localizeReviewItem',
         'localizeUser',
         'localizeFeedMessage',
         'localizeRedeemNote',
@@ -510,6 +530,41 @@ async function main() {
       for (const codeItem of seed.redeemCodes || []) {
         collectCjkViolations(i18nMod.localizeRedeemNote(codeItem, 'en'), `redeemNote(${codeItem.code})`, dynamicViolations);
       }
+      // Verify seeded & dynamic peer review queue items (rev-clean-01, rev-slop-01, dynamic) have ZERO CJK in EN
+      assert.ok(
+        Array.isArray(seed.reviewQueue) && seed.reviewQueue.some((r) => r.id === 'rev-clean-01') && seed.reviewQueue.some((r) => r.id === 'rev-slop-01'),
+        'Seeded state must include rev-clean-01 and rev-slop-01 for review localization check',
+      );
+      for (const revItem of seed.reviewQueue) {
+        collectCjkViolations(
+          i18nMod.localizeReviewItem(revItem, 'en', { tasks: seed.tasks, projects: seed.projects }),
+          `reviewItem(${revItem.id})`,
+          dynamicViolations,
+        );
+      }
+      const dynamicReviewSample = {
+        id: 'rev-dynamic-smoke',
+        projectId: 'proj-meta',
+        projectName: '像素算力鎮 v1.0（創世 Meta 項目）',
+        taskId: 'task-meta-pr',
+        taskTitle: '為像素辦公室實作鍵盤快捷鍵導覽與任務詳情 PR',
+        submittedByUserId: 'usr-alice',
+        submittedByName: 'Alice Builder',
+        aiReview: {
+          aiScore: 34,
+          riskLevel: 'high',
+          bloatRatioPct: 72,
+          summary: '⚠️ 疑似低效垃圾 AI 注水（注水比 72%，偵測 2 項異常），建議實幹審閱團駁回並沒收押金！',
+          flags: ['DUPLICATE_LINES (65%)', '⚠️ 72% 重複註解注水'],
+        },
+        content: 'export function run() {\n  // 測試註解\n  return true;\n}',
+      };
+      const localizedDyn = i18nMod.localizeReviewItem(dynamicReviewSample, 'en', {
+        tasks: seed.tasks,
+        projects: seed.projects,
+      });
+      assert.equal(localizedDyn.submitterName, 'Alice Builder', 'Dynamic reviewItem must preserve submittedByName');
+      collectCjkViolations(localizedDyn, 'reviewItem(dynamic)', dynamicViolations);
       collectCjkViolations(i18nMod.getCanvasI18n('en'), 'canvasI18n(en)', dynamicViolations);
 
       assert.deepEqual(
@@ -557,10 +612,18 @@ async function main() {
       assert.match(readme, /onboard/);
       assert.match(readme, /Proof of First Spark/);
       assert.match(readme, /5%.*85%.*10%/);
+      assert.match(readme, /70\/30|70%.*30%/);
+      assert.match(readme, /AI 盲審/);
+      assert.match(readme, /實幹審閱/);
+      assert.match(readme, /押金/);
 
       const prd = await fs.readFile(path.join(ROOT_DIR, 'docs', 'PRD.md'), 'utf8');
       assert.match(prd, /Proof of First Spark/);
       assert.match(prd, /5%.*85%.*10%/);
+      assert.match(prd, /70\/30|70%.*30%/);
+      assert.match(prd, /AI 盲審/);
+      assert.match(prd, /實幹審閱/);
+      assert.match(prd, /押金/);
 
       const ciYaml = await fs.readFile(path.join(ROOT_DIR, '.github/workflows/ci.yml'), 'utf8');
       assert.match(ciYaml, /node-version:\s*["']?24["']?/);
@@ -606,6 +669,68 @@ async function main() {
       assert.equal(tamperedReport.valid, false, 'Tampered project must fail provenance verification');
 
       return `${chainReport.chainLength} seeded records verified, tamper detection & zh/en similarity active`;
+    });
+
+    // 9. src/server/governance.mjs exports, 70/30 anti-dilution split math & AI blind review diagnostics check
+    await runCheck('9. src/server/governance.mjs exports, 70/30 anti-dilution math & AI blind review verified', async () => {
+      const gov = await import('../src/server/governance.mjs');
+      assert.equal(gov.CORE_BUCKET_PCT, 70);
+      assert.equal(gov.PERIPHERAL_BUCKET_PCT, 30);
+      assert.equal(gov.REVIEWER_REWARD_GOLD, 15);
+      assert.equal(gov.REVIEWER_REWARD_POINTS, 5);
+      assert.equal(gov.SLOP_STRIKE_LIMIT, 2);
+      assert.equal(gov.DEFAULT_COOLDOWN_SEC, 60);
+      assert.equal(gov.DEFAULT_MIN_REPUTATION, 60);
+
+      for (const fnName of [
+        'getTaskBucket',
+        'getTaskStakeGold',
+        'getTaskMinReputation',
+        'getCooldownSeconds',
+        'ensureProjectBuckets',
+        'computeBucketStats',
+        'computeAntiDilutionMeritSplit',
+        'canUserReview',
+        'runAiBlindReview',
+      ]) {
+        assert.equal(typeof gov[fnName], 'function', `governance.mjs must export function ${fnName}()`);
+      }
+
+      // 70/30 bucket cap sanity proof: 100 core vs 10,000 peripheral on $850 merit pool -> $595 / $255
+      const split = gov.computeAntiDilutionMeritSplit(
+        {
+          id: 'proj-smoke-gov',
+          poolCaps: { coreSharePct: 70, peripheralSharePct: 30 },
+          bucketPoints: { core: { 'core-dev': 100 }, peripheral: { 'spam-bot': 10000 } },
+        },
+        850,
+      );
+      assert.equal(split.corePoolUsd, 595);
+      assert.equal(split.peripheralPoolUsd, 255);
+      assert.equal(split.payoutsByUserId['core-dev'], 595);
+      assert.equal(split.payoutsByUserId['spam-bot'], 255);
+
+      // AI blind review distinguishes clean code vs repetitive slop
+      const cleanReport = gov.runAiBlindReview(
+        { title: 'Core PR' },
+        'export function sum(a, b) {\n  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;\n  return a + b;\n}\n',
+        'https://github.com/pixel-compute-town/demo/pull/1',
+      );
+      assert.equal(cleanReport.riskLevel, 'low');
+      assert.ok(cleanReport.aiScore >= 80, `Clean PR should score >= 80, got ${cleanReport.aiScore}`);
+
+      const slopContent = [
+        ...Array.from({ length: 12 }, () => '// TODO: placeholder auto-generated comment'),
+        'function stub1() {}',
+        'function stub2() {}',
+        'function stub3() {}',
+      ].join('\n');
+      const slopReport = gov.runAiBlindReview({ title: 'Slop PR' }, slopContent, '');
+      assert.equal(slopReport.riskLevel, 'high');
+      assert.ok(slopReport.aiScore < 50, `Slop PR should score < 50, got ${slopReport.aiScore}`);
+      assert.ok(slopReport.bloatRatioPct >= 55, `Slop PR should have high bloat ratio, got ${slopReport.bloatRatioPct}`);
+
+      return `9 exports + 7 constants verified; 70/30 cap ($595/$255) & AI blind review (clean ${cleanReport.aiScore} vs slop ${slopReport.aiScore}) active`;
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));

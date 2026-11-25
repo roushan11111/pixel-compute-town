@@ -103,6 +103,21 @@ const I18N = {
     'manifesto.cmp2Math1': '首發版稅 5%',
     'manifesto.cmp2Math2': '實幹分紅 34%',
     'manifesto.cmp2Math3': '合計實得：39%',
+    'manifesto.moatTitle': '🛡️ 4 層防垃圾 AI 稀釋護城河（Anti-Slop & Anti-Dilution）',
+    'manifesto.moatSub':
+      '用數學分桶隔離、跨模型 AI 盲審、實幹審閱團與押金沒收，徹底封殺低質 AI 狂刷微任務稀釋核心開發者！',
+    'manifesto.moat1Title': '① 任務定額 ＋ 70/30 核心池隔離',
+    'manifesto.moat1Desc':
+      '每張任務皆有固定點數定額；85% 實幹池內嚴格切分 70% 核心架構池與 ≤30% 週邊微任務池，刷一萬次週邊微任務也絕不稀釋核心貢獻者！',
+    'manifesto.moat2Title': '② CI 硬門檻 ＋ 跨模型 AI 盲審',
+    'manifesto.moat2Desc':
+      '所有交付先過自動化語法與結構硬門檻，再由跨模型 AI 盲審掃描 Diff 注水比、重複註解與空函式，高風險垃圾即時亮紅燈警示。',
+    'manifesto.moat3Title': '③ 實幹審閱團合併否決權',
+    'manifesto.moat3Desc':
+      '只有真正交付過成果的實幹者與維護者擁有合併否決權：核准優質 PR 領 +15G 審閱獎，揪出垃圾注水可直接一鍵駁回！',
+    'manifesto.moat4Title': '④ 接單押金沒收 ＋ 冷卻懲罰',
+    'manifesto.moat4Desc':
+      '接取核心懸賞須達信譽門檻並質押誠意押金；若提交垃圾 AI 注水，押金直接沒收賠給審閱人，連續違規立即觸發反刷單冷卻！',
     'install.tag': 'ONE-CLICK INSTALL HUB',
     'install.title': '📦 多平臺「複製即裝」本機算力小人中心',
     'install.desc':
@@ -312,6 +327,21 @@ const I18N = {
     'manifesto.cmp2Math1': '首发版税 5%',
     'manifesto.cmp2Math2': '实干分红 34%',
     'manifesto.cmp2Math3': '合计实得：39%',
+    'manifesto.moatTitle': '🛡️ 4 层防垃圾 AI 稀释护城河（Anti-Slop & Anti-Dilution）',
+    'manifesto.moatSub':
+      '用数学分桶隔离、跨模型 AI 盲审、实干审阅团与押金没收，彻底封杀低质 AI 狂刷微任务稀释核心开发者！',
+    'manifesto.moat1Title': '① 任务定额 ＋ 70/30 核心池隔离',
+    'manifesto.moat1Desc':
+      '每张任务皆有固定点数定额；85% 实干池内严格切分 70% 核心架构池与 ≤30% 周边微任务池，刷一万次周边微任务也绝不稀释核心贡献者！',
+    'manifesto.moat2Title': '② CI 硬门槛 ＋ 跨模型 AI 盲审',
+    'manifesto.moat2Desc':
+      '所有交付先过自动化语法与结构硬门槛，再由跨模型 AI 盲审扫描 Diff 注水比、重复注释与空函数，高风险垃圾即时亮红灯警示。',
+    'manifesto.moat3Title': '③ 实干审阅团合并否决权',
+    'manifesto.moat3Desc':
+      '只有真正交付过成果的实干者与维护者拥有合并否决权：核准优质 PR 领 +15G 审阅奖，揪出垃圾注水可直接一键驳回！',
+    'manifesto.moat4Title': '④ 接单押金没收 ＋ 冷却惩罚',
+    'manifesto.moat4Desc':
+      '接取核心悬赏须达信誉门槛并质押诚意押金；若提交垃圾 AI 注水，押金直接没收赔给审阅人，连续违规立即触发反刷单冷却！',
     'install.tag': 'ONE-CLICK INSTALL HUB',
     'install.title': '📦 多平台「复制即装」本机算力小人中心',
     'install.desc':
@@ -521,6 +551,21 @@ const I18N = {
     'manifesto.cmp2Math1': 'Spark Royalty 5%',
     'manifesto.cmp2Math2': 'Merit Pool 34%',
     'manifesto.cmp2Math3': 'Combined Total: 39%',
+    'manifesto.moatTitle': '🛡️ 4-Layer Anti-Slop & Anti-Dilution Moat',
+    'manifesto.moatSub':
+      'Mathematical bucket caps, cross-model AI blind review, peer builder veto power, and stake slashing stop low-effort AI spam from ever diluting core builders.',
+    'manifesto.moat1Title': '① Fixed Task Quotas + 70/30 Core Isolation',
+    'manifesto.moat1Desc':
+      'Every task has a fixed point cap. Inside the 85% merit pool, 70% is ring-fenced for core engineering and ≤30% for peripheral tasks — 10,000 spam micro-tasks can never dilute core builders.',
+    'manifesto.moat2Title': '② CI Hard Gate + Cross-Model AI Blind Review',
+    'manifesto.moat2Desc':
+      'Deliverables must clear automated syntax & structural checks first, then a cross-model AI blind reviewer scores diff bloat, repetitive comments, and empty stubs.',
+    'manifesto.moat3Title': '③ Peer Builder Merge Veto Power',
+    'manifesto.moat3Desc':
+      'Only verified builders and maintainers hold merge approval rights: approve clean PRs for +15G review bonus, or reject AI slop in one click.',
+    'manifesto.moat4Title': '④ Sincerity Stake Slashing + Cooldowns',
+    'manifesto.moat4Desc':
+      'Core bounties require reputation and a Gold sincerity stake. Submitting AI slop forfeits the stake directly to the reviewer and triggers anti-spam cooldowns.',
     'install.tag': 'ONE-CLICK INSTALL HUB',
     'install.title': '📦 Multi-Platform Copy-to-Install Local Worker Hub',
     'install.desc':

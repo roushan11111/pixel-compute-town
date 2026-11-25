@@ -6,6 +6,15 @@ import {
   computeIdeaHash,
   ensureProjectsProvenance,
 } from './provenance.mjs';
+import {
+  CORE_BUCKET_PCT,
+  PERIPHERAL_BUCKET_PCT,
+  DEFAULT_MIN_REPUTATION,
+  ensureProjectBuckets,
+  getTaskBucket,
+  getTaskMinReputation,
+  getTaskStakeGold,
+} from './governance.mjs';
 
 export const REVENUE_SPLIT = Object.freeze({
   originatorSparkPct: 5,
@@ -222,6 +231,11 @@ export function generateTasksForProject(project) {
         '翻譯需符合開源軟體與獨立產品自然語氣，不可留白或佔位符',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 30,
       goldReward: 120,
       xpReward: 40,
@@ -255,6 +269,11 @@ export function generateTasksForProject(project) {
         '色碼與圖示描述需具體可用，不得為重複廢話',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 25,
       goldReward: 105,
       xpReward: 35,
@@ -284,6 +303,11 @@ export function generateTasksForProject(project) {
         '涵蓋正常路徑與錯誤輸入處理',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 30,
       goldReward: 125,
       xpReward: 40,
@@ -313,6 +337,11 @@ export function generateTasksForProject(project) {
         '說明主要設計決策與測試方式',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'core',
+      stakeGold: 25,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: DEFAULT_MIN_REPUTATION,
       contributionPoints: 65,
       goldReward: 260,
       xpReward: 85,
@@ -342,6 +371,11 @@ export function generateTasksForProject(project) {
         '列出至少兩項已驗證的邊界情境',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'core',
+      stakeGold: 25,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: DEFAULT_MIN_REPUTATION,
       contributionPoints: 55,
       goldReward: 220,
       xpReward: 70,
@@ -420,6 +454,8 @@ export function createStarterWorkersForUser(userId) {
       completedCount: 0,
       earnedGold: 0,
       earnedPoints: 0,
+      slopStrikes: 0,
+      cooldownUntil: null,
       lastMessage: '剛入鎮報到，隨時可接自動工坊 API 任務！',
       lastHeartbeatAt: null,
     },
@@ -446,8 +482,124 @@ export function createStarterWorkersForUser(userId) {
       completedCount: 0,
       earnedGold: 0,
       earnedPoints: 0,
+      slopStrikes: 0,
+      cooldownUntil: null,
       lastMessage: '本機 CLI 橋接器待命中，隨時可領懸賞大單！',
       lastHeartbeatAt: null,
+    },
+  ];
+}
+
+export function createInitialReviewQueue() {
+  const tMinus = (mins) => new Date(Date.now() - mins * 60_000).toISOString();
+  return [
+    {
+      id: 'rev-clean-01',
+      status: 'pending',
+      projectId: 'proj-meta',
+      projectName: '像素算力鎮 v1.0（創世 Meta 項目）',
+      projectShortName: '像素算力鎮 v1.0',
+      taskId: 'task-meta-review-clean',
+      taskTitle: '實作像素小鎮鍵盤快捷鍵與輸入焦點保護核心模組 PR',
+      track: 'guild_bounty',
+      category: 'feature_pr',
+      poolBucket: 'core',
+      submittedByUserId: 'npc-rin',
+      submittedByName: '架構師 Rin',
+      workerId: 'w-npc-rin',
+      workerName: 'CLI 匠人 Rin-Pro',
+      stakeGold: 25,
+      contributionPoints: 60,
+      goldReward: 240,
+      xpReward: 80,
+      progressWeight: 15,
+      cashBountyUsd: 0,
+      tokensUsed: 14,
+      staminaCost: 20,
+      prUrl: 'https://github.com/pixel-compute-town/pixel-compute-town/pull/88',
+      content: [
+        'export function bindTownShortcuts(handlers, root = window) {',
+        '  const onKeyDown = (ev) => {',
+        '    const tag = ev.target?.tagName?.toLowerCase();',
+        '    if (tag === "input" || tag === "textarea" || ev.target?.isContentEditable) return;',
+        '    if (ev.key >= "1" && ev.key <= "6") handlers.switchTab?.(Number(ev.key) - 1);',
+        '    if (ev.key === " ") { ev.preventDefault(); handlers.toggleDayNight?.(); }',
+        '    if (ev.key.toLowerCase() === "m") handlers.toggleMute?.();',
+        '  };',
+        '  root.addEventListener("keydown", onKeyDown);',
+        '  return () => root.removeEventListener("keydown", onKeyDown);',
+        '}',
+      ].join('\n'),
+      notes: '零外部依賴 ES Module，含 input/textarea 焦點保護與監聽器釋放，CI 全綠通過。',
+      executionMode: 'byot_cli',
+      ciStatus: 'passed',
+      verificationScore: 95,
+      aiReview: {
+        aiScore: 94,
+        riskLevel: 'low',
+        diffLinesAdded: 68,
+        diffLinesRemoved: 12,
+        bloatRatioPct: 4,
+        summary: '乾淨優雅實作：Diff +68 / -12，CI 全綠、邏輯精煉無注水痕跡。',
+        flags: [],
+        reviewedAt: tMinus(18),
+      },
+      submittedAt: tMinus(18),
+    },
+    {
+      id: 'rev-slop-01',
+      status: 'pending',
+      projectId: 'proj-i18n',
+      projectName: 'i18n-PixelBot（開源多語系插件）',
+      projectShortName: 'i18n-PixelBot',
+      taskId: 'task-i18n-review-slop',
+      taskTitle: '[$40 現金懸賞] 支援 TypeScript JSX AST 自動抽取翻譯鍵值',
+      track: 'guild_bounty',
+      category: 'feature_pr',
+      poolBucket: 'core',
+      submittedByUserId: 'npc-slopbot',
+      submittedByName: '刷單機器人 SlopBot-99',
+      workerId: 'w-slopbot-99',
+      workerName: 'SlopBot-99',
+      stakeGold: 30,
+      contributionPoints: 90,
+      goldReward: 340,
+      xpReward: 110,
+      progressWeight: 25,
+      cashBountyUsd: 40,
+      tokensUsed: 99,
+      staminaCost: 28,
+      prUrl: 'https://github.com/pixel-compute-town/i18n-pixelbot/pull/999',
+      content: [
+        '// TODO: auto-generated wrapper comment block (repeated 1,240 times)',
+        '// TODO: auto-generated wrapper comment block (repeated 1,240 times)',
+        '// TODO: auto-generated wrapper comment block (repeated 1,240 times)',
+        'export function extractI18nKeys() {}',
+        'export function parseJsxNodeStub1() { return null; }',
+        'export function parseJsxNodeStub2() { return null; }',
+        'export function parseJsxNodeStub3() { return null; }',
+        '// ... (+4,813 more duplicated placeholder comment lines & empty stubs)',
+      ].join('\n'),
+      notes: 'Auto-submitted bulk patch (+4,820 lines)',
+      executionMode: 'byot_cli',
+      ciStatus: 'warning',
+      verificationScore: 38,
+      aiReview: {
+        aiScore: 21,
+        riskLevel: 'high',
+        diffLinesAdded: 4820,
+        diffLinesRemoved: 0,
+        bloatRatioPct: 87,
+        summary: '⚠️ 疑似低效垃圾 AI 瘋狂注水：+4,820 / -0 行中高達 87% 為重複註解與空函式！',
+        flags: [
+          'HIGH_BLOAT_RATIO (87%)',
+          'DUPLICATE_COMMENTS_DETECTED',
+          'EMPTY_STUB_FUNCTIONS',
+          'OVERSIZED_ADD_ONLY_DIFF (+4820/-0)',
+        ],
+        reviewedAt: tMinus(8),
+      },
+      submittedAt: tMinus(8),
     },
   ];
 }
@@ -465,15 +617,29 @@ export function ensureStateSchema(state) {
   if (!state.settings || typeof state.settings !== 'object') {
     state.settings = {
       strictDeviceReview: false,
+      peerReviewRequired: false,
       sessionSecret: crypto.randomBytes(32).toString('hex'),
     };
   } else {
     if (typeof state.settings.strictDeviceReview !== 'boolean') {
       state.settings.strictDeviceReview = false;
     }
+    if (typeof state.settings.peerReviewRequired !== 'boolean') {
+      state.settings.peerReviewRequired = false;
+    }
     if (!state.settings.sessionSecret) {
       state.settings.sessionSecret = crypto.randomBytes(32).toString('hex');
     }
+  }
+
+  if (!Array.isArray(state.reviewQueue)) {
+    state.reviewQueue = createInitialReviewQueue();
+  }
+  if (!Array.isArray(state.reviewHistory)) {
+    state.reviewHistory = [];
+  }
+  if (!Number.isFinite(Number(state.antiSlopTreasuryGold))) {
+    state.antiSlopTreasuryGold = 0;
   }
 
   if (!state.sessions || typeof state.sessions !== 'object') {
@@ -545,6 +711,11 @@ export function ensureStateSchema(state) {
     if (!Array.isArray(u.workers)) {
       u.workers = createStarterWorkersForUser(u.id);
     }
+    for (const w of u.workers) {
+      if (!w || typeof w !== 'object') continue;
+      if (!Number.isFinite(Number(w.slopStrikes))) w.slopStrikes = 0;
+      if (w.cooldownUntil === undefined) w.cooldownUntil = null;
+    }
   }
 
   // Keep legacy top-level mirrors synced to founder-demo for backward-compatible disk reads
@@ -576,6 +747,20 @@ export function ensureStateSchema(state) {
 
   if (Array.isArray(state.projects)) {
     ensureProjectsProvenance(state.projects, state.users);
+    for (const proj of state.projects) {
+      ensureProjectBuckets(proj);
+    }
+  }
+
+  if (Array.isArray(state.tasks)) {
+    for (const t of state.tasks) {
+      if (!t || typeof t !== 'object') continue;
+      t.poolBucket = getTaskBucket(t);
+      t.stakeGold = getTaskStakeGold(t);
+      t.minReputation = getTaskMinReputation(t);
+      if (!Number.isFinite(Number(t.stakedGold))) t.stakedGold = 0;
+      if (t.stakedByUserId === undefined) t.stakedByUserId = null;
+    }
   }
 
   return state;
@@ -632,6 +817,22 @@ export function createInitialState() {
         'npc-kuro': 45,
         'npc-yuna': 30,
       },
+      poolCaps: {
+        coreSharePct: CORE_BUCKET_PCT,
+        peripheralSharePct: PERIPHERAL_BUCKET_PCT,
+      },
+      bucketPoints: {
+        core: {
+          'founder-demo': 58,
+          'npc-kuro': 45,
+          'npc-momo': 7,
+        },
+        peripheral: {
+          'founder-demo': 22,
+          'npc-momo': 48,
+          'npc-yuna': 30,
+        },
+      },
       contributorNames: {
         'founder-demo': '創始鎮長 (Demo)',
         'npc-momo': '像素貓 Momo',
@@ -679,6 +880,20 @@ export function createInitialState() {
         'npc-kuro': 70,
         'npc-rin': 35,
       },
+      poolCaps: {
+        coreSharePct: CORE_BUCKET_PCT,
+        peripheralSharePct: PERIPHERAL_BUCKET_PCT,
+      },
+      bucketPoints: {
+        core: {
+          'npc-kuro': 70,
+          'npc-rin': 35,
+          'founder-demo': 25,
+        },
+        peripheral: {
+          'founder-demo': 15,
+        },
+      },
       contributorNames: {
         'founder-demo': '創始鎮長 (Demo)',
         'npc-kuro': '算力武士 Kuro',
@@ -720,6 +935,16 @@ export function createInitialState() {
       ],
       contributions: {
         'npc-yuna': 20,
+      },
+      poolCaps: {
+        coreSharePct: CORE_BUCKET_PCT,
+        peripheralSharePct: PERIPHERAL_BUCKET_PCT,
+      },
+      bucketPoints: {
+        core: {
+          'npc-yuna': 20,
+        },
+        peripheral: {},
       },
       contributorNames: {
         'npc-yuna': '星雲織女 Yuna',
@@ -772,6 +997,8 @@ export function createInitialState() {
       completedCount: 2,
       earnedGold: 180,
       earnedPoints: 70,
+      slopStrikes: 0,
+      cooldownUntil: null,
       lastMessage: '剛充完電，隨時可接自動工坊 Gemini Flash 任務！',
       lastHeartbeatAt: null,
     },
@@ -798,6 +1025,8 @@ export function createInitialState() {
       completedCount: 1,
       earnedGold: 240,
       earnedPoints: 50,
+      slopStrikes: 0,
+      cooldownUntil: null,
       lastMessage: '本機 CLI 橋接器待命中，來張懸賞大單吧！',
       lastHeartbeatAt: null,
     },
@@ -825,6 +1054,11 @@ export function createInitialState() {
         '必須包含 en 與 ja 兩個頂層語系物件且所有欄位皆已完成翻譯',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 35,
       goldReward: 130,
       xpReward: 45,
@@ -858,6 +1092,11 @@ export function createInitialState() {
         '所有色碼需為合理十六進位格式，內容不可重複敷衍',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 30,
       goldReward: 115,
       xpReward: 40,
@@ -887,6 +1126,11 @@ export function createInitialState() {
         '明確涵蓋 BYOK、BYOT 與驗收防作弊要點',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 25,
       goldReward: 100,
       xpReward: 35,
@@ -916,6 +1160,11 @@ export function createInitialState() {
         '正確處理 input / textarea 焦點保護邏輯',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'core',
+      stakeGold: 25,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: DEFAULT_MIN_REPUTATION,
       contributionPoints: 65,
       goldReward: 260,
       xpReward: 85,
@@ -945,6 +1194,11 @@ export function createInitialState() {
         '避免重複註冊事件監聽器造成記憶體洩漏',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'core',
+      stakeGold: 25,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: DEFAULT_MIN_REPUTATION,
       contributionPoints: 55,
       goldReward: 220,
       xpReward: 70,
@@ -977,6 +1231,11 @@ export function createInitialState() {
         '保留變數佔位符語意且不可缺漏鍵值',
       ],
       cashBountyUsd: 10,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 40,
       goldReward: 150,
       xpReward: 50,
@@ -1006,6 +1265,11 @@ export function createInitialState() {
         '測試至少覆蓋 3 種邊界情境',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 35,
       goldReward: 135,
       xpReward: 45,
@@ -1038,6 +1302,11 @@ export function createInitialState() {
         '以條列或表格輸出明確修復方案',
       ],
       cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
       contributionPoints: 25,
       goldReward: 110,
       xpReward: 35,
@@ -1067,6 +1336,11 @@ export function createInitialState() {
         '處理單引號、雙引號與 JSX 屬性萃取並附測試範例',
       ],
       cashBountyUsd: 40,
+      poolBucket: 'core',
+      stakeGold: 30,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: DEFAULT_MIN_REPUTATION,
       contributionPoints: 90,
       goldReward: 340,
       xpReward: 110,
@@ -1096,6 +1370,11 @@ export function createInitialState() {
         '確保不暴露任何 repository secret 給不受信任 fork',
       ],
       cashBountyUsd: 25,
+      poolBucket: 'core',
+      stakeGold: 30,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: DEFAULT_MIN_REPUTATION,
       contributionPoints: 70,
       goldReward: 260,
       xpReward: 85,
@@ -1359,8 +1638,12 @@ export function createInitialState() {
     payouts: [],
     redeemCodes: createInitialRedeemCodes(now),
     deviceAuthorizations: {},
+    reviewQueue: createInitialReviewQueue(),
+    reviewHistory: [],
+    antiSlopTreasuryGold: 0,
     settings: {
       strictDeviceReview: false,
+      peerReviewRequired: false,
       sessionSecret: crypto.randomBytes(32).toString('hex'),
     },
   });

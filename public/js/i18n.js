@@ -544,6 +544,53 @@ export const DICTIONARY = Object.freeze({
     'toast.ideaCertExported': '📜 已匯出《{name}》創意首發溯源證書 PNG！',
     'toast.copycatBlocked': '🛡️ 偵測到與既有原創創意《{name}》高度相似（{pct}%），建議直接加入原創意共建！',
     'toast.hashCopied': '🔐 已複製完整 SHA-256 創意溯源指紋！',
+
+    // Anti-Dilution Governance & Peer Review Queue
+    'review.panelTitle': '⚖️ 實幹審閱佇列（防垃圾 AI 過濾站）',
+    'review.pendingBadge': '{count} 筆待審',
+    'review.refreshBtn': '🔄 刷新佇列',
+    'review.panelDesc': '實幹者與維護者擁有合併否決權：核准優質 PR 領 <strong>+15G</strong> 審閱獎，揪出並駁回垃圾 AI 注水可直接<strong>沒收對方押金歸自己</strong>！',
+    'review.empty': '目前沒有待審閱的提交，所有佇列均已清空！',
+    'review.historyTitle': '📜 近期審閱裁決紀錄',
+    'review.submitterPrefix': '👤 提交者：{name}',
+    'review.stakeBadge': '🔒 {stake} G 押金',
+    'review.aiScoreGood': '🤖 AI 盲審 {score}/100 優質',
+    'review.aiScoreMed': '🤖 AI 盲審 {score}/100 需複查',
+    'review.aiScoreSlop': '🤖 AI 盲審 {score}/100 ⚠️ 垃圾 AI 注水警告',
+    'review.diffBloat': '{bloat}% 注水',
+    'review.previewSummary': '🔍 展開檢視提交內容預覽',
+    'review.approveBtn': '✅ 批准合併 (+15G)',
+    'review.rejectBtn': '🚫 駁回垃圾 (沒收押金)',
+    'review.rejectBtnWithStake': '🚫 駁回垃圾 (沒收 {stake}G 押金)',
+    'review.historyApproved': '✅ 已核准合併',
+    'review.historyRejected': '🚫 已駁回垃圾',
+    'review.historyReward': '+{gold}G 審閱獎',
+    'review.historySlashed': '沒收 +{stake}G 押金',
+    'review.jumpToQueue': '⚖️ 前往審閱佇列',
+    'gov.bucketCore': '🔥 核心池 70%',
+    'gov.bucketPeripheral': '⚙️ 週邊池 ≤30%',
+    'gov.stakeTag': '🔒 押金 {gold}G',
+    'gov.minRepTag': '🛡️ 信譽 ≥ {rep}',
+    'gov.quotaHeader': '🛡️ 防稀釋配額條（85% 實幹池內強制分桶隔離）',
+    'gov.quotaProofHint': '週邊刷單封頂 ≤30%，絕不稀釋核心實幹',
+    'gov.coreBarLabel': '🔥 核心實幹池 {cap}% ({pts} pt)',
+    'gov.periphBarLabel': '⚙️ 週邊微任務池 ≤{cap}% ({pts} pt)',
+    'badge.guildPendingReview': '⚖️ 待實幹審閱',
+    'modal.guild.submitForReview': '⚖️ 提交至雙階段實幹審閱佇列（標準防刷流程）',
+    'modal.guild.submitForReviewEnforced': '⚖️ 全局強制雙階段實幹審閱已啟用（送出後自動進入佇列）',
+    'workers.cooldownBadge': '⏳ 反刷單冷卻中 ({sec}s)',
+    'workers.strikesBadge': '⚠️ 垃圾警示 {strikes}/2',
+    'admin.peerReviewTitle': '⚖️ 全局強制雙階段實幹審閱（Peer Review Required）',
+    'admin.peerReviewDesc': '開啟後，所有工會大單通過機器硬門檻後將自動進入實幹審閱佇列，須由實幹者或維護者核准才合併結算。',
+    'admin.peerReviewOn': '⚖️ 強制審閱 ON',
+    'admin.peerReviewOff': '⚡ 自選審閱',
+    'toast.reviewApproved': '✅ 已批准合併優質 PR！獲得 +{gold}G 審閱獎勵與 +{pts} 貢獻點！',
+    'toast.reviewRejected': '🚫 已攔截垃圾 AI 刷單！沒收 {stake}G 押金入帳！',
+    'toast.reviewRejectedNoStake': '🚫 已攔截並駁回垃圾 AI 提交！對方 0 貢獻並扣信譽分！',
+    'toast.reviewDecideFailed': '審閱操作失敗：{err}',
+    'toast.reviewRefreshed': '🔄 已同步最新實幹審閱佇列',
+    'toast.guildQueuedForReview': '⚖️ 已過機器硬門檻！進入實幹審閱佇列（AI 盲審 {score}/100），可立即在上方審閱合併！',
+    'toast.adminPeerReviewChanged': '⚖️ 全局強制實幹審閱已切換為：{state}',
   },
 
   'zh-CN': {
@@ -1066,6 +1113,53 @@ export const DICTIONARY = Object.freeze({
     'toast.ideaCertExported': '📜 已导出《{name}》创意首发溯源证书 PNG！',
     'toast.copycatBlocked': '🛡️ 检测到与既有原创创意《{name}》高度相似（{pct}%），建议直接加入原创意共建！',
     'toast.hashCopied': '🔐 已复制完整 SHA-256 创意溯源指纹！',
+
+    // Anti-Dilution Governance & Peer Review Queue
+    'review.panelTitle': '⚖️ 实干审阅队列（防垃圾 AI 过滤站）',
+    'review.pendingBadge': '{count} 笔待审',
+    'review.refreshBtn': '🔄 刷新队列',
+    'review.panelDesc': '实干者与维护者拥有合并否决权：核准优质 PR 领 <strong>+15G</strong> 审阅奖，揪出并驳回垃圾 AI 注水可直接<strong>没收对方押金归自己</strong>！',
+    'review.empty': '当前没有待审阅的提交，所有队列均已清空！',
+    'review.historyTitle': '📜 近期审阅裁决记录',
+    'review.submitterPrefix': '👤 提交者：{name}',
+    'review.stakeBadge': '🔒 {stake} G 押金',
+    'review.aiScoreGood': '🤖 AI 盲审 {score}/100 优质',
+    'review.aiScoreMed': '🤖 AI 盲审 {score}/100 需复查',
+    'review.aiScoreSlop': '🤖 AI 盲审 {score}/100 ⚠️ 垃圾 AI 注水警告',
+    'review.diffBloat': '{bloat}% 注水',
+    'review.previewSummary': '🔍 展开查看提交内容预览',
+    'review.approveBtn': '✅ 批准合并 (+15G)',
+    'review.rejectBtn': '🚫 驳回垃圾 (没收押金)',
+    'review.rejectBtnWithStake': '🚫 驳回垃圾 (没收 {stake}G 押金)',
+    'review.historyApproved': '✅ 已核准合并',
+    'review.historyRejected': '🚫 已驳回垃圾',
+    'review.historyReward': '+{gold}G 审阅奖',
+    'review.historySlashed': '没收 +{stake}G 押金',
+    'review.jumpToQueue': '⚖️ 前往审阅队列',
+    'gov.bucketCore': '🔥 核心池 70%',
+    'gov.bucketPeripheral': '⚙️ 周边池 ≤30%',
+    'gov.stakeTag': '🔒 押金 {gold}G',
+    'gov.minRepTag': '🛡️ 信誉 ≥ {rep}',
+    'gov.quotaHeader': '🛡️ 防稀释配额条（85% 实干池内强制分桶隔离）',
+    'gov.quotaProofHint': '周边刷单封顶 ≤30%，绝不稀释核心实干',
+    'gov.coreBarLabel': '🔥 核心实干池 {cap}% ({pts} pt)',
+    'gov.periphBarLabel': '⚙️ 周边微任务池 ≤{cap}% ({pts} pt)',
+    'badge.guildPendingReview': '⚖️ 待实干审阅',
+    'modal.guild.submitForReview': '⚖️ 提交至双阶段实干审阅队列（标准防刷流程）',
+    'modal.guild.submitForReviewEnforced': '⚖️ 全局强制双阶段实干审阅已启用（送出后自动进入队列）',
+    'workers.cooldownBadge': '⏳ 反刷单冷却中 ({sec}s)',
+    'workers.strikesBadge': '⚠️ 垃圾警示 {strikes}/2',
+    'admin.peerReviewTitle': '⚖️ 全局强制双阶段实干审阅（Peer Review Required）',
+    'admin.peerReviewDesc': '开启后，所有工会大单通过机器硬门槛后将自动进入实干审阅队列，须由实干者或维护者核准才合并结算。',
+    'admin.peerReviewOn': '⚖️ 强制审阅 ON',
+    'admin.peerReviewOff': '⚡ 自选审阅',
+    'toast.reviewApproved': '✅ 已批准合并优质 PR！获得 +{gold}G 审阅奖励与 +{pts} 贡献点！',
+    'toast.reviewRejected': '🚫 已拦截垃圾 AI 刷单！没收 {stake}G 押金入账！',
+    'toast.reviewRejectedNoStake': '🚫 已拦截并驳回垃圾 AI 提交！对方 0 贡献并扣信誉分！',
+    'toast.reviewDecideFailed': '审阅操作失败：{err}',
+    'toast.reviewRefreshed': '🔄 已同步最新实干审阅队列',
+    'toast.guildQueuedForReview': '⚖️ 已过机器硬门槛！进入实干审阅队列（AI 盲审 {score}/100），可立即在上方审阅合并！',
+    'toast.adminPeerReviewChanged': '⚖️ 全局强制实干审阅已切换为：{state}',
   },
 
   en: {
@@ -1588,6 +1682,53 @@ export const DICTIONARY = Object.freeze({
     'toast.ideaCertExported': '📜 Exported Proof of First Spark Certificate PNG for "{name}"!',
     'toast.copycatBlocked': '🛡️ Blocked potential copycat of "{name}" ({pct}% match) — join the original idea instead!',
     'toast.hashCopied': '🔐 Full SHA-256 idea provenance hash copied!',
+
+    // Anti-Dilution Governance & Peer Review Queue
+    'review.panelTitle': '⚖️ Peer Review Queue (Anti-Slop Filter Station)',
+    'review.pendingBadge': '{count} Pending',
+    'review.refreshBtn': '🔄 Refresh Queue',
+    'review.panelDesc': 'Core builders & maintainers hold merge veto power: approve clean PRs for <strong>+15G</strong> review reward, or reject AI slop to <strong>slash & claim their stake directly</strong>!',
+    'review.empty': 'No submissions pending peer review — the queue is spotless!',
+    'review.historyTitle': '📜 Recent Review Verdicts',
+    'review.submitterPrefix': '👤 Submitter: {name}',
+    'review.stakeBadge': '🔒 {stake} G Stake',
+    'review.aiScoreGood': '🤖 AI Blind Review {score}/100 Clean',
+    'review.aiScoreMed': '🤖 AI Blind Review {score}/100 Needs Check',
+    'review.aiScoreSlop': '🤖 AI Blind Review {score}/100 ⚠️ AI Slop Bloat Alert',
+    'review.diffBloat': '{bloat}% bloat',
+    'review.previewSummary': '🔍 Expand Submission Preview',
+    'review.approveBtn': '✅ Approve Merge (+15G)',
+    'review.rejectBtn': '🚫 Reject Slop (Slash Stake)',
+    'review.rejectBtnWithStake': '🚫 Reject Slop (Slash {stake}G)',
+    'review.historyApproved': '✅ Approved Merge',
+    'review.historyRejected': '🚫 Rejected Slop',
+    'review.historyReward': '+{gold}G Review Bonus',
+    'review.historySlashed': 'Slashed +{stake}G Stake',
+    'review.jumpToQueue': '⚖️ Go to Review Queue',
+    'gov.bucketCore': '🔥 Core Pool 70%',
+    'gov.bucketPeripheral': '⚙️ Peripheral Pool ≤30%',
+    'gov.stakeTag': '🔒 Stake {gold}G',
+    'gov.minRepTag': '🛡️ Rep ≥ {rep}',
+    'gov.quotaHeader': '🛡️ Anti-Dilution Bucket Cap (Inside 85% Merit Pool)',
+    'gov.quotaProofHint': 'Peripheral farming capped ≤30% — zero core dilution',
+    'gov.coreBarLabel': '🔥 Core Builders {cap}% ({pts} pt)',
+    'gov.periphBarLabel': '⚙️ Peripheral ≤{cap}% ({pts} pt)',
+    'badge.guildPendingReview': '⚖️ Pending Review',
+    'modal.guild.submitForReview': '⚖️ Submit to 2-Stage Peer Review Queue (Standard Anti-Slop Flow)',
+    'modal.guild.submitForReviewEnforced': '⚖️ Global Peer Review Required is ON (auto-queued after CI checks)',
+    'workers.cooldownBadge': '⏳ Anti-Slop Cooldown ({sec}s)',
+    'workers.strikesBadge': '⚠️ Slop Strikes {strikes}/2',
+    'admin.peerReviewTitle': '⚖️ Global 2-Stage Peer Review Required',
+    'admin.peerReviewDesc': 'When enabled, all Guild bounties passing automated checks enter the Peer Review Queue for maintainer/builder merge approval.',
+    'admin.peerReviewOn': '⚖️ Peer Review ON',
+    'admin.peerReviewOff': '⚡ Optional Review',
+    'toast.reviewApproved': '✅ Approved clean PR merge! Earned +{gold}G review bonus & +{pts} pts!',
+    'toast.reviewRejected': '🚫 Blocked AI slop farm! Slashed & claimed +{stake}G stake!',
+    'toast.reviewRejectedNoStake': '🚫 Blocked & rejected AI slop submission! 0 pts awarded & rep penalized!',
+    'toast.reviewDecideFailed': 'Review decision failed: {err}',
+    'toast.reviewRefreshed': '🔄 Peer review queue synced',
+    'toast.guildQueuedForReview': '⚖️ Passed CI hard gate! Queued for Peer Review (AI Blind Review {score}/100) — review it above!',
+    'toast.adminPeerReviewChanged': '⚖️ Global Peer Review Required set to: {state}',
   },
 });
 
@@ -1982,7 +2123,69 @@ const NPC_USER_I18N = Object.freeze({
   'npc-yuna': { 'zh-TW': '星雲織女 Yuna', 'zh-CN': '星云织女 Yuna', en: 'Nebula Weaver Yuna' },
   'npc-rin': { 'zh-TW': '架構師 Rin', 'zh-CN': '架构师 Rin', en: 'Architect Rin' },
   'npc-zero': { 'zh-TW': '夜貓工程師 Zero', 'zh-CN': '夜猫工程师 Zero', en: 'Night Owl Zero' },
+  'npc-slopbot': { 'zh-TW': '刷單機器人 SlopBot-99', 'zh-CN': '刷单机器人 SlopBot-99', en: 'Spam Bot SlopBot-99' },
   'founder-demo': { 'zh-TW': '創始鎮長 (Demo)', 'zh-CN': '创始镇长 (Demo)', en: 'Founding Mayor (Demo)' },
+});
+
+const REVIEW_ITEM_I18N = Object.freeze({
+  'rev-clean-01': {
+    'zh-TW': {
+      taskTitle: '實作小鎮鍵盤快捷鍵導覽與快速切換建築視角 PR',
+      projectName: '像素算力鎮 v1.0',
+      submitterName: '架構師 Rin',
+      summary: '跨模型 AI 盲審評分 94/100：結構精煉、焦點保護完備、CI 單元測試全綠，極低注水風險。',
+      flags: ['✅ CI 測試全綠', '✅ 零冗餘注水', '✅ 符合核心架構規範'],
+      contentPreview:
+        'export function bindTownHotkeys(onTabSwitch) {\n  window.addEventListener("keydown", (e) => {\n    if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) return;\n    const map = { "1": "factory", "2": "guild", "3": "incubator", "4": "workers", "5": "revenue" };\n    if (map[e.key]) onTabSwitch(map[e.key]);\n  });\n}\n// 6/6 unit tests passed (0 warnings)',
+    },
+    'zh-CN': {
+      taskTitle: '实现小镇键盘快捷键导航与快速切换建筑视角 PR',
+      projectName: '像素算力镇 v1.0',
+      submitterName: '架构师 Rin',
+      summary: '跨模型 AI 盲审评分 94/100：结构精炼、焦点保护完备、CI 单元测试全绿，极低注水风险。',
+      flags: ['✅ CI 测试全绿', '✅ 零冗余注水', '✅ 符合核心架构规范'],
+      contentPreview:
+        'export function bindTownHotkeys(onTabSwitch) {\n  window.addEventListener("keydown", (e) => {\n    if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) return;\n    const map = { "1": "factory", "2": "guild", "3": "incubator", "4": "workers", "5": "revenue" };\n    if (map[e.key]) onTabSwitch(map[e.key]);\n  });\n}\n// 6/6 unit tests passed (0 warnings)',
+    },
+    en: {
+      taskTitle: 'Implement Keyboard Shortcuts & Quick Building Focus PR',
+      projectName: 'PixelCompute v1.0',
+      submitterName: 'Architect Rin',
+      summary: 'Cross-model AI blind review 94/100: concise diff, safe input focus guard, all CI unit tests green, minimal bloat.',
+      flags: ['✅ CI Tests Green', '✅ Zero Bloat', '✅ Core Architecture Compliant'],
+      contentPreview:
+        'export function bindTownHotkeys(onTabSwitch) {\n  window.addEventListener("keydown", (e) => {\n    if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) return;\n    const map = { "1": "factory", "2": "guild", "3": "incubator", "4": "workers", "5": "revenue" };\n    if (map[e.key]) onTabSwitch(map[e.key]);\n  });\n}\n// 6/6 unit tests passed (0 warnings)',
+    },
+  },
+  'rev-slop-01': {
+    'zh-TW': {
+      taskTitle: '[$40 現金懸賞] 支援 TypeScript JSX AST 自動抽取翻譯鍵值',
+      projectName: 'i18n-PixelBot',
+      submitterName: '刷單機器人 SlopBot-99',
+      summary: '⚠️ 疑似低效垃圾 AI 瘋狂注水！Diff 暴增 +4,820 行（87% 重複無意義註解與空函式），建議立即駁回並沒收押金！',
+      flags: ['⚠️ 87% 重複註解注水', '🚫 含大量空函式佔位符', '⚠️ Diff 異常暴增 (+4,820)'],
+      contentPreview:
+        '// Auto-generated helper wrapper #1 ... (repeated 1,240 times)\n// TODO: implement AST parser later\nexport function parseAstStub1() { return null; }\nexport function parseAstStub2() { return null; }\n// ... +4,800 lines of padded boilerplate comments ...',
+    },
+    'zh-CN': {
+      taskTitle: '[$40 现金悬赏] 支持 TypeScript JSX AST 自动抽取翻译键值',
+      projectName: 'i18n-PixelBot',
+      submitterName: '刷单机器人 SlopBot-99',
+      summary: '⚠️ 疑似低效垃圾 AI 疯狂注水！Diff 暴增 +4,820 行（87% 重复无意义注释与空函数），建议立即驳回并没收押金！',
+      flags: ['⚠️ 87% 重复注释注水', '🚫 含大量空函数占位符', '⚠️ Diff 异常暴增 (+4,820)'],
+      contentPreview:
+        '// Auto-generated helper wrapper #1 ... (repeated 1,240 times)\n// TODO: implement AST parser later\nexport function parseAstStub1() { return null; }\nexport function parseAstStub2() { return null; }\n// ... +4,800 lines of padded boilerplate comments ...',
+    },
+    en: {
+      taskTitle: '[$40 Cash Bounty] TypeScript JSX AST Translation Key Extractor',
+      projectName: 'i18n-PixelBot',
+      submitterName: 'Spam Bot SlopBot-99',
+      summary: '⚠️ High-risk AI slop bloat detected! Diff ballooned +4,820 lines (87% repetitive comments & empty stubs) — reject to slash stake!',
+      flags: ['⚠️ 87% Repetitive Comment Bloat', '🚫 Empty Stub Functions', '⚠️ Abnormal Diff Spike (+4,820)'],
+      contentPreview:
+        '// Auto-generated helper wrapper #1 ... (repeated 1,240 times)\n// TODO: implement AST parser later\nexport function parseAstStub1() { return null; }\nexport function parseAstStub2() { return null; }\n// ... +4,800 lines of padded boilerplate comments ...',
+    },
+  },
 });
 
 const BADGE_I18N = Object.freeze({
@@ -2006,6 +2209,8 @@ const NAME_TEXT_MAP = Object.freeze({
   '星雲織女 Yuna': NPC_USER_I18N['npc-yuna'],
   '架構師 Rin': NPC_USER_I18N['npc-rin'],
   '夜貓工程師 Zero': NPC_USER_I18N['npc-zero'],
+  '刷單機器人 SlopBot-99': NPC_USER_I18N['npc-slopbot'],
+  '刷单机器人 SlopBot-99': NPC_USER_I18N['npc-slopbot'],
   '社群': { 'zh-TW': '社群', 'zh-CN': '社区', en: 'Community' },
   '閃電小吉 (Flash-01)': WORKER_NAME_I18N['w-flash-01'],
   '架構師阿瓜 (Pro-01)': WORKER_NAME_I18N['w-pro-01'],
@@ -2474,6 +2679,167 @@ export function localizeLeaderboardEntry(row, locale) {
   return { displayName, badge };
 }
 
+function translateReviewFlag(flag, loc) {
+  const s = String(flag || '');
+  if (!s || loc === 'zh-TW') return s;
+  if (loc === 'zh-CN') {
+    return s
+      .replaceAll('測試', '测试')
+      .replaceAll('全綠', '全绿')
+      .replaceAll('冗餘', '冗余')
+      .replaceAll('重複', '重复')
+      .replaceAll('註解', '注释')
+      .replaceAll('無意義', '无意义')
+      .replaceAll('空函式', '空函数')
+      .replaceAll('佔位符', '占位符')
+      .replaceAll('異常', '异常')
+      .replaceAll('規範', '规范')
+      .replaceAll('高風險', '高风险')
+      .replaceAll('低風險', '低风险')
+      .replaceAll('結構', '结构');
+  }
+  // English translation for known & dynamic AI blind review flags (0 CJK leakage)
+  if (/CI.*(綠|绿|pass|green)/i.test(s)) return '✅ CI Checks Green';
+  if (/注水|重複註解|重复注释|bloat/i.test(s)) {
+    const pct = s.match(/(\d+)%/);
+    return pct ? `⚠️ ${pct[1]}% Repetitive Comment Bloat` : '⚠️ High Comment/Boilerplate Bloat';
+  }
+  if (/空函式|空函数|stub|佔位|占位/i.test(s)) return '🚫 Empty Stub / Placeholder Functions';
+  if (/Diff.*暴增|行數過多|行数过多|oversized/i.test(s)) return '⚠️ Oversized Diff Spike';
+  if (/重複行|重复行|duplicate/i.test(s)) return '⚠️ Excessive Duplicate Lines';
+  if (/TODO|FIXME/i.test(s)) return '⚠️ Unfinished TODO / FIXME Stubs';
+  if (/精煉|精炼|乾淨|干净|clean|零冗餘|零冗余/i.test(s)) return '✅ Clean & Concise Diff';
+  if (/PR|GitHub/i.test(s)) return '🔗 GitHub PR Attached';
+  if (/[\u4e00-\u9fff]/.test(s)) return '🤖 Automated AI Blind-Review Signal';
+  return s;
+}
+
+function translateReviewSummary(summary, aiScore, riskLevel, bloatRatioPct, loc) {
+  const s = String(summary || '');
+  if (!s) {
+    if (loc === 'en') {
+      return riskLevel === 'high'
+        ? `High-risk AI slop detected (${aiScore}/100, ${bloatRatioPct}% bloat) — reject to slash stake.`
+        : `Cross-model AI blind review scored ${aiScore}/100 (${bloatRatioPct}% bloat).`;
+    }
+    return '';
+  }
+  if (loc === 'zh-TW') return s;
+  if (loc === 'zh-CN') {
+    return s
+      .replaceAll('評分', '评分')
+      .replaceAll('結構', '结构')
+      .replaceAll('精煉', '精炼')
+      .replaceAll('焦點', '焦点')
+      .replaceAll('完備', '完备')
+      .replaceAll('單元測試', '单元测试')
+      .replaceAll('全綠', '全绿')
+      .replaceAll('風險', '风险')
+      .replaceAll('瘋狂', '疯狂')
+      .replaceAll('重複', '重复')
+      .replaceAll('無意義', '无意义')
+      .replaceAll('註解', '注释')
+      .replaceAll('空函式', '空函数')
+      .replaceAll('建議', '建议')
+      .replaceAll('駁回', '驳回')
+      .replaceAll('沒收', '没收')
+      .replaceAll('過高', '过高')
+      .replaceAll('體檢', '体检');
+  }
+  if (!/[\u4e00-\u9fff]/.test(s)) return s;
+  if (riskLevel === 'high' || Number(aiScore) < 45) {
+    return `⚠️ High-risk AI slop alert (${aiScore}/100, ${bloatRatioPct}% bloat): repetitive boilerplate & low signal-to-noise ratio. Recommend rejecting to slash stake.`;
+  }
+  if (riskLevel === 'medium' || Number(aiScore) < 70) {
+    return `🤖 Cross-model AI blind review (${aiScore}/100, ${bloatRatioPct}% bloat): moderate code signal — human builder inspection recommended.`;
+  }
+  return `✅ Cross-model AI blind review (${aiScore}/100, ${bloatRatioPct}% bloat): clean, focused implementation ready for peer merge approval.`;
+}
+
+export function localizeReviewItem(item, locale, { tasks = [], projects = [] } = {}) {
+  const loc = normalizeLocale(locale);
+  if (!item || typeof item !== 'object') {
+    return {
+      taskTitle: '',
+      projectName: '',
+      submitterName: '',
+      summary: '',
+      flags: [],
+      contentPreview: '',
+    };
+  }
+
+  const ai = item.aiReview || item.aiReport || item.blindReview || {};
+  const aiScore = Number(ai.aiScore ?? item.aiScore ?? 80);
+  const riskLevel = ai.riskLevel || item.riskLevel || (aiScore >= 70 ? 'low' : aiScore >= 45 ? 'medium' : 'high');
+  const bloatRatioPct = Number(ai.bloatRatioPct ?? item.bloatRatioPct ?? 0);
+
+  const preset = item.id && REVIEW_ITEM_I18N[item.id]?.[loc];
+  if (preset) {
+    return {
+      taskTitle: preset.taskTitle,
+      projectName: preset.projectName,
+      submitterName: preset.submitterName,
+      summary: preset.summary,
+      flags: [...preset.flags],
+      contentPreview:
+        loc === 'en' && /[\u4e00-\u9fff]/.test(String(item.content || item.contentPreview || ''))
+          ? preset.contentPreview
+          : item.content || item.contentPreview || preset.contentPreview,
+    };
+  }
+
+  const matchedTask = tasks.find((tk) => tk.id === item.taskId);
+  const matchedProject = projects.find((p) => p.id === item.projectId);
+
+  let taskTitle = matchedTask
+    ? localizeTask(matchedTask, loc).title
+    : item.taskId && TASK_I18N[item.taskId]?.[loc]?.title
+      ? TASK_I18N[item.taskId][loc].title
+      : localizeTask({ id: item.taskId, title: item.taskTitle || item.title || item.taskId || '' }, loc).title;
+
+  let projectName = matchedProject
+    ? localizeProject(matchedProject, loc).shortName || localizeProject(matchedProject, loc).name
+    : item.projectId && PROJECT_I18N[item.projectId]?.[loc]?.shortName
+      ? PROJECT_I18N[item.projectId][loc].shortName
+      : item.projectName || item.projectId || '';
+
+  const submitterName = localizeUser(
+    {
+      id: item.submittedByUserId || item.submitterId || item.submittedBy || item.userId,
+      displayName: item.submittedByName || item.submitterName || item.authorName || '',
+    },
+    loc,
+  ).displayName;
+
+  if (loc === 'en' && /[\u4e00-\u9fff]/.test(taskTitle)) {
+    taskTitle = `Guild Bounty Deliverable (${item.taskId || item.id})`;
+  }
+  if (loc === 'en' && /[\u4e00-\u9fff]/.test(projectName)) {
+    projectName = item.projectId || 'Incubator Project';
+  }
+
+  const rawSummary = ai.summary || item.aiSummary || item.summary || '';
+  const summary = translateReviewSummary(rawSummary, aiScore, riskLevel, bloatRatioPct, loc);
+
+  const rawFlags = Array.isArray(ai.flags) ? ai.flags : Array.isArray(item.flags) ? item.flags : [];
+  const flags = rawFlags.map((f) => translateReviewFlag(f, loc));
+
+  let contentPreview = String(item.content || item.contentPreview || '');
+  if (loc === 'en' && /[\u4e00-\u9fff]/.test(contentPreview)) {
+    contentPreview = contentPreview.replace(/[\u4e00-\u9fff]+/g, '[localized-note]');
+  }
+
+  return {
+    taskTitle,
+    projectName,
+    submitterName,
+    summary,
+    flags,
+    contentPreview,
+  };
+}
+
 export function localizeRevenueLabel(label, locale) {
   const loc = normalizeLocale(locale);
   if (!label) return '';
@@ -2705,6 +3071,25 @@ export function localizeFeedMessage(msg, locale) {
     return `[CLI:${m[1]}] ${wName}: ${m[3]}`;
   }
 
+  // Pattern 17: Governance peer review queued / approved / rejected
+  if (loc === 'en') {
+    if (s.includes('實幹審閱佇列') || s.includes('实干审阅队列')) {
+      return '⚖️ Deliverable passed CI hard gate and entered the Peer Review Queue.';
+    }
+    if ((s.includes('沒收') || s.includes('没收')) && (s.includes('押金') || s.includes('垃圾'))) {
+      const stakeMatch = s.match(/(\d+)\s*G/);
+      return stakeMatch
+        ? `🚫 Rejected AI slop submission & slashed +${stakeMatch[1]}G stake to reviewer!`
+        : '🚫 Rejected AI slop submission & slashed submitter stake!';
+    }
+    if ((s.includes('批准合併') || s.includes('核准合併') || s.includes('審閱通過')) && s.includes('G')) {
+      return '✅ Peer reviewer approved clean PR merge (+15G review bonus)!';
+    }
+    if (s.includes('反刷單冷卻') || s.includes('冷卻')) {
+      return '⏳ Worker entered anti-slop cooldown after repeated rejected submissions.';
+    }
+  }
+
   if (loc === 'zh-CN') {
     return s
       .replaceAll('像素算力鎮', '像素算力镇')
@@ -2718,7 +3103,12 @@ export function localizeFeedMessage(msg, locale) {
       .replaceAll('穩定幣', '稳定币')
       .replaceAll('兌換碼', '兑换码')
       .replaceAll('裝置', '设备')
-      .replaceAll('審核', '审核');
+      .replaceAll('審核', '审核')
+      .replaceAll('審閱', '审阅')
+      .replaceAll('佇列', '队列')
+      .replaceAll('沒收', '没收')
+      .replaceAll('駁回', '驳回')
+      .replaceAll('冷卻', '冷却');
   }
 
   return s;
@@ -2820,6 +3210,24 @@ export function localizeServerMessage(msg, locale) {
     if (s.includes('信箱已被註冊') || s.includes('邮箱已被注册')) return 'This email is already registered.';
     if (s.includes('帳號或密碼錯誤') || s.includes('账号或密码错误')) return 'Invalid email or password.';
     if (s.includes('請先綁定') && s.includes('錢包')) return 'Please bind a stablecoin payout wallet first.';
+    if (s.includes('冷卻') || s.includes('冷却') || s.includes('COOLDOWN')) {
+      const secMatch = s.match(/(\d+)\s*[秒s]/i);
+      return secMatch
+        ? `Worker is in anti-slop cooldown (${secMatch[1]}s remaining).`
+        : 'Worker is currently in anti-slop cooldown.';
+    }
+    if ((s.includes('信譽') || s.includes('信誉')) && (s.includes('不足') || s.includes('門檻') || s.includes('门槛'))) {
+      return 'Reputation score too low for this core Guild bounty.';
+    }
+    if (s.includes('押金') && (s.includes('不足') || s.includes('金幣') || s.includes('金币'))) {
+      return 'Insufficient Town Gold to cover the bounty sincerity stake.';
+    }
+    if ((s.includes('審閱') || s.includes('审阅')) && (s.includes('權限') || s.includes('权限'))) {
+      return 'Only core builders, project originators, or mayors may review this submission.';
+    }
+    if ((s.includes('找不到') || s.includes('已處理') || s.includes('已处理')) && (s.includes('審閱') || s.includes('审阅'))) {
+      return 'Review item not found or already decided.';
+    }
   }
 
   if (loc === 'zh-CN') {

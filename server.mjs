@@ -26,6 +26,25 @@ import {
   findSimilarIdeas,
   verifyProvenanceChain,
 } from './src/server/provenance.mjs';
+import {
+  CORE_BUCKET_PCT,
+  DEFAULT_COOLDOWN_SEC,
+  DEFAULT_MIN_REPUTATION,
+  PERIPHERAL_BUCKET_PCT,
+  REVIEWER_REWARD_GOLD,
+  REVIEWER_REWARD_POINTS,
+  REVIEW_REJECT_REPUTATION_PENALTY,
+  SLOP_STRIKE_LIMIT,
+  canUserReview,
+  computeAntiDilutionMeritSplit,
+  computeBucketStats,
+  ensureProjectBuckets,
+  getCooldownSeconds,
+  getTaskBucket,
+  getTaskMinReputation,
+  getTaskStakeGold,
+  runAiBlindReview,
+} from './src/server/governance.mjs';
 import { verifySubmission, validateGitHubPrUrl } from './src/server/verifier.mjs';
 import {
   FOUNDER_USER_ID,
@@ -191,6 +210,11 @@ function buildTaskFromGitHubIssue(issue, project, repoInfo, requestedTrack, { is
         `解決 ${repoInfo.fullName} Issue #${issueNum} 描述的問題並附驗證說明`,
       ],
     cashBountyUsd: 0,
+    poolBucket: isApi ? 'peripheral' : 'core',
+    stakeGold: isApi ? 0 : 25,
+    stakedGold: 0,
+    stakedByUserId: null,
+    minReputation: isApi ? 0 : DEFAULT_MIN_REPUTATION,
     contributionPoints: isApi ? 30 : 60,
     goldReward: isApi ? 125 : 240,
     xpReward: isApi ? 40 : 80,
@@ -419,13 +443,42 @@ function buildChainedProject(state, user, fields) {
     contributorsSharePct: REVENUE_SPLIT.meritPoolPct,
     inspiredByHash: fields.inspiredByHash || null,
     revenueSplit: { ...REVENUE_SPLIT },
+    poolCaps: {
+      coreSharePct: CORE_BUCKET_PCT,
+      peripheralSharePct: PERIPHERAL_BUCKET_PCT,
+    },
+    bucketPoints: fields.bucketPoints || { core: {}, peripheral: {} },
     createdAt: originatedAt,
     contributions: fields.contributions || {},
     contributorNames: fields.contributorNames || {},
   };
 }
 
+function buildProjectBucketsMap(state) {
+  const map = {};
+  for (const proj of state?.projects || []) {
+    ensureProjectBuckets(proj);
+    map[proj.id] = computeBucketStats(proj);
+  }
+  return map;
+}
+
+function projectClientState(state, userId) {
+  const projected = projectStateForUser(state, userId);
+  projected.reviewQueue = Array.isArray(state.reviewQueue) ? state.reviewQueue : [];
+  projected.reviewHistory = Array.isArray(state.reviewHistory) ? state.reviewHistory : [];
+  projected.antiSlopTreasuryGold = Number(state.antiSlopTreasuryGold || 0);
+  projected.projectBuckets = buildProjectBucketsMap(state);
+  projected.settings = {
+    ...(projected.settings || {}),
+    strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+    peerReviewRequired: Boolean(state.settings?.peerReviewRequired),
+  };
+  return projected;
+}
+
 function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, label) {
+  ensureProjectBuckets(project);
   const gross = round2(grossRevenueUsd);
   const sparkPct = Number.isFinite(Number(project.sparkRoyaltyPct))
     ? Number(project.sparkRoyaltyPct)
@@ -433,9 +486,6 @@ function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, l
   const platformPct = Number.isFinite(Number(project.platformSharePct))
     ? Number(project.platformSharePct)
     : REVENUE_SPLIT.platformPct;
-  const meritPct = Number.isFinite(Number(project.meritPoolPct))
-    ? Number(project.meritPoolPct)
-    : REVENUE_SPLIT.meritPoolPct;
 
   const sparkRoyaltyUsd = round2(gross * (sparkPct / 100));
   const platformCarryUsd = round2(gross * (platformPct / 100));
@@ -454,8 +504,12 @@ function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, l
         userName: userName || userId,
         sparkUsd: 0,
         meritUsd: 0,
+        coreUsd: 0,
+        peripheralUsd: 0,
         totalUsd: 0,
         points: 0,
+        corePoints: 0,
+        peripheralPoints: 0,
         meritRatioPct: 0,
         totalSharePct: 0,
         isOriginator: userId === originatorId,
@@ -475,46 +529,45 @@ function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, l
   const origBucket = ensureUserBucket(originatorId, originatorName);
   origBucket.sparkUsd = round2(origBucket.sparkUsd + sparkRoyaltyUsd);
 
-  // 2) 85% Merit Pool strictly proportional to accepted contribution points
-  const entries = Object.entries(project.contributions || {})
-    .filter(([, pts]) => Number(pts) > 0)
-    .sort((a, b) => Number(b[1]) - Number(a[1]));
+  // 2) 85% Merit Pool with Anti-Dilution 70/30 Core vs Peripheral Bucket Caps
+  const meritSplit = computeAntiDilutionMeritSplit(project, meritPoolUsd);
+  const splitUsers = Object.values(meritSplit.detailsByUserId || {})
+    .filter((d) => d.points > 0)
+    .sort((a, b) => (b.totalUsd !== a.totalUsd ? b.totalUsd - a.totalUsd : b.points - a.points));
 
-  const totalPoints = entries.reduce((sum, [, pts]) => sum + Number(pts), 0);
-
-  if (totalPoints > 0 && entries.length > 0) {
-    let allocated = 0;
-    const contribPayouts = entries.map(([userId, pts]) => {
-      const numericPts = Number(pts);
-      const ratio = numericPts / totalPoints;
-      const amt = round2(meritPoolUsd * ratio);
-      allocated = round2(allocated + amt);
+  if (splitUsers.length > 0) {
+    for (const detail of splitUsers) {
+      const userId = detail.userId;
+      const amt = round2(meritSplit.payoutsByUserId[userId] || 0);
       const userName = (project.contributorNames && project.contributorNames[userId])
         || state.users?.[userId]?.displayName
         || userId;
-      return {
+      const meritRatioPct = meritPoolUsd > 0 ? round2((amt / meritPoolUsd) * 100) : 0;
+      const sharePct = gross > 0 ? round2((amt / gross) * 100) : 0;
+
+      const cp = {
         userId,
         userName,
         role: 'contributor',
-        points: numericPts,
-        meritRatioPct: round2(ratio * 100),
-        sharePct: round2(ratio * meritPct),
+        points: detail.points,
+        corePoints: detail.corePoints,
+        peripheralPoints: detail.peripheralPoints,
+        coreUsd: detail.coreUsd,
+        peripheralUsd: detail.peripheralUsd,
+        meritRatioPct,
+        sharePct,
         amountUsd: amt,
       };
-    });
-
-    // Fix any 0.01 rounding remainder on top contributor so total equals meritPoolUsd exactly
-    const diff = round2(meritPoolUsd - allocated);
-    if (diff !== 0 && contribPayouts.length > 0) {
-      contribPayouts[0].amountUsd = round2(contribPayouts[0].amountUsd + diff);
-    }
-
-    for (const cp of contribPayouts) {
       payouts.push(cp);
-      const bucket = ensureUserBucket(cp.userId, cp.userName);
-      bucket.meritUsd = round2(bucket.meritUsd + cp.amountUsd);
-      bucket.points = cp.points;
-      bucket.meritRatioPct = cp.meritRatioPct;
+
+      const bucket = ensureUserBucket(userId, userName);
+      bucket.meritUsd = round2(bucket.meritUsd + amt);
+      bucket.coreUsd = round2(bucket.coreUsd + detail.coreUsd);
+      bucket.peripheralUsd = round2(bucket.peripheralUsd + detail.peripheralUsd);
+      bucket.points = detail.points;
+      bucket.corePoints = detail.corePoints;
+      bucket.peripheralPoints = detail.peripheralPoints;
+      bucket.meritRatioPct = meritRatioPct;
     }
   } else {
     // Fallback if zero contributions recorded anywhere: goes to originator so total equals gross
@@ -564,6 +617,12 @@ function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, l
     grossRevenueUsd: gross,
     sparkRoyaltyUsd,
     meritPoolUsd,
+    corePoolUsd: meritSplit.corePoolUsd,
+    peripheralPoolUsd: meritSplit.peripheralPoolUsd,
+    bucketCaps: {
+      core: meritSplit.bucketCaps.core,
+      peripheral: meritSplit.bucketCaps.peripheral,
+    },
     platformCarryUsd,
     originatorTotalUsd,
     playerSparkUsd,
@@ -834,9 +893,10 @@ export function createAppServer(options = {}) {
         const state = await store.load();
         const ctx = getActiveUserContext(req, state);
         const user = sanitizeUserForClient(ctx.user);
-        const projected = projectStateForUser(state, ctx.userId);
+        const projected = projectClientState(state, ctx.userId);
         const isAdmin = ctx.user.role === 'founder';
         const { pendingDevices, allDevices } = getAdminDevicesData(state);
+        const peerReviewRequired = Boolean(state.settings?.peerReviewRequired);
 
         return sendJson(res, 200, {
           ok: true,
@@ -849,21 +909,33 @@ export function createAppServer(options = {}) {
             githubOAuthEnabled: isGitHubOAuthEnabled(),
             googleOAuthEnabled: isGoogleOAuthEnabled(),
             strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+            peerReviewRequired,
             version: VERSION,
             platformFeePct: PLATFORM_BOUNTY_FEE_PCT,
             billboardPriceUsd: BILLBOARD_PRICE_USD,
             revenueSplit: REVENUE_SPLIT,
+            governance: {
+              coreBucketPct: CORE_BUCKET_PCT,
+              peripheralBucketPct: PERIPHERAL_BUCKET_PCT,
+              reviewerRewardGold: REVIEWER_REWARD_GOLD,
+              reviewerRewardPoints: REVIEWER_REWARD_POINTS,
+              slopStrikeLimit: SLOP_STRIKE_LIMIT,
+              defaultCooldownSec: DEFAULT_COOLDOWN_SEC,
+              defaultMinReputation: DEFAULT_MIN_REPUTATION,
+            },
           },
           authConfig: {
             githubOAuthEnabled: isGitHubOAuthEnabled(),
             googleOAuthEnabled: isGoogleOAuthEnabled(),
             strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+            peerReviewRequired,
           },
           paymentConfig: getPaymentConfig(),
           adminData: isAdmin
             ? {
               isAdmin: true,
               strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+              peerReviewRequired,
               pendingDevices,
               allDevices,
               redeemCodes: state.redeemCodes || [],
@@ -872,6 +944,7 @@ export function createAppServer(options = {}) {
             : {
               isAdmin: false,
               strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+              peerReviewRequired,
               pendingDevices: [],
               allDevices: [],
               redeemCodes: [],
@@ -884,7 +957,7 @@ export function createAppServer(options = {}) {
       if (pathname === '/api/state' && method === 'GET') {
         const state = await store.load();
         const ctx = getActiveUserContext(req, state);
-        return sendJson(res, 200, { ok: true, state: projectStateForUser(state, ctx.userId) });
+        return sendJson(res, 200, { ok: true, state: projectClientState(state, ctx.userId) });
       }
 
       // Auth routes
@@ -993,7 +1066,51 @@ export function createAppServer(options = {}) {
       }
       if (pathname === '/api/admin/settings' && method === 'PATCH') {
         const body = await parseJsonBody(req);
-        return await handleAdminSettings(req, res, body, store, sseHub);
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          if (ctx.user.role !== 'founder') {
+            throw new HttpError(403, '僅限創始鎮長修改管理設定');
+          }
+
+          if (typeof body?.strictDeviceReview === 'boolean') {
+            s.settings.strictDeviceReview = body.strictDeviceReview;
+            pushActivity(s, {
+              type: 'admin',
+              icon: '🛡️',
+              message: s.settings.strictDeviceReview
+                ? '鎮長已開啟「嚴格裝置審核模式」：新綁定本機裝置需經人工核准'
+                : '鎮長已切換為「自助即時核准模式」：新本機裝置確認後立即上線',
+            });
+          }
+
+          if (typeof body?.peerReviewRequired === 'boolean') {
+            s.settings.peerReviewRequired = body.peerReviewRequired;
+            pushActivity(s, {
+              type: 'admin',
+              icon: '⚖️',
+              message: s.settings.peerReviewRequired
+                ? '鎮長已開啟「全局強制雙階段實幹審閱」：工會核心大單須經實幹審閱團核准方可合併記功'
+                : '鎮長已關閉「全局強制雙階段審閱」：工會任務改為自由選擇是否進入審閱佇列',
+            });
+          }
+
+          return {
+            settings: {
+              strictDeviceReview: Boolean(s.settings.strictDeviceReview),
+              peerReviewRequired: Boolean(s.settings.peerReviewRequired),
+            },
+            userId: ctx.userId,
+          };
+        });
+
+        sseHub.broadcast('settings_updated', result.settings);
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        return sendJson(res, 200, {
+          ok: true,
+          settings: result.settings,
+          state: projectClientState(state, result.userId),
+        });
       }
 
       // Workers: POST /api/workers (recruit new worker for active user)
@@ -1044,6 +1161,8 @@ export function createAppServer(options = {}) {
             completedCount: 0,
             earnedGold: 0,
             earnedPoints: 0,
+            slopStrikes: 0,
+            cooldownUntil: null,
             lastMessage: `新報到的 ${template.label}，已準備好上工！`,
             lastHeartbeatAt: null,
           };
@@ -1063,7 +1182,7 @@ export function createAppServer(options = {}) {
         return sendJson(res, 201, {
           ok: true,
           worker: result.worker,
-          state: projectStateForUser(state, result.userId),
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -1131,7 +1250,7 @@ export function createAppServer(options = {}) {
         return sendJson(res, 200, {
           ok: true,
           worker: result.worker,
-          state: projectStateForUser(state, result.userId),
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -1249,7 +1368,7 @@ export function createAppServer(options = {}) {
         return sendJson(res, 201, {
           ok: true,
           project: result.project,
-          state: projectStateForUser(state, result.userId),
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -1309,7 +1428,7 @@ export function createAppServer(options = {}) {
           alreadyJoined: result.alreadyJoined,
           coBuildersCount: result.coBuildersCount,
           project: result.project,
-          state: projectStateForUser(state, result.userId),
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -1378,7 +1497,7 @@ export function createAppServer(options = {}) {
           unlocked: result.unlocked,
           generatedTasks: result.generatedTasks,
           unlockedAchievements: result.unlockedAchievements,
-          state: projectStateForUser(state, result.user.id),
+          state: projectClientState(state, result.user.id),
         });
       }
 
@@ -1426,7 +1545,7 @@ export function createAppServer(options = {}) {
           project: result.project,
           feeUsd: BILLBOARD_PRICE_USD,
           founderRevenue: state.founderRevenue,
-          state: projectStateForUser(state, result.userId),
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -1485,7 +1604,7 @@ export function createAppServer(options = {}) {
           dividend: result.dividend,
           founderRevenue: state.founderRevenue,
           unlockedAchievements: result.unlockedAchievements,
-          state: projectStateForUser(state, result.user.id),
+          state: projectClientState(state, result.user.id),
         });
       }
 
@@ -1535,7 +1654,7 @@ export function createAppServer(options = {}) {
           dividend: result.dividend,
           founderRevenue: state.founderRevenue,
           unlockedAchievements: result.unlockedAchievements,
-          state: projectStateForUser(state, result.user.id),
+          state: projectClientState(state, result.user.id),
         });
       }
 
@@ -1554,6 +1673,9 @@ export function createAppServer(options = {}) {
           }
           if (task.status === 'completed') {
             throw new HttpError(409, '此任務已完成驗收');
+          }
+          if (task.status === 'pending_review') {
+            throw new HttpError(409, '此任務已提交至實幹審閱佇列，正在等待同行審閱');
           }
           if (task.status === 'in_progress' && task.assignedWorkerId && task.assignedWorkerId !== body.workerId) {
             throw new HttpError(409, '此任務正由其他算力小人執行中');
@@ -1576,11 +1698,72 @@ export function createAppServer(options = {}) {
           if (worker.status === 'working' && worker.currentTaskId !== task.id) {
             throw new HttpError(409, `小人【${worker.name}】正在執行其他任務`);
           }
+
+          // Anti-slop Layer 4a: Worker cooldown check
+          if (worker.cooldownUntil) {
+            const remainingMs = Date.parse(worker.cooldownUntil) - Date.now();
+            if (remainingMs > 0) {
+              const cooldownRemainingSec = Math.max(1, Math.ceil(remainingMs / 1000));
+              throw new HttpError(
+                429,
+                `小人【${worker.name}】因連續提交垃圾產出正在反刷單冷卻中，請於 ${cooldownRemainingSec} 秒後再接單`,
+                {
+                  code: 'WORKER_COOLDOWN',
+                  cooldownRemainingSec,
+                  cooldownUntil: worker.cooldownUntil,
+                },
+              );
+            }
+            worker.cooldownUntil = null;
+            worker.slopStrikes = 0;
+          }
+
+          // Anti-slop Layer 4b: Player reputation threshold check
+          const minReputation = getTaskMinReputation(task);
+          if ((user.reputation ?? 0) < minReputation) {
+            throw new HttpError(
+              403,
+              `信譽分不足！領取此工會核心任務需信譽 ≥ ${minReputation}，你目前信譽分為 ${user.reputation}`,
+              {
+                code: 'REPUTATION_TOO_LOW',
+                requiredReputation: minReputation,
+                currentReputation: user.reputation,
+              },
+            );
+          }
+
           if (worker.stamina < task.staminaCost) {
             throw new HttpError(400, `小人【${worker.name}】體力不足（剩餘 ${worker.stamina}，需要 ${task.staminaCost}），請先到宿舍喝咖啡回復體力`);
           }
           if (worker.track === 'api' && worker.usedTokensToday + task.tokenCostEst > worker.dailyTokenCap) {
             throw new HttpError(400, `小人【${worker.name}】即將超過今日 Token 安全上限（${worker.dailyTokenCap}），請調高上限或明日再戰`);
+          }
+
+          // Anti-slop Layer 4c: Stake Gold deposit freeze
+          const stakeGold = getTaskStakeGold(task);
+          const alreadyStakedSameClaim = task.status === 'in_progress'
+            && task.assignedWorkerId === worker.id
+            && Number(task.stakedGold || 0) > 0;
+          if (!alreadyStakedSameClaim) {
+            if (stakeGold > 0) {
+              if (user.gold < stakeGold) {
+                throw new HttpError(
+                  400,
+                  `金幣不足以支付接單誠意押金！此任務需暫時質押 ${stakeGold}G（驗收通過或釋放將全額退還），目前僅有 ${user.gold}G`,
+                  {
+                    code: 'INSUFFICIENT_STAKE_GOLD',
+                    requiredStakeGold: stakeGold,
+                    currentGold: user.gold,
+                  },
+                );
+              }
+              user.gold -= stakeGold;
+              task.stakedGold = stakeGold;
+              task.stakedByUserId = user.id;
+            } else {
+              task.stakedGold = 0;
+              task.stakedByUserId = null;
+            }
           }
 
           const now = new Date().toISOString();
@@ -1593,25 +1776,28 @@ export function createAppServer(options = {}) {
           worker.currentTaskId = task.id;
           worker.currentProjectId = task.projectId;
           worker.currentZone = task.track === 'api_auto' ? 'factory' : 'guild';
-          worker.lastMessage = `已接單：${task.title.slice(0, 22)}...`;
+          worker.lastMessage = task.stakedGold > 0
+            ? `已接單（質押 ${task.stakedGold}G）：${task.title.slice(0, 18)}...`
+            : `已接單：${task.title.slice(0, 22)}...`;
 
           const proj = s.projects.find((p) => p.id === task.projectId);
           pushActivity(s, {
             type: 'claim',
             icon: task.track === 'api_auto' ? '🏭' : '⚔️',
-            message: `【${worker.name}】接下《${proj?.shortName || task.projectId}》任務：${task.title}`,
+            message: `【${worker.name}】接下《${proj?.shortName || task.projectId}》任務：${task.title}${task.stakedGold > 0 ? `（已凍結誠意押金 ${task.stakedGold}G）` : ''}`,
             workerId: worker.id,
             projectId: task.projectId,
             taskId: task.id,
           });
 
-          return { task, worker, project: proj || null, userId: user.id };
+          return { task, worker, project: proj || null, stakedGold: task.stakedGold || 0, userId: user.id };
         });
 
         sseHub.broadcast('task_claimed', {
           task: result.task,
           worker: result.worker,
           project: result.project,
+          stakedGold: result.stakedGold,
         });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
@@ -1619,7 +1805,8 @@ export function createAppServer(options = {}) {
           task: result.task,
           worker: result.worker,
           project: result.project,
-          state: projectStateForUser(state, result.userId),
+          stakedGold: result.stakedGold,
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -1639,6 +1826,9 @@ export function createAppServer(options = {}) {
           if (task.status === 'completed') {
             throw new HttpError(409, '此任務已完成驗收，無法釋放');
           }
+          if (task.status === 'pending_review') {
+            throw new HttpError(409, '此任務正在實幹審閱佇列中，無法直接釋放');
+          }
 
           const targetWorkerId = body.workerId || task.assignedWorkerId;
           let worker = targetWorkerId
@@ -1649,11 +1839,23 @@ export function createAppServer(options = {}) {
             if (cross) worker = cross.worker;
           }
 
+          // Refund frozen stake gold in full upon clean release
+          let refundedStakeGold = 0;
+          if (Number(task.stakedGold || 0) > 0) {
+            refundedStakeGold = Number(task.stakedGold);
+            const staker = (task.stakedByUserId && s.users[task.stakedByUserId]) || user;
+            if (staker) {
+              staker.gold += refundedStakeGold;
+            }
+          }
+
           const wasInProgress = task.status === 'in_progress';
           task.status = 'open';
           task.assignedWorkerId = null;
           task.claimedBy = null;
           task.claimedAt = null;
+          task.stakedGold = 0;
+          task.stakedByUserId = null;
 
           const reasonText = sanitizeText(body.reason, 120);
 
@@ -1671,26 +1873,28 @@ export function createAppServer(options = {}) {
             pushActivity(s, {
               type: 'release',
               icon: '↩️',
-              message: `【${worker?.name || '系統'}】無懲罰釋放任務《${task.title}》回待接狀態${reasonText ? `（${reasonText}）` : ''}`,
+              message: `【${worker?.name || '系統'}】無懲罰釋放任務《${task.title}》回待接狀態${refundedStakeGold > 0 ? `（已全額退還 ${refundedStakeGold}G 押金）` : ''}${reasonText ? `（${reasonText}）` : ''}`,
               workerId: worker?.id || null,
               projectId: task.projectId,
               taskId: task.id,
             });
           }
 
-          return { task, worker: worker || null, userId: user.id };
+          return { task, worker: worker || null, refundedStakeGold, userId: user.id };
         });
 
         sseHub.broadcast('task_released', {
           task: result.task,
           worker: result.worker,
+          refundedStakeGold: result.refundedStakeGold,
         });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
+          refundedStakeGold: result.refundedStakeGold,
           task: result.task,
           worker: result.worker,
-          state: projectStateForUser(state, result.userId),
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -1709,6 +1913,9 @@ export function createAppServer(options = {}) {
           }
           if (task.status === 'completed') {
             throw new HttpError(409, '此任務已完成驗收，無法重複提交');
+          }
+          if (task.status === 'pending_review') {
+            throw new HttpError(409, '此任務已進入實幹審閱佇列，請等待審閱結果');
           }
 
           const expectedTrack = task.track === 'api_auto' ? 'api' : 'quota';
@@ -1738,24 +1945,44 @@ export function createAppServer(options = {}) {
 
           if (!verification.passed) {
             user.reputation = Math.max(0, user.reputation - 2);
+
+            // Forfeit any frozen stake gold into anti-slop treasury
+            const forfeitedStakeGold = Number(task.stakedGold || 0);
+            if (forfeitedStakeGold > 0) {
+              s.antiSlopTreasuryGold = Number(s.antiSlopTreasuryGold || 0) + forfeitedStakeGold;
+            }
             task.status = 'open';
             task.assignedWorkerId = null;
+            task.claimedBy = null;
+            task.claimedAt = null;
+            task.stakedGold = 0;
+            task.stakedByUserId = null;
             task.lastRejectedVerification = verification;
             task.lastRejectedAt = now;
 
+            let cooldownTriggered = false;
+            let cooldownSec = 0;
             if (worker) {
+              worker.slopStrikes = (Number(worker.slopStrikes) || 0) + 1;
+              if (worker.slopStrikes >= SLOP_STRIKE_LIMIT) {
+                cooldownSec = getCooldownSeconds();
+                worker.cooldownUntil = new Date(Date.now() + cooldownSec * 1000).toISOString();
+                cooldownTriggered = true;
+                worker.lastMessage = `連續垃圾提交達 ${worker.slopStrikes} 次，已觸發 ${cooldownSec} 秒反刷單冷卻！`;
+              } else {
+                worker.lastMessage = `交卷未通過驗收（違規 ${worker.slopStrikes}/${SLOP_STRIKE_LIMIT}），需要修正後重交！`;
+              }
               worker.status = 'idle';
               worker.currentTaskId = null;
               worker.currentProjectId = null;
               worker.currentZone = 'lounge';
-              worker.lastMessage = '交卷未通過驗收，需要修正後重交！';
             }
 
             syncUserLeaderboard(s, user);
             pushActivity(s, {
               type: 'reject',
               icon: '🛡️',
-              message: `防作弊驗收攔截：【${task.title}】未通過檢查（0 貢獻值，信譽分 -2）— ${verification.reason}`,
+              message: `防作弊驗收攔截：【${task.title}】未通過檢查（0 貢獻值，信譽分 -2${forfeitedStakeGold > 0 ? `，沒收押金 ${forfeitedStakeGold}G` : ''}${cooldownTriggered ? `，觸發 ${cooldownSec}s 冷卻` : ''}）— ${verification.reason}`,
               workerId: worker?.id || null,
               projectId: task.projectId,
               taskId: task.id,
@@ -1763,7 +1990,11 @@ export function createAppServer(options = {}) {
 
             return {
               passed: false,
+              pendingReview: false,
               verification,
+              cooldownTriggered,
+              cooldownUntil: worker?.cooldownUntil || null,
+              slopStrikes: worker?.slopStrikes || 0,
               rewards: {
                 gold: 0,
                 contributionPoints: 0,
@@ -1772,6 +2003,7 @@ export function createAppServer(options = {}) {
                 bountyNetUsd: 0,
                 platformFeeUsd: 0,
                 reputationDelta: -2,
+                forfeitedStakeGold,
                 leveledUp: false,
               },
               task,
@@ -1782,16 +2014,6 @@ export function createAppServer(options = {}) {
             };
           }
 
-          // Passed Proof of Accepted Work!
-          const gold = task.goldReward;
-          const contributionPoints = task.contributionPoints;
-          const xp = task.xpReward || 40;
-          const bountyGrossUsd = round2(task.cashBountyUsd || 0);
-          const platformFeeUsd = round2(bountyGrossUsd * (PLATFORM_BOUNTY_FEE_PCT / 100));
-          const bountyNetUsd = round2(bountyGrossUsd - platformFeeUsd);
-          const reputationDelta = verification.score >= 85 ? 2 : 1;
-          const tokensUsed = Number(body.tokensUsed) > 0 ? Math.round(Number(body.tokensUsed)) : task.tokenCostEst;
-
           const contentStr = sanitizeText(
             typeof body.content === 'string'
               ? body.content
@@ -1799,16 +2021,131 @@ export function createAppServer(options = {}) {
             50_000,
             { multiline: true },
           );
+          const cleanPrUrl = sanitizeText(body.prUrl, 240) || null;
+          const cleanNotes = sanitizeText(body.notes, 500, { multiline: true });
+          const executionMode = sanitizeText(body.executionMode, 32) || (task.track === 'api_auto' ? 'byok' : 'byot_cli');
+          const tokensUsed = Number(body.tokensUsed) > 0 ? Math.round(Number(body.tokensUsed)) : task.tokenCostEst;
+          const poolBucket = getTaskBucket(task);
+
+          // Anti-slop Layer 2 & 3: Route guild_bounty to Two-Stage Peer Review Queue when requested or globally required
+          const needsPeerReview = task.track === 'guild_bounty'
+            && (body.submitForReview === true || s.settings?.peerReviewRequired === true);
+
+          if (needsPeerReview) {
+            const aiReview = runAiBlindReview(task, contentStr, cleanPrUrl || '');
+            task.status = 'pending_review';
+            task.submittedAt = now;
+            task.assignedWorkerId = worker?.id || task.assignedWorkerId || null;
+            task.verification = verification;
+            task.submission = {
+              content: contentStr,
+              prUrl: cleanPrUrl,
+              notes: cleanNotes,
+              executionMode,
+              tokensUsed,
+              submittedBy: user.displayName,
+              submittedByUserId: user.id,
+              submittedAt: now,
+            };
+
+            if (worker) {
+              worker.status = 'idle';
+              worker.currentTaskId = null;
+              worker.currentProjectId = null;
+              worker.currentZone = 'lounge';
+              worker.lastMessage = `已送交實幹審閱團（AI 盲審 ${aiReview.aiScore}/100），等待批准合併！`;
+            }
+
+            const reviewItem = {
+              id: uid('rev'),
+              status: 'pending',
+              projectId: task.projectId,
+              projectName: proj?.name || task.projectId,
+              projectShortName: proj?.shortName || proj?.name || task.projectId,
+              taskId: task.id,
+              taskTitle: task.title,
+              track: task.track,
+              category: task.category,
+              poolBucket,
+              submittedByUserId: user.id,
+              submittedByName: user.displayName,
+              workerId: worker?.id || task.assignedWorkerId || null,
+              workerName: worker?.name || '手動提交',
+              stakeGold: Number(task.stakedGold || 0),
+              contributionPoints: task.contributionPoints,
+              goldReward: task.goldReward,
+              xpReward: task.xpReward || 40,
+              progressWeight: task.progressWeight || 15,
+              cashBountyUsd: round2(task.cashBountyUsd || 0),
+              tokensUsed,
+              staminaCost: task.staminaCost || 0,
+              prUrl: cleanPrUrl,
+              content: contentStr,
+              notes: cleanNotes,
+              executionMode,
+              ciStatus: 'passed',
+              verificationScore: verification.score,
+              aiReview,
+              submittedAt: now,
+            };
+
+            s.reviewQueue.unshift(reviewItem);
+            if (s.reviewQueue.length > 60) {
+              s.reviewQueue.length = 60;
+            }
+
+            pushActivity(s, {
+              type: 'review_queued',
+              icon: '⚖️',
+              message: `${user.displayName} 提交《${task.title}》進入雙階段實幹審閱佇列（AI 盲審 ${aiReview.aiScore}/100 · ${aiReview.riskLevel} risk${reviewItem.stakeGold > 0 ? ` · 質押 ${reviewItem.stakeGold}G` : ''}）`,
+              workerId: worker?.id || null,
+              projectId: task.projectId,
+              taskId: task.id,
+            });
+
+            return {
+              passed: true,
+              pendingReview: true,
+              reviewItem,
+              verification,
+              task,
+              worker: worker || null,
+              project: proj || null,
+              unlockedAchievements: [],
+              user,
+            };
+          }
+
+          // Passed Proof of Accepted Work — Direct Settlement!
+          const gold = task.goldReward;
+          const contributionPoints = task.contributionPoints;
+          const xp = task.xpReward || 40;
+          const bountyGrossUsd = round2(task.cashBountyUsd || 0);
+          const platformFeeUsd = round2(bountyGrossUsd * (PLATFORM_BOUNTY_FEE_PCT / 100));
+          const bountyNetUsd = round2(bountyGrossUsd - platformFeeUsd);
+          const reputationDelta = verification.score >= 85 ? 2 : 1;
+
+          // Refund frozen stake gold in full upon accepted submission
+          let refundedStakeGold = 0;
+          if (Number(task.stakedGold || 0) > 0) {
+            refundedStakeGold = Number(task.stakedGold);
+            const staker = (task.stakedByUserId && s.users[task.stakedByUserId]) || user;
+            if (staker) {
+              staker.gold += refundedStakeGold;
+            }
+          }
 
           task.status = 'completed';
           task.submittedAt = now;
           task.assignedWorkerId = worker?.id || task.assignedWorkerId || null;
+          task.stakedGold = 0;
+          task.stakedByUserId = null;
           task.verification = verification;
           task.submission = {
             content: contentStr,
-            prUrl: sanitizeText(body.prUrl, 240) || null,
-            notes: sanitizeText(body.notes, 500, { multiline: true }),
-            executionMode: sanitizeText(body.executionMode, 32) || (task.track === 'api_auto' ? 'byok' : 'byot_cli'),
+            prUrl: cleanPrUrl,
+            notes: cleanNotes,
+            executionMode,
             tokensUsed,
             submittedBy: user.displayName,
             submittedByUserId: user.id,
@@ -1832,9 +2169,11 @@ export function createAppServer(options = {}) {
             });
           }
 
-          // Update worker stats & level up
+          // Update worker stats & level up + clear slop strikes/cooldown
           let leveledUp = false;
           if (worker) {
+            worker.slopStrikes = 0;
+            worker.cooldownUntil = null;
             worker.stamina = Math.max(0, worker.stamina - task.staminaCost);
             worker.usedTokensToday += tokensUsed;
             worker.xp += xp;
@@ -1857,12 +2196,14 @@ export function createAppServer(options = {}) {
               : `驗收通過（${verification.score}分）！獲得 +${gold}G！`;
           }
 
-          // Update project progress, contributions & coBuilders
+          // Update project progress, contributions, anti-dilution bucketPoints & coBuilders
           if (proj) {
+            ensureProjectBuckets(proj);
             proj.progressPct = Math.min(100, (proj.progressPct || 0) + (task.progressWeight || 15));
             proj.contributions = proj.contributions || {};
             proj.contributorNames = proj.contributorNames || {};
             proj.contributions[user.id] = (proj.contributions[user.id] || 0) + contributionPoints;
+            proj.bucketPoints[poolBucket][user.id] = (proj.bucketPoints[poolBucket][user.id] || 0) + contributionPoints;
             proj.contributorNames[user.id] = user.displayName;
             if (!Array.isArray(proj.coBuilders)) {
               proj.coBuilders = [];
@@ -1889,6 +2230,7 @@ export function createAppServer(options = {}) {
             userName: user.displayName,
             workerId: worker?.id || null,
             workerName: worker?.name || '手動提交',
+            poolBucket,
             points: contributionPoints,
             gold,
             bountyGrossUsd,
@@ -1910,7 +2252,7 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'complete',
             icon: '✅',
-            message: `【${worker?.name || user.displayName}】完成《${task.title}》（評分 ${verification.score}）：+${gold}G、+${contributionPoints} 貢獻點${bountyText}`,
+            message: `【${worker?.name || user.displayName}】完成《${task.title}》（評分 ${verification.score}）：+${gold}G、+${contributionPoints} 貢獻點 [${poolBucket === 'core' ? '核心池' : '週邊池'}]${refundedStakeGold > 0 ? `、退還押金 ${refundedStakeGold}G` : ''}${bountyText}`,
             workerId: worker?.id || null,
             projectId: task.projectId,
             taskId: task.id,
@@ -1930,10 +2272,13 @@ export function createAppServer(options = {}) {
 
           return {
             passed: true,
+            pendingReview: false,
             verification,
             rewards: {
               gold,
               contributionPoints,
+              poolBucket,
+              refundedStakeGold,
               xp,
               bountyGrossUsd,
               bountyNetUsd,
@@ -1949,6 +2294,26 @@ export function createAppServer(options = {}) {
           };
         });
 
+        if (result.pendingReview) {
+          sseHub.broadcast('review_queued', {
+            reviewItem: result.reviewItem,
+            task: result.task,
+            project: result.project,
+          });
+          sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+          return sendJson(res, 200, {
+            ok: true,
+            passed: true,
+            pendingReview: true,
+            reviewItem: result.reviewItem,
+            verification: result.verification,
+            task: result.task,
+            worker: result.worker,
+            project: result.project,
+            state: projectClientState(state, result.user.id),
+          });
+        }
+
         sseHub.broadcast(result.passed ? 'task_completed' : 'task_rejected', {
           task: result.task,
           worker: result.worker,
@@ -1962,13 +2327,344 @@ export function createAppServer(options = {}) {
         return sendJson(res, 200, {
           ok: result.passed,
           passed: result.passed,
+          pendingReview: false,
           verification: result.verification,
           rewards: result.rewards,
+          cooldownTriggered: Boolean(result.cooldownTriggered),
+          cooldownUntil: result.cooldownUntil || null,
+          slopStrikes: result.slopStrikes || 0,
           task: result.task,
           worker: result.worker,
           project: result.project,
           unlockedAchievements: result.unlockedAchievements || [],
-          state: projectStateForUser(state, result.user.id),
+          state: projectClientState(state, result.user.id),
+        });
+      }
+
+      // Governance Peer Review: GET /api/reviews
+      if (pathname === '/api/reviews' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        return sendJson(res, 200, {
+          ok: true,
+          reviewQueue: state.reviewQueue || [],
+          reviewHistory: state.reviewHistory || [],
+          peerReviewRequired: Boolean(state.settings?.peerReviewRequired),
+          projectBuckets: buildProjectBucketsMap(state),
+          reviewerRewards: {
+            approveGold: REVIEWER_REWARD_GOLD,
+            approvePoints: REVIEWER_REWARD_POINTS,
+          },
+        });
+      }
+
+      // Governance Peer Review: POST /api/reviews/:id/decide
+      const reviewDecideMatch = pathname.match(/^\/api\/reviews\/([^/]+)\/decide$/);
+      if (reviewDecideMatch && method === 'POST') {
+        const reviewId = decodeURIComponent(reviewDecideMatch[1]);
+        const body = await parseJsonBody(req);
+        const decision = String(body.decision || '').toLowerCase();
+        const reason = sanitizeText(body.reason, 200);
+
+        if (decision !== 'approve' && decision !== 'reject') {
+          throw new HttpError(400, 'decision 必須為 approve 或 reject');
+        }
+
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          const reviewer = ctx.user;
+
+          const idx = s.reviewQueue.findIndex((item) => item.id === reviewId);
+          if (idx === -1) {
+            throw new HttpError(404, `找不到待審項目：${reviewId}`);
+          }
+          const item = s.reviewQueue[idx];
+          const proj = s.projects.find((p) => p.id === item.projectId) || null;
+
+          if (!canUserReview(reviewer, proj)) {
+            throw new HttpError(
+              403,
+              '審閱權限不足：僅限創始鎮長、項目發起人或該項目既有貢獻者可參與實幹審閱，防止無關新小號亂審',
+              { code: 'REVIEWER_NOT_ELIGIBLE' },
+            );
+          }
+
+          s.reviewQueue.splice(idx, 1);
+
+          const now = new Date().toISOString();
+          const task = s.tasks.find((t) => t.id === item.taskId) || null;
+          const submitterUser = (item.submittedByUserId && s.users[item.submittedByUserId]) || null;
+          const crossWorker = item.workerId ? findWorkerAcrossUsers(s, item.workerId) : null;
+          const submitterWorker = crossWorker?.worker || null;
+          const poolBucket = item.poolBucket === 'peripheral' ? 'peripheral' : getTaskBucket(item);
+
+          let unlockedAchievements = [];
+          let reviewerRewardGold = 0;
+          let reviewerRewardPoints = 0;
+          let seizedStakeGold = 0;
+          let submitterPointsAwarded = 0;
+
+          if (decision === 'approve') {
+            const contributionPoints = Number(item.contributionPoints || 50);
+            const gold = Number(item.goldReward || 200);
+            const xp = Number(item.xpReward || 60);
+            const refundedStakeGold = Number(item.stakeGold || 0);
+            const bountyGrossUsd = round2(item.cashBountyUsd || 0);
+            const platformFeeUsd = round2(bountyGrossUsd * (PLATFORM_BOUNTY_FEE_PCT / 100));
+            const bountyNetUsd = round2(bountyGrossUsd - platformFeeUsd);
+            submitterPointsAwarded = contributionPoints;
+
+            if (submitterUser) {
+              submitterUser.gold += gold + refundedStakeGold;
+              submitterUser.usdBalance = round2((submitterUser.usdBalance || 0) + bountyNetUsd);
+              submitterUser.completedTasks += 1;
+              submitterUser.totalContribution += contributionPoints;
+              submitterUser.reputation += 2;
+              syncUserLeaderboard(s, submitterUser);
+            } else {
+              const npcRow = s.leaderboard.find((r) => r.userId === item.submittedByUserId);
+              if (npcRow) {
+                npcRow.completedTasks = (Number(npcRow.completedTasks) || 0) + 1;
+                npcRow.contributionPoints = (Number(npcRow.contributionPoints) || 0) + contributionPoints;
+                npcRow.earnedUsd = round2((Number(npcRow.earnedUsd) || 0) + bountyNetUsd);
+              }
+            }
+
+            if (platformFeeUsd > 0) {
+              addFounderRevenueEntry(s, {
+                stream: 'bounty_fee',
+                label: `實幹審閱核准現金懸賞《${item.taskTitle.slice(0, 24)}》10% 託管費`,
+                amountUsd: platformFeeUsd,
+                projectId: item.projectId,
+                taskId: item.taskId,
+              });
+            }
+
+            if (submitterWorker) {
+              submitterWorker.slopStrikes = 0;
+              submitterWorker.cooldownUntil = null;
+              submitterWorker.stamina = Math.max(0, submitterWorker.stamina - (item.staminaCost || 0));
+              submitterWorker.usedTokensToday += Number(item.tokensUsed || 0);
+              submitterWorker.xp += xp;
+              while (submitterWorker.xp >= submitterWorker.xpToNext) {
+                submitterWorker.xp -= submitterWorker.xpToNext;
+                submitterWorker.level += 1;
+                submitterWorker.xpToNext = Math.round(submitterWorker.xpToNext * 1.35);
+                submitterWorker.maxStamina = Math.min(150, submitterWorker.maxStamina + 5);
+              }
+              submitterWorker.completedCount += 1;
+              submitterWorker.earnedGold += gold;
+              submitterWorker.earnedPoints += contributionPoints;
+              submitterWorker.status = 'idle';
+              submitterWorker.currentTaskId = null;
+              submitterWorker.currentProjectId = null;
+              submitterWorker.currentZone = 'lounge';
+              submitterWorker.lastMessage = `實幹審閱批准合併！獲得 +${gold}G / +${contributionPoints} 核心點！`;
+            }
+
+            if (proj) {
+              ensureProjectBuckets(proj);
+              proj.progressPct = Math.min(100, (proj.progressPct || 0) + (item.progressWeight || 15));
+              proj.contributions = proj.contributions || {};
+              proj.contributorNames = proj.contributorNames || {};
+              proj.contributions[item.submittedByUserId] = (proj.contributions[item.submittedByUserId] || 0) + contributionPoints;
+              proj.bucketPoints[poolBucket][item.submittedByUserId] = (proj.bucketPoints[poolBucket][item.submittedByUserId] || 0) + contributionPoints;
+              proj.contributorNames[item.submittedByUserId] = item.submittedByName;
+              if (!Array.isArray(proj.coBuilders)) proj.coBuilders = [];
+              if (!proj.coBuilders.some((b) => b.userId === item.submittedByUserId)) {
+                proj.coBuilders.push({
+                  userId: item.submittedByUserId,
+                  username: submitterUser?.username || item.submittedByUserId,
+                  displayName: item.submittedByName,
+                  joinedAt: now,
+                });
+              }
+            }
+
+            if (task) {
+              task.status = 'completed';
+              task.stakedGold = 0;
+              task.stakedByUserId = null;
+              task.reviewedAt = now;
+              task.reviewedBy = reviewer.id;
+            }
+
+            s.contributionLedger.unshift({
+              id: uid('contrib'),
+              timestamp: now,
+              projectId: item.projectId,
+              projectName: proj?.name || item.projectName,
+              taskId: item.taskId,
+              taskTitle: item.taskTitle,
+              userId: item.submittedByUserId,
+              userName: item.submittedByName,
+              workerId: item.workerId || null,
+              workerName: item.workerName || '審閱核准',
+              poolBucket,
+              points: contributionPoints,
+              gold,
+              bountyGrossUsd,
+              bountyNetUsd,
+              platformFeeUsd,
+              verificationScore: item.aiReview?.aiScore || item.verificationScore || 90,
+            });
+            if (s.contributionLedger.length > 100) {
+              s.contributionLedger.length = 100;
+            }
+
+            // Reviewer incentive: +15G & +5 contribution points
+            reviewerRewardGold = REVIEWER_REWARD_GOLD;
+            reviewerRewardPoints = REVIEWER_REWARD_POINTS;
+            reviewer.gold += reviewerRewardGold;
+            reviewer.totalContribution += reviewerRewardPoints;
+            reviewer.reputation += 1;
+            if (proj) {
+              ensureProjectBuckets(proj);
+              proj.contributions[reviewer.id] = (proj.contributions[reviewer.id] || 0) + reviewerRewardPoints;
+              proj.bucketPoints.core[reviewer.id] = (proj.bucketPoints.core[reviewer.id] || 0) + reviewerRewardPoints;
+              proj.contributorNames[reviewer.id] = reviewer.displayName;
+            }
+            syncUserLeaderboard(s, reviewer);
+
+            if (submitterUser) {
+              const achCandidates = ['first_blood'];
+              const completedTracks = new Set(
+                s.tasks
+                  .filter((t) => t.status === 'completed' && (!t.submission?.submittedByUserId || t.submission.submittedByUserId === submitterUser.id))
+                  .map((t) => t.track),
+              );
+              if (completedTracks.has('api_auto') && completedTracks.has('guild_bounty')) {
+                achCandidates.push('dual_track_master');
+              }
+              unlockedAchievements = unlockAchievements(s, submitterUser, achCandidates);
+            }
+
+            pushActivity(s, {
+              type: 'review_approved',
+              icon: '✅',
+              message: `⚖️ 實幹審閱核准：${reviewer.displayName} 批准合併 ${item.submittedByName} 的《${item.taskTitle}》（提交者 +${contributionPoints} ${poolBucket === 'core' ? '核心' : '週邊'}點；審閱獎勵 +${reviewerRewardGold}G / +${reviewerRewardPoints} 點）`,
+              projectId: item.projectId,
+              taskId: item.taskId,
+            });
+          } else {
+            // REJECT: 0 contribution to submitter, -5 reputation, slop strike + cooldown, seize stake gold to reviewer!
+            seizedStakeGold = Number(item.stakeGold || 0);
+            reviewerRewardGold = seizedStakeGold;
+            reviewerRewardPoints = 0;
+
+            if (submitterUser) {
+              submitterUser.reputation = Math.max(0, submitterUser.reputation - REVIEW_REJECT_REPUTATION_PENALTY);
+              syncUserLeaderboard(s, submitterUser);
+            } else {
+              const npcRow = s.leaderboard.find((r) => r.userId === item.submittedByUserId);
+              if (npcRow) {
+                npcRow.reputation = Math.max(0, (Number(npcRow.reputation) || 0) - REVIEW_REJECT_REPUTATION_PENALTY);
+              }
+            }
+
+            if (submitterWorker) {
+              submitterWorker.slopStrikes = (Number(submitterWorker.slopStrikes) || 0) + 1;
+              if (submitterWorker.slopStrikes >= SLOP_STRIKE_LIMIT) {
+                const cooldownSec = getCooldownSeconds();
+                submitterWorker.cooldownUntil = new Date(Date.now() + cooldownSec * 1000).toISOString();
+              }
+              submitterWorker.status = 'idle';
+              submitterWorker.currentTaskId = null;
+              submitterWorker.currentProjectId = null;
+              submitterWorker.currentZone = 'lounge';
+              submitterWorker.lastMessage = '提交遭實幹審閱團駁回，押金已被沒收！';
+            }
+
+            // Reviewer pockets the seized stake gold as anti-slop bounty!
+            reviewer.gold += seizedStakeGold;
+            reviewer.reputation += 1;
+            syncUserLeaderboard(s, reviewer);
+
+            if (task) {
+              task.status = 'open';
+              task.assignedWorkerId = null;
+              task.claimedBy = null;
+              task.claimedAt = null;
+              task.stakedGold = 0;
+              task.stakedByUserId = null;
+              task.lastRejectedAt = now;
+            }
+
+            pushActivity(s, {
+              type: 'review_rejected',
+              icon: '🚫',
+              message: `🚫 實幹審閱駁回垃圾提交：${reviewer.displayName} 攔截 ${item.submittedByName} 的《${item.taskTitle}》（提交者 0 貢獻、信譽 -${REVIEW_REJECT_REPUTATION_PENALTY}；沒收押金 +${seizedStakeGold}G 歸審閱人！）${reason ? ` — ${reason}` : ''}`,
+              projectId: item.projectId,
+              taskId: item.taskId,
+            });
+          }
+
+          const decidedRecord = {
+            ...item,
+            status: decision === 'approve' ? 'approved' : 'rejected',
+            decision,
+            decisionReason: reason || null,
+            decidedBy: reviewer.id,
+            decidedByName: reviewer.displayName,
+            decidedAt: now,
+            reviewerRewardGold,
+            reviewerRewardPoints,
+            seizedStakeGold,
+            slashedStakeGold: seizedStakeGold,
+            submitterPointsAwarded,
+          };
+
+          s.reviewHistory.unshift(decidedRecord);
+          if (s.reviewHistory.length > 60) {
+            s.reviewHistory.length = 60;
+          }
+
+          return {
+            decision,
+            review: decidedRecord,
+            reviewerReward: {
+              gold: reviewerRewardGold,
+              points: reviewerRewardPoints,
+              seizedStakeGold,
+              slashedStakeGold: seizedStakeGold,
+            },
+            project: proj,
+            task,
+            unlockedAchievements,
+            submitterUser,
+            reviewer,
+          };
+        });
+
+        sseHub.broadcast('review_decided', {
+          decision: result.decision,
+          review: result.review,
+          reviewItem: result.review,
+          reviewerReward: result.reviewerReward,
+          slashedStakeGold: result.reviewerReward.slashedStakeGold,
+          project: result.project,
+          task: result.task,
+        });
+        if (result.submitterUser && result.unlockedAchievements?.length) {
+          broadcastAchievements(sseHub, result.unlockedAchievements, result.submitterUser);
+        }
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+
+        return sendJson(res, 200, {
+          ok: true,
+          decision: result.decision,
+          review: result.review,
+          reviewItem: result.review,
+          reviewerReward: result.reviewerReward,
+          reviewerRewardGold: result.reviewerReward.gold,
+          reviewerRewardPoints: result.reviewerReward.points,
+          seizedGold: result.reviewerReward.seizedStakeGold,
+          slashedStakeGold: result.reviewerReward.slashedStakeGold,
+          project: result.project,
+          task: result.task,
+          projectBuckets: buildProjectBucketsMap(state),
+          state: projectClientState(state, result.reviewer.id),
         });
       }
 
@@ -2045,7 +2741,7 @@ export function createAppServer(options = {}) {
           ok: true,
           item,
           founderRevenue: state.founderRevenue,
-          state: projectStateForUser(state, userId),
+          state: projectClientState(state, userId),
         });
       }
 
@@ -2121,7 +2817,7 @@ export function createAppServer(options = {}) {
           heartbeat: result.heartbeat,
           worker: result.worker,
           unlockedAchievements: result.unlockedAchievements,
-          state: projectStateForUser(state, result.user.id),
+          state: projectClientState(state, result.user.id),
         });
       }
 
@@ -2271,7 +2967,7 @@ export function createAppServer(options = {}) {
           importedCount: result.tasks.length,
           fallbackUsed,
           fallbackReason,
-          state: projectStateForUser(state, result.userId),
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -2350,7 +3046,7 @@ export function createAppServer(options = {}) {
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
-          state: projectStateForUser(state, FOUNDER_USER_ID),
+          state: projectClientState(state, FOUNDER_USER_ID),
         });
       }
 

@@ -9,6 +9,7 @@ import path from 'node:path';
 import http from 'node:http';
 
 import { createAppServer } from '../server.mjs';
+import { computeAntiDilutionMeritSplit } from '../src/server/governance.mjs';
 
 function round2(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -1752,5 +1753,453 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     // Joining a non-existent project returns 404
     const joinMissing = await apiJson(baseUrl, 'POST', '/api/projects/proj-does-not-exist/join', {}, bobCookie);
     assert.equal(joinMissing.status, 404);
+  });
+
+  it('23. Anti-dilution 70/30 bucket cap dividend math (100 core -> $595, 10,000 peripheral -> strictly capped at $255 on $1,000 revenue)', async () => {
+    // 1. Direct unit math proof on computeAntiDilutionMeritSplit ($850 merit pool)
+    const pureSplit = computeAntiDilutionMeritSplit(
+      {
+        id: 'proj-math-proof',
+        poolCaps: { coreSharePct: 70, peripheralSharePct: 30 },
+        bucketPoints: {
+          core: { 'core-dev': 100 },
+          peripheral: { 'spam-farmer': 10000 },
+        },
+      },
+      850,
+    );
+    assert.equal(pureSplit.corePoolUsd, 595, 'Core pool must be exactly 70% of $850 = $595');
+    assert.equal(pureSplit.peripheralPoolUsd, 255, 'Peripheral pool must be strictly capped at 30% of $850 = $255');
+    assert.deepEqual(pureSplit.bucketCaps, { core: 70, peripheral: 30 });
+    assert.equal(pureSplit.payoutsByUserId['core-dev'], 595);
+    assert.equal(pureSplit.payoutsByUserId['spam-farmer'], 255);
+
+    // Single-bucket non-waste rule: core-only or peripheral-only receives 100% of $850 merit pool
+    const coreOnlySplit = computeAntiDilutionMeritSplit(
+      { bucketPoints: { core: { 'core-dev': 100 }, peripheral: {} } },
+      850,
+    );
+    assert.equal(coreOnlySplit.corePoolUsd, 850);
+    assert.equal(coreOnlySplit.peripheralPoolUsd, 0);
+    assert.equal(coreOnlySplit.payoutsByUserId['core-dev'], 850);
+
+    const periphOnlySplit = computeAntiDilutionMeritSplit(
+      { bucketPoints: { core: {}, peripheral: { 'docs-dev': 500 } } },
+      850,
+    );
+    assert.equal(periphOnlySplit.corePoolUsd, 0);
+    assert.equal(periphOnlySplit.peripheralPoolUsd, 850);
+    assert.equal(periphOnlySplit.payoutsByUserId['docs-dev'], 850);
+
+    // 2. Full end-to-end HTTP server lifecycle with $1,000 launch revenue & persisted user balances
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-anti-dilution-'));
+    let isoServer = null;
+    try {
+      let started = await startServer(isoDir);
+      isoServer = started.server;
+      let isoUrl = started.baseUrl;
+
+      // Register 3 distinct users: Originator (5% spark), Core Builder (100 core pts), Peripheral Spammer (10,000 peripheral pts)
+      const regOrig = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'orig-7030@pixelcompute.test',
+        password: 'orig-password-123',
+        displayName: 'Spark Originator',
+      });
+      assert.equal(regOrig.status, 201);
+      const origCookie = regOrig.cookie;
+      const origId = regOrig.json.user.id;
+
+      const regCore = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'core-7030@pixelcompute.test',
+        password: 'core-password-123',
+        displayName: 'Core Architect',
+      });
+      assert.equal(regCore.status, 201);
+      const coreCookie = regCore.cookie;
+      const coreId = regCore.json.user.id;
+
+      const regSpammer = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'spam-7030@pixelcompute.test',
+        password: 'spam-password-123',
+        displayName: 'Peripheral Farmer',
+      });
+      assert.equal(regSpammer.status, 201);
+      const spamCookie = regSpammer.cookie;
+      const spamId = regSpammer.json.user.id;
+
+      // Originator proposes a unique project and Core Builder unlocks it
+      const propRes = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects',
+        {
+          name: 'AntiDilution Vault Protocol',
+          tagline: 'Mathematically isolated 70/30 core-vs-peripheral contributor dividend engine',
+          votesRequired: 2,
+        },
+        origCookie,
+      );
+      assert.equal(propRes.status, 201);
+      const projId = propRes.json.project.id;
+
+      const unlockRes = await apiJson(isoUrl, 'POST', `/api/projects/${projId}/vote`, {}, coreCookie);
+      assert.equal(unlockRes.status, 200);
+      assert.equal(unlockRes.json.unlocked, true);
+
+      // Verify generated tasks carry accurate poolBucket tags (core vs peripheral)
+      const genTasks = unlockRes.json.generatedTasks;
+      const coreTask = genTasks.find((t) => t.track === 'guild_bounty');
+      const periphTask = genTasks.find((t) => t.track === 'api_auto' && t.category === 'i18n');
+      assert.equal(coreTask.poolBucket, 'core');
+      assert.equal(periphTask.poolBucket, 'peripheral');
+
+      // Core Builder completes a real core task -> recorded in bucketPoints.core
+      const coreBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, coreCookie);
+      const coreWorker = coreBoot.json.state.workers.find((w) => w.track === 'quota');
+      const coreClaim = await apiJson(isoUrl, 'POST', `/api/tasks/${coreTask.id}/claim`, { workerId: coreWorker.id }, coreCookie);
+      assert.equal(coreClaim.status, 200);
+      const coreSubmit = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${coreTask.id}/submit`,
+        {
+          workerId: coreWorker.id,
+          prUrl: 'https://github.com/pixel-compute-town/anti-dilution/pull/1',
+          content: [
+            'export function enforceCoreBucketFloor(corePts, periphPts, poolUsd) {',
+            '  if (corePts > 0 && periphPts > 0) return { core: poolUsd * 0.7, peripheral: poolUsd * 0.3 };',
+            '  return { core: corePts > 0 ? poolUsd : 0, peripheral: periphPts > 0 ? poolUsd : 0 };',
+            '}',
+          ].join('\n'),
+        },
+        coreCookie,
+      );
+      assert.equal(coreSubmit.status, 200);
+      assert.equal(coreSubmit.json.passed, true);
+      assert.equal(coreSubmit.json.rewards.poolBucket, 'core');
+      assert.ok(coreSubmit.json.project.bucketPoints.core[coreId] > 0);
+
+      // Peripheral Farmer completes a real peripheral task -> recorded in bucketPoints.peripheral
+      const spamBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, spamCookie);
+      const spamWorker = spamBoot.json.state.workers.find((w) => w.track === 'api');
+      const spamClaim = await apiJson(isoUrl, 'POST', `/api/tasks/${periphTask.id}/claim`, { workerId: spamWorker.id }, spamCookie);
+      assert.equal(spamClaim.status, 200);
+      const spamSubmit = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${periphTask.id}/submit`,
+        {
+          workerId: spamWorker.id,
+          content: JSON.stringify({
+            en: { title: 'AntiDilution Vault', button: 'Verify Split', badge: '70/30 Cap' },
+            'zh-TW': { title: '防稀釋金庫', button: '驗證分紅', badge: '70/30 隔離' },
+          }, null, 2),
+        },
+        spamCookie,
+      );
+      assert.equal(spamSubmit.status, 200);
+      assert.equal(spamSubmit.json.passed, true);
+      assert.equal(spamSubmit.json.rewards.poolBucket, 'peripheral');
+      assert.ok(spamSubmit.json.project.bucketPoints.peripheral[spamId] > 0);
+
+      // Simulate extreme peripheral farming (100 core vs 10,000 peripheral) & 100% progress via persisted state.json
+      await stopServer(isoServer);
+      isoServer = null;
+
+      const statePath = path.join(isoDir, 'state.json');
+      const persisted = JSON.parse(await fs.readFile(statePath, 'utf8'));
+      const targetProj = persisted.projects.find((p) => p.id === projId);
+      assert.ok(targetProj);
+      targetProj.progressPct = 100;
+      targetProj.poolCaps = { coreSharePct: 70, peripheralSharePct: 30 };
+      targetProj.bucketPoints = {
+        core: { [coreId]: 100 },
+        peripheral: { [spamId]: 10000 },
+      };
+      targetProj.contributions = {
+        [coreId]: 100,
+        [spamId]: 10000,
+      };
+      await fs.writeFile(statePath, JSON.stringify(persisted, null, 2), 'utf8');
+
+      started = await startServer(isoDir);
+      isoServer = started.server;
+      isoUrl = started.baseUrl;
+
+      // Snapshot pre-launch balances
+      const origPre = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, origCookie);
+      const corePre = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, coreCookie);
+      const spamPre = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, spamCookie);
+      const origUsdBefore = origPre.json.state.player.usdBalance;
+      const coreUsdBefore = corePre.json.state.player.usdBalance;
+      const spamUsdBefore = spamPre.json.state.player.usdBalance;
+      const carryBefore = corePre.json.state.founderRevenue.incubationCarryUsd;
+
+      // Launch with $1,000 initial revenue -> $50 spark (5%), $100 platform (10%), $850 merit pool (85%)
+      // Inside $850 merit pool: Core gets EXACTLY $595 (85% x 70% = 59.5%), Peripheral Farmer capped at $255 (85% x 30% = 25.5%)
+      const launchRes = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/projects/${projId}/launch`,
+        { initialRevenueUsd: 1000 },
+        coreCookie,
+      );
+      assert.equal(launchRes.status, 200);
+      const div = launchRes.json.dividend;
+      assert.equal(div.grossRevenueUsd, 1000);
+      assert.equal(div.sparkRoyaltyUsd, 50, '5% First Spark royalty on $1,000 must be $50');
+      assert.equal(div.platformCarryUsd, 100, '10% Platform carry on $1,000 must be $100');
+      assert.equal(div.meritPoolUsd, 850, '85% Merit pool on $1,000 must be $850');
+      assert.equal(div.corePoolUsd, 595, 'Core pool (85% x 70%) must be EXACTLY $595');
+      assert.equal(div.peripheralPoolUsd, 255, 'Peripheral pool (85% x 30%) must be STRICTLY capped at $255');
+      assert.deepEqual(div.bucketCaps, { core: 70, peripheral: 30 });
+
+      assert.equal(div.payoutsByUser[origId].sparkUsd, 50);
+      assert.equal(div.payoutsByUser[origId].totalUsd, 50);
+      assert.equal(div.payoutsByUser[coreId].corePoints, 100);
+      assert.equal(div.payoutsByUser[coreId].coreUsd, 595);
+      assert.equal(div.payoutsByUser[coreId].peripheralUsd, 0);
+      assert.equal(div.payoutsByUser[coreId].totalUsd, 595, 'Core contributor must receive EXACTLY $595 (59.5%) with zero dilution');
+      assert.equal(div.payoutsByUser[spamId].peripheralPoints, 10000);
+      assert.equal(div.payoutsByUser[spamId].coreUsd, 0);
+      assert.equal(div.payoutsByUser[spamId].peripheralUsd, 255);
+      assert.equal(div.payoutsByUser[spamId].totalUsd, 255, '10,000-point peripheral spammer must be capped at $255 (25.5%)');
+      assert.equal(round2(div.payouts.reduce((sum, p) => sum + p.amountUsd, 0)), 1000);
+
+      // Confirm persisted USD balances & founderRevenue
+      const origPost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, origCookie);
+      const corePost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, coreCookie);
+      const spamPost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, spamCookie);
+      assert.equal(origPost.json.state.player.usdBalance, round2(origUsdBefore + 50));
+      assert.equal(corePost.json.state.player.usdBalance, round2(coreUsdBefore + 595));
+      assert.equal(spamPost.json.state.player.usdBalance, round2(spamUsdBefore + 255));
+      assert.equal(launchRes.json.founderRevenue.incubationCarryUsd, round2(carryBefore + 100));
+
+      // Verify subsequent simulate-revenue ($1,000) enforces the exact same $50 / $595 / $255 / $100 split
+      const simRes = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/projects/${projId}/simulate-revenue`,
+        { amountUsd: 1000 },
+        coreCookie,
+      );
+      assert.equal(simRes.status, 200);
+      assert.equal(simRes.json.dividend.corePoolUsd, 595);
+      assert.equal(simRes.json.dividend.peripheralPoolUsd, 255);
+      assert.equal(simRes.json.dividend.payoutsByUser[coreId].totalUsd, 595);
+      assert.equal(simRes.json.dividend.payoutsByUser[spamId].totalUsd, 255);
+    } finally {
+      await stopServer(isoServer);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
+
+  it('24. Stake gold deposit/refund, two-stage peer review queue (rev-slop-01 slash 30G, rev-clean-01 +15G), submitForReview & WORKER_COOLDOWN (429)', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-gov-review-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      // 1. GET /api/reviews must include pre-seeded rev-clean-01 and rev-slop-01
+      const revList = await apiJson(isoUrl, 'GET', '/api/reviews');
+      assert.equal(revList.status, 200);
+      assert.equal(revList.json.ok, true);
+      assert.ok(Array.isArray(revList.json.reviewQueue));
+
+      const cleanItem = revList.json.reviewQueue.find((r) => r.id === 'rev-clean-01');
+      const slopItem = revList.json.reviewQueue.find((r) => r.id === 'rev-slop-01');
+      assert.ok(cleanItem, 'Seeded reviewQueue must include rev-clean-01');
+      assert.ok(slopItem, 'Seeded reviewQueue must include rev-slop-01');
+      assert.equal(cleanItem.stakeGold, 25);
+      assert.equal(cleanItem.aiReview.aiScore, 94);
+      assert.equal(cleanItem.aiReview.riskLevel, 'low');
+      assert.equal(slopItem.stakeGold, 30);
+      assert.equal(slopItem.aiReview.aiScore, 21);
+      assert.equal(slopItem.aiReview.riskLevel, 'high');
+      assert.equal(slopItem.aiReview.bloatRatioPct, 87);
+
+      // 2. Unrelated brand-new user with 0 contributions cannot decide reviews (HTTP 403 REVIEWER_NOT_ELIGIBLE)
+      const regOutsider = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'outsider-rev@pixelcompute.test',
+        password: 'outsider-pass-123',
+        displayName: 'Unrelated Newbie',
+      });
+      assert.equal(regOutsider.status, 201);
+      const outsiderDecide = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/reviews/rev-slop-01/decide',
+        { decision: 'reject', reason: 'Unauthorized attempt' },
+        regOutsider.cookie,
+      );
+      assert.equal(outsiderDecide.status, 403);
+      assert.equal(outsiderDecide.json.ok, false);
+      assert.equal(outsiderDecide.json.code, 'REVIEWER_NOT_ELIGIBLE');
+
+      // 3. Reject rev-slop-01 as eligible reviewer (founding mayor): reviewer seizes 30G stake, slop submitter gets 0 contribution
+      const bootBeforeSlop = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      const mayorGoldBeforeSlop = bootBeforeSlop.json.state.player.gold;
+      const projI18nBefore = bootBeforeSlop.json.state.projects.find((p) => p.id === 'proj-i18n');
+      assert.equal(projI18nBefore.contributions['npc-slopbot'] || 0, 0);
+
+      const rejectSlop = await apiJson(isoUrl, 'POST', '/api/reviews/rev-slop-01/decide', {
+        decision: 'reject',
+        reason: 'Detected 87% repetitive AI slop boilerplate',
+      });
+      assert.equal(rejectSlop.status, 200);
+      assert.equal(rejectSlop.json.ok, true);
+      assert.equal(rejectSlop.json.decision, 'reject');
+      assert.equal(rejectSlop.json.slashedStakeGold, 30, 'Reviewer must seize 30G stake from SlopBot');
+      assert.equal(rejectSlop.json.seizedGold, 30);
+      assert.equal(rejectSlop.json.state.player.gold, mayorGoldBeforeSlop + 30, 'Mayor gold must increase by seized 30G');
+      const projI18nAfter = rejectSlop.json.state.projects.find((p) => p.id === 'proj-i18n');
+      assert.equal(projI18nAfter.contributions['npc-slopbot'] || 0, 0, 'Slop submitter must receive 0 contribution');
+      assert.equal(projI18nAfter.bucketPoints.core['npc-slopbot'] || 0, 0);
+      assert.ok(!rejectSlop.json.state.reviewQueue.some((r) => r.id === 'rev-slop-01'));
+      assert.ok(rejectSlop.json.state.reviewHistory.some((r) => r.id === 'rev-slop-01' && r.decision === 'reject'));
+
+      // 4. Approve rev-clean-01: reviewer earns +15G & +5 pts, contributor npc-rin receives +60 core points
+      const mayorGoldBeforeClean = rejectSlop.json.state.player.gold;
+      const projMetaBefore = rejectSlop.json.state.projects.find((p) => p.id === 'proj-meta');
+      const rinCoreBefore = projMetaBefore.bucketPoints?.core?.['npc-rin'] || 0;
+      const rinTotalBefore = projMetaBefore.contributions?.['npc-rin'] || 0;
+
+      const approveClean = await apiJson(isoUrl, 'POST', '/api/reviews/rev-clean-01/decide', {
+        decision: 'approve',
+        reason: 'Clean keyboard shortcut implementation with focus guards',
+      });
+      assert.equal(approveClean.status, 200);
+      assert.equal(approveClean.json.ok, true);
+      assert.equal(approveClean.json.decision, 'approve');
+      assert.equal(approveClean.json.reviewerRewardGold, 15, 'Approving reviewer must receive +15G');
+      assert.equal(approveClean.json.reviewerRewardPoints, 5, 'Approving reviewer must receive +5 contribution points');
+      assert.equal(approveClean.json.state.player.gold, mayorGoldBeforeClean + 15);
+      const projMetaAfter = approveClean.json.state.projects.find((p) => p.id === 'proj-meta');
+      assert.equal(projMetaAfter.bucketPoints.core['npc-rin'], rinCoreBefore + cleanItem.contributionPoints);
+      assert.equal(projMetaAfter.contributions['npc-rin'], rinTotalBefore + cleanItem.contributionPoints);
+      assert.ok(!approveClean.json.state.reviewQueue.some((r) => r.id === 'rev-clean-01'));
+      assert.ok(approveClean.json.state.reviewHistory.some((r) => r.id === 'rev-clean-01' && r.decision === 'approve'));
+
+      // 5. Claim guild task freezes stake gold -> release refunds full stake gold
+      const goldBeforeStake = approveClean.json.state.player.gold;
+      const claimBounty = await apiJson(isoUrl, 'POST', '/api/tasks/task-i18n-ast-pr/claim', {
+        workerId: 'w-pro-01',
+      });
+      assert.equal(claimBounty.status, 200);
+      assert.equal(claimBounty.json.stakedGold, 30, 'High-value $40 cash bounty should freeze 30G stake');
+      assert.equal(claimBounty.json.task.stakedGold, 30);
+      assert.equal(claimBounty.json.state.player.gold, goldBeforeStake - 30);
+
+      const releaseBounty = await apiJson(isoUrl, 'POST', '/api/tasks/task-i18n-ast-pr/release', {
+        workerId: 'w-pro-01',
+        reason: 'Testing full stake refund on clean release',
+      });
+      assert.equal(releaseBounty.status, 200);
+      assert.equal(releaseBounty.json.refundedStakeGold, 30);
+      assert.equal(releaseBounty.json.task.status, 'open');
+      assert.equal(releaseBounty.json.task.stakedGold, 0);
+      assert.equal(releaseBounty.json.state.player.gold, goldBeforeStake, 'Release must refund 100% of frozen stake gold');
+
+      // 6. Re-claim & submit with submitForReview: true -> enters pending_review -> peer approve completes task
+      const reClaimBounty = await apiJson(isoUrl, 'POST', '/api/tasks/task-i18n-ast-pr/claim', {
+        workerId: 'w-pro-01',
+      });
+      assert.equal(reClaimBounty.status, 200);
+      assert.equal(reClaimBounty.json.state.player.gold, goldBeforeStake - 30);
+
+      const submitQueued = await apiJson(isoUrl, 'POST', '/api/tasks/task-i18n-ast-pr/submit', {
+        workerId: 'w-pro-01',
+        prUrl: 'https://github.com/pixel-compute-town/i18n-pixelbot/pull/512',
+        submitForReview: true,
+        content: [
+          'export function extractJsxTranslationKeys(source) {',
+          '  const keys = new Set();',
+          '  const re = /\\bt\\(\\s*[\'"]([a-z0-9_.-]+)[\'"]\\s*\\)/gi;',
+          '  let match;',
+          '  while ((match = re.exec(source)) !== null) keys.add(match[1]);',
+          '  return Array.from(keys);',
+          '}',
+        ].join('\n'),
+      });
+      assert.equal(submitQueued.status, 200);
+      assert.equal(submitQueued.json.ok, true);
+      assert.equal(submitQueued.json.passed, true);
+      assert.equal(submitQueued.json.pendingReview, true);
+      assert.equal(submitQueued.json.task.status, 'pending_review');
+      assert.ok(submitQueued.json.reviewItem?.id);
+      assert.equal(submitQueued.json.reviewItem.stakeGold, 30);
+      assert.equal(submitQueued.json.reviewItem.poolBucket, 'core');
+      assert.equal(typeof submitQueued.json.reviewItem.aiReview?.aiScore, 'number');
+
+      const reviewsWithQueued = await apiJson(isoUrl, 'GET', '/api/reviews');
+      assert.ok(
+        reviewsWithQueued.json.reviewQueue.some((r) => r.id === submitQueued.json.reviewItem.id),
+        'Submitted PR must appear in GET /api/reviews queue',
+      );
+
+      const usdBeforeDynamicApprove = submitQueued.json.state.player.usdBalance;
+      const approveQueued = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/reviews/${encodeURIComponent(submitQueued.json.reviewItem.id)}/decide`,
+        { decision: 'approve', reason: 'Peer-approved after blind review' },
+      );
+      assert.equal(approveQueued.status, 200);
+      assert.equal(approveQueued.json.decision, 'approve');
+      assert.equal(approveQueued.json.task.status, 'completed');
+      assert.equal(approveQueued.json.reviewerRewardGold, 15);
+      // Founder gets $36 net bounty ($40 - 10% platform fee $4)
+      assert.equal(approveQueued.json.state.player.usdBalance, round2(usdBeforeDynamicApprove + 36));
+
+      // Verify PATCH /api/admin/settings supports peerReviewRequired toggle
+      const toggleOn = await apiJson(isoUrl, 'PATCH', '/api/admin/settings', { peerReviewRequired: true });
+      assert.equal(toggleOn.status, 200);
+      assert.equal(toggleOn.json.settings.peerReviewRequired, true);
+      const revAfterToggle = await apiJson(isoUrl, 'GET', '/api/reviews');
+      assert.equal(revAfterToggle.json.peerReviewRequired, true);
+      await apiJson(isoUrl, 'PATCH', '/api/admin/settings', { peerReviewRequired: false });
+
+      // 7. Two consecutive slop submissions forfeit stakes & trigger WORKER_COOLDOWN (HTTP 429 on next claim)
+      await apiJson(isoUrl, 'PATCH', '/api/workers/w-pro-01', { recoverStamina: true });
+      const claimSlop1 = await apiJson(isoUrl, 'POST', '/api/tasks/task-meta-pr/claim', { workerId: 'w-pro-01' });
+      assert.equal(claimSlop1.status, 200);
+      assert.equal(claimSlop1.json.stakedGold, 25);
+
+      const slop1 = await apiJson(isoUrl, 'POST', '/api/tasks/task-meta-pr/submit', {
+        workerId: 'w-pro-01',
+        content: 'lorem ipsum garbage aaaaaaaaaa',
+      });
+      assert.equal(slop1.status, 200);
+      assert.equal(slop1.json.passed, false);
+      assert.equal(slop1.json.slopStrikes, 1);
+      assert.equal(slop1.json.cooldownTriggered, false);
+      assert.equal(slop1.json.rewards.forfeitedStakeGold, 25);
+
+      // Second consecutive slop submission -> triggers cooldown!
+      const claimSlop2 = await apiJson(isoUrl, 'POST', '/api/tasks/task-meta-pr/claim', { workerId: 'w-pro-01' });
+      assert.equal(claimSlop2.status, 200);
+      assert.equal(claimSlop2.json.stakedGold, 25);
+
+      const slop2 = await apiJson(isoUrl, 'POST', '/api/tasks/task-meta-pr/submit', {
+        workerId: 'w-pro-01',
+        content: '隨便寫佔位符 lorem ipsum aaaaaaaa',
+      });
+      assert.equal(slop2.status, 200);
+      assert.equal(slop2.json.passed, false);
+      assert.equal(slop2.json.slopStrikes, 2);
+      assert.equal(slop2.json.cooldownTriggered, true);
+      assert.ok(slop2.json.cooldownUntil && Date.parse(slop2.json.cooldownUntil) > Date.now());
+      assert.equal(slop2.json.rewards.forfeitedStakeGold, 25);
+
+      // Attempting to claim again while cooling down MUST return HTTP 429 WORKER_COOLDOWN
+      const blockedClaim = await apiJson(isoUrl, 'POST', '/api/tasks/task-meta-pr/claim', { workerId: 'w-pro-01' });
+      assert.equal(blockedClaim.status, 429, 'Cooling-down worker must be blocked with HTTP 429');
+      assert.equal(blockedClaim.json.ok, false);
+      assert.equal(blockedClaim.json.code, 'WORKER_COOLDOWN');
+      assert.ok(blockedClaim.json.cooldownRemainingSec >= 1);
+    } finally {
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
   });
 });

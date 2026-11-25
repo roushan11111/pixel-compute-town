@@ -212,6 +212,27 @@
           <span data-i18n-html="guild.banner">⚔️ <strong>月／週訂閱額度軌道（BYOT 合規）</strong>：接單後複製標準化 Context Pack 給本機 Gemini CLI / Claude Code / Codex，或跑 <code class="mono">pixel-worker</code> 即時直播小人幹活！</span>
         </div>
 
+        <!-- ⚖️ 實幹審閱佇列（防垃圾 AI 過濾站） -->
+        <section class="review-queue-panel" id="review-queue-panel" aria-label="Peer Review Queue">
+          <div class="review-panel-head">
+            <div class="review-panel-title-wrap">
+              <strong class="review-panel-title" data-i18n="review.panelTitle">⚖️ 實幹審閱佇列（防垃圾 AI 過濾站）</strong>
+              <span class="badge red review-badge-pulse" id="review-queue-badge">0 筆待審</span>
+            </div>
+            <button type="button" class="btn btn-sm" id="btn-refresh-reviews" data-i18n="review.refreshBtn">🔄 刷新佇列</button>
+          </div>
+          <p class="review-panel-desc" data-i18n-html="review.panelDesc">
+            實幹者與維護者擁有合併否決權：核准優質 PR 領 <strong>+15G</strong> 審閱獎，揪出並駁回垃圾 AI 注水可直接<strong>沒收對方押金歸自己</strong>！
+          </p>
+          <div class="card-list review-queue-list" id="review-queue-list">
+            <div class="empty-state" data-i18n="review.empty">目前沒有待審閱的提交，所有佇列均已清空！</div>
+          </div>
+          <div class="review-history-wrap" id="review-history-wrap" style="display: none;">
+            <div class="review-history-title" data-i18n="review.historyTitle">📜 近期審閱裁決紀錄</div>
+            <div class="ledger-list" id="review-history-list"></div>
+          </div>
+        </section>
+
         <!-- GitHub 公開倉庫 Issue 實單匯入面板 -->
         <form class="github-import-card" id="github-import-form">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
@@ -460,6 +481,18 @@
               </label>
             </div>
 
+            <!-- 全局強制雙階段實幹審閱開關 -->
+            <div class="admin-switch-row">
+              <div>
+                <div style="font-weight: 800; font-size: 12px;" data-i18n="admin.peerReviewTitle">⚖️ 全局強制雙階段實幹審閱（Peer Review Required）</div>
+                <div class="card-subtitle" data-i18n="admin.peerReviewDesc">開啟後，所有工會大單通過機器硬門檻後將自動進入實幹審閱佇列，須由實幹者或維護者核准才合併結算。</div>
+              </div>
+              <label class="autopilot-toggle" id="peer-review-label">
+                <input type="checkbox" id="toggle-peer-review-required" />
+                <span id="peer-review-badge" data-i18n="admin.peerReviewOff">⚡ 自選審閱</span>
+              </label>
+            </div>
+
             <!-- 待審核與已綁定裝置清單 -->
             <div class="subsection-title" style="font-size: 12px;">
               <span data-i18n="admin.devicesTitle">待審核與已綁定裝置清單</span>
@@ -613,6 +646,11 @@
           </div>
           <textarea class="textarea" id="guild-submit-content" rows="6" data-i18n-placeholder="modal.guild.contentPlaceholder" placeholder="貼上程式碼、Diff 說明、測試輸出或結構化交付報告（空白或灌水將被防作弊系統攔截並扣信譽分）..."></textarea>
         </div>
+
+        <label class="autopilot-toggle review-submit-toggle" id="guild-submit-review-label">
+          <input type="checkbox" id="guild-submit-for-review" />
+          <span data-i18n="modal.guild.submitForReview">⚖️ 提交至雙階段實幹審閱佇列（標準防刷流程）</span>
+        </label>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn" data-close-modal="modal-guild" data-i18n="modal.guild.laterBtn">稍後提交</button>

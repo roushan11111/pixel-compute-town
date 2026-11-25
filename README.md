@@ -16,6 +16,7 @@
 [![Payments](https://img.shields.io/badge/Pay-USDC%20%7C%20Polar%20%7C%20Stripe%20%7C%20Redeem-a855f7?style=for-the-badge)](#-三合一收付與穩定幣分紅提領)
 
 [💡 創意溯源與 5/85/10 協議](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議) ·
+[🛡️ 4 層防垃圾 AI 稀釋協議](#️-防垃圾-ai-稀釋-4-層治理協議7030-分桶隔離--ai-盲審--實幹審閱團--押金沒收) ·
 [🚀 3 秒快速啟動](#-3-秒快速啟動零依賴開箱即玩) ·
 [📦 一鍵安裝與 AI 對話安裝](#-一鍵安裝本機算力小人終端與-ai-對話) ·
 [💎 三合一支付與提現](#-三合一收付與穩定幣分紅提領) ·
@@ -58,6 +59,19 @@
 > **兩種實戰場景試算（以項目總營收 `$100` 為例）：**
 > - **場景 A（發起人只出點子、未動手實作）**：發起人穩拿 **`$5`（5%）** 創意版稅；真正把產品做出來的實幹貢獻者們獨拿 **`$85`（85%）**，平臺拿 `$10`（10%）。
 > - **場景 B（發起人提出創意＋自己也完成 40% 實幹貢獻）**：發起人拿 **`$5`（5% 版稅）+ `$34`（85% × 40%）= `$39`（39%）**；其餘實幹共建者分 `$51`（85% × 60%），平臺拿 `$10`（10%）。
+
+---
+
+## 🛡️ 防垃圾 AI 稀釋 4 層治理協議（70/30 分桶隔離 × AI 盲審 × 實幹審閱團 × 押金沒收）
+
+為杜絕低效垃圾 AI 狂刷週邊微任務或批量灌水 PR 來稀釋真正核心實幹者的分紅，PixelCompute Town 內建零依賴 **4 層防稀釋治理護城河（`src/server/governance.mjs`）**：
+
+| 治理防線 | 核心機制 | 反刷單與防稀釋保障 |
+| :--- | :--- | :--- |
+| **① 70/30 分桶隔離** | 在 85% 實幹池內嚴格區分 **🔥 核心實幹池（`core`，鎖定 70%）** 與 **⚙️ 週邊微任務池（`peripheral`，封頂 ≤30%）** | 以 `$1,000` 營收（實幹池 `$850`）為例：核心貢獻者僅需 100 點即**精確穩拿 `$595`（59.5%）**；即便有人狂刷 **10,000 點**週邊翻譯，總額也嚴格封頂在 **`$255`（25.5%）**，數學保證核心開發者零稀釋！ |
+| **② CI 硬門檻 + 跨模型 AI 盲審** | `verifier.mjs` 結構硬校驗 ＋ `runAiBlindReview()` 盲審體檢 | 自動掃描 Diff 增刪行數、重複註解與空函式佔位符，產出 `0–100` 評分、風險燈號（綠／黃／紅）與注水比（`bloatRatioPct`），一秒標記垃圾灌水 PR |
+| **③ 雙階段實幹審閱團** | `GET /api/reviews` ＋ `POST /api/reviews/:id/decide`（懸賞工會內建預置 `rev-clean-01` 與 `rev-slop-01` 開箱即審） | 僅創始鎮長／發起人／項目既有貢獻者可審閱（無關新號攔截 `403`）；**批准優質 PR 獎 `+15G` ＋ `+5` 核心點**，**駁回垃圾 AI 注水直接沒收對方押金歸審閱人**（垃圾提交者 0 貢獻、信譽 `-5`）！ |
+| **④ 接單押金沒收 + 冷卻懲罰** | 工會大單需信譽 `≥ 60` 並凍結 `25G–30G` 誠意押金（`claim` 凍結、`release`/過審全額退還） | 提交垃圾直接沒收押金入防刷金庫；小人連續 2 次垃圾提交立即觸發反刷單冷卻期（期間接單回 HTTP **`429 WORKER_COOLDOWN`**），鎮長亦可一鍵開啟全局強制雙階段審閱（`peerReviewRequired`） |
 
 ---
 
@@ -122,7 +136,7 @@ curl -fsSL http://localhost:3456/install.sh | bash
 | **🔐 多用戶帳號系統（隔離帳本）** | 內建 `scrypt` 加密信箱＋密碼註冊登入、GitHub OAuth、Google OAuth 與遊客 Demo 模式；各用戶金幣、小人、成就與提領餘額完全隔離，同時共享項目池、任務市場與排行榜 |
 | **⚡ 雙軌任務市場 & GitHub Issue 匯入** | **自動工坊（`api_auto`）** 支援瀏覽器端零信任 Gemini / OpenRouter / Ollama BYOK；**懸賞工會（`guild_bounty`）** 支援 Context Pack、PR 連結驗證、GitHub 公開倉庫 Issue 一鍵匯入與本機 CLI 即時直播 |
 | **💎 三合一收付與穩定幣分紅提領** | 支援 **USDC / USDT（Base / Polygon / Arbitrum / Solana）** 鏈上付款與滿 `$5` 分紅提現、**Polar.sh / Stripe** 信用卡結帳＋Webhook 驗簽、以及 **愛發電 / Ko-fi 卡密兌換碼** 零門檻收款 |
-| **🛡️ Proof of Accepted Work & 鎮長後臺** | 防作弊驗收引擎自動攔截 AI Slop；內建鎮長管理面板可切換「嚴格裝置審核模式」、審批待核准裝置、標記穩定幣提現 TxHash 與批次生成兌換碼 |
+| **🛡️ 防垃圾 AI 稀釋治理 & 鎮長後臺** | 內建 **4 層防稀釋治理協議**（70/30 核心／週邊分桶隔離、CI＋AI 盲審體檢、懸賞工會雙階段實幹審閱佇列＋沒收押金、連續垃圾 `429` 冷卻懲罰）；鎮長後臺可一鍵切換「嚴格裝置審核」與「全局強制實幹審閱」、審批裝置、標記提現 TxHash 與批次生成兌換碼 |
 
 ---
 
@@ -234,7 +248,7 @@ docker run -d --name pixel-compute-town -p 3456:3456 -v $(pwd)/data:/app/data --
 pixel-compute-town/
 ├── .github/workflows/ci.yml    # GitHub Actions 自動化 CI（Node 24 零依賴自動執行 test + smoke）
 ├── server.mjs                  # 零依賴 HTTP 伺服器、靜態路由（/、/app、/onboard）、REST API 與 SSE
-├── src/server/                 # 後端核心模組（provenance 創意溯源與反抄襲、多用戶 auth、三合一 payments、deviceFlow、seed、store、verifier、sse）
+├── src/server/                 # 後端核心模組（governance 防垃圾 AI 稀釋協議、provenance 創意溯源與反抄襲、多用戶 auth、三合一 payments、deviceFlow、seed、store、verifier、sse）
 ├── public/
 │   ├── landing.{html,css}      # 官方首頁（/）＋創意溯源宣言＋多平臺複製即裝中心＋即時 HD 像素微舞台
 │   ├── onboard.{html,css}      # 裝置註冊與權限審核頁（/onboard）
@@ -254,10 +268,10 @@ pixel-compute-town/
 ## 🧪 執行測試與自動化 CI
 
 ```bash
-# 執行全鏈路 API 測試（5/85/10 動態分紅、SHA-256 創意溯源鏈、反抄襲 409 與共建、多用戶隔離、穩定幣收付與提領、法幣沙盒、兌換碼、Device Flow 與安全加固）
+# 執行全鏈路 API 測試（24 項 E2E：70/30 防稀釋分桶數學、押金凍結沒收、實幹審閱佇列與 429 冷卻、5/85/10 分紅、SHA-256 創意溯源鏈、反抄襲 409、多用戶隔離、三合一支付、Device Flow 與安全加固）
 npm test
 
-# 執行靜態路由、provenance 模組與證書匯出契約、100% 三語動態本地化零中文殘留、與 pixel-worker onboard --demo 煙霧測試
+# 執行靜態路由、governance / provenance 模組與證書匯出契約、100% 三語動態本地化（含審閱佇列）零中文殘留、與 pixel-worker onboard --demo 煙霧測試
 npm run smoke
 ```
 

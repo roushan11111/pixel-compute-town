@@ -22,6 +22,7 @@ import {
   localizeProject,
   localizeRedeemNote,
   localizeRevenueLabel,
+  localizeReviewItem,
   localizeRoleLabel,
   localizeServerMessage,
   localizeShopItem,
@@ -110,11 +111,13 @@ const app = {
   adminData: {
     isAdmin: true,
     strictDeviceReview: false,
+    peerReviewRequired: false,
     pendingDevices: [],
     allDevices: [],
     redeemCodes: [],
     payouts: [],
   },
+  cooldownTimer: null,
   engine: null,
   sse: null,
   sseState: 'connecting',
@@ -218,6 +221,75 @@ function shortHash(str, head = 8, tail = 6) {
   if (!str) return '';
   const s = String(str);
   return s.length > head + tail + 3 ? `${s.slice(0, head)}...${s.slice(-tail)}` : s;
+}
+
+function getWorkerCooldownRemainingSec(worker) {
+  if (!worker?.cooldownUntil) return 0;
+  const untilMs =
+    typeof worker.cooldownUntil === 'number'
+      ? worker.cooldownUntil
+      : new Date(worker.cooldownUntil).getTime();
+  if (!Number.isFinite(untilMs)) return 0;
+  const diff = Math.ceil((untilMs - Date.now()) / 1000);
+  return diff > 0 ? diff : 0;
+}
+
+function syncWorkerCooldownTicker() {
+  const workers = app.state?.workers || [];
+  const hasCooldown = workers.some((w) => getWorkerCooldownRemainingSec(w) > 0);
+  if (hasCooldown && !app.cooldownTimer) {
+    app.cooldownTimer = setInterval(() => {
+      const stillCooling = (app.state?.workers || []).some((w) => getWorkerCooldownRemainingSec(w) > 0);
+      renderWorkersAndShopTab();
+      renderStageStatus();
+      if (!stillCooling && app.cooldownTimer) {
+        clearInterval(app.cooldownTimer);
+        app.cooldownTimer = null;
+      }
+    }, 1000);
+  } else if (!hasCooldown && app.cooldownTimer) {
+    clearInterval(app.cooldownTimer);
+    app.cooldownTimer = null;
+  }
+}
+
+function getPeerReviewRequiredFlag() {
+  return Boolean(
+    app.state?.settings?.peerReviewRequired ??
+      app.authConfig?.peerReviewRequired ??
+      app.adminData?.peerReviewRequired ??
+      false,
+  );
+}
+
+function getTaskBucketSafe(task) {
+  if (task?.poolBucket === 'core' || task?.poolBucket === 'peripheral') {
+    return task.poolBucket;
+  }
+  if (
+    task?.track === 'guild_bounty' ||
+    ['feature_pr', 'architecture', 'bugfix'].includes(task?.category)
+  ) {
+    return 'core';
+  }
+  return 'peripheral';
+}
+
+function getTaskStakeSafe(task) {
+  if (typeof task?.stakeGold === 'number' && Number.isFinite(task.stakeGold)) {
+    return task.stakeGold;
+  }
+  if (task?.track === 'guild_bounty') {
+    return (task.cashBountyUsd || 0) > 0 ? 30 : 25;
+  }
+  return 0;
+}
+
+function getTaskMinRepSafe(task) {
+  if (typeof task?.minReputation === 'number' && Number.isFinite(task.minReputation)) {
+    return task.minReputation;
+  }
+  return task?.track === 'guild_bounty' ? 60 : 0;
 }
 
 function showToast(message, type = 'info', durationMs = 3400) {
@@ -818,11 +890,13 @@ function renderStageStatus() {
       .map((w) => {
         const lw = localizeWorker(w, loc);
         const isWorking = w.status === 'working';
-        const icon = isWorking ? '⚡' : '☕';
+        const cdSec = getWorkerCooldownRemainingSec(w);
+        const icon = cdSec > 0 ? '⏳' : isWorking ? '⚡' : '☕';
+        const cdSuffix = cdSec > 0 ? ` · ${cdSec}s` : '';
         return `
           <button type="button" class="worker-strip-pill ${isWorking ? 'working' : ''}" data-select-strip-worker="${escapeHtml(w.id)}" title="${escapeHtml(lw.name)} · ${escapeHtml(lw.roleName)}">
             <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(w.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(w.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'idle'}"></canvas>
-            <span>${icon} ${escapeHtml(lw.name)} Lv.${w.level} (${w.stamina}/${w.maxStamina})</span>
+            <span>${icon} ${escapeHtml(lw.name)} Lv.${w.level} (${w.stamina}/${w.maxStamina})${escapeHtml(cdSuffix)}</span>
           </button>
         `;
       })
@@ -985,6 +1059,14 @@ function renderFactoryTab() {
           `
           : '';
 
+      const bucket = getTaskBucketSafe(task);
+      const bucketBadge =
+        bucket === 'core'
+          ? `<span class="badge core-pool">${escapeHtml(t('gov.bucketCore'))}</span>`
+          : `<span class="badge periph-pool">${escapeHtml(t('gov.bucketPeripheral'))}</span>`;
+      const stakeGold = getTaskStakeSafe(task);
+      const minRep = getTaskMinRepSafe(task);
+
       return `
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
           <div class="card-head">
@@ -996,11 +1078,14 @@ function renderFactoryTab() {
           </div>
           ${workerChipHtml}
           <div class="badge-row">
+            ${bucketBadge}
             <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
             <span class="badge cyan">🤖 ${escapeHtml(task.modelSuggestion || 'gemini-2.5-flash')}</span>
             <span class="badge">⚡ ${(task.tokenCostEst || 0).toLocaleString()} tok / -${task.staminaCost || 12}</span>
             <span class="badge gold">🪙 +${task.goldReward}G</span>
             <span class="badge pink">✨ +${task.contributionPoints} pt</span>
+            ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
+            ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
             ${task.cashBountyUsd > 0 ? `<span class="badge green">💵 $${task.cashBountyUsd} ($${(task.cashBountyUsd * 0.9).toFixed(2)} ${escapeHtml(t('factory.netSuffix'))})</span>` : ''}
           </div>
           <div class="card-footer">
@@ -1024,7 +1109,214 @@ function renderFactoryTab() {
   hydrateWorkerPortraits(listEl);
 }
 
+function renderReviewQueuePanel() {
+  const loc = getLocale();
+  const listEl = $('review-queue-list');
+  const badgeEl = $('review-queue-badge');
+  const histWrap = $('review-history-wrap');
+  const histEl = $('review-history-list');
+  if (!listEl) return;
+
+  const rawQueue = Array.isArray(app.state?.reviewQueue) ? app.state.reviewQueue : [];
+  const pendingItems = rawQueue.filter((item) => item && item.status !== 'approved' && item.status !== 'rejected');
+
+  if (badgeEl) {
+    badgeEl.textContent = t('review.pendingBadge', { count: pendingItems.length });
+    badgeEl.className = `badge ${pendingItems.length > 0 ? 'red review-badge-pulse has-items' : 'green'}`;
+  }
+
+  if (pendingItems.length === 0) {
+    listEl.innerHTML = `<div class="empty-state">${escapeHtml(t('review.empty'))}</div>`;
+  } else {
+    const tasks = app.state?.tasks || [];
+    const projects = app.state?.projects || [];
+
+    listEl.innerHTML = pendingItems
+      .map((item) => {
+        const lr = localizeReviewItem(item, loc, { tasks, projects });
+        const ai = item.aiReview || item.aiReport || item.blindReview || {};
+        const aiScore = Number(ai.aiScore ?? item.aiScore ?? 80);
+        const riskLevel =
+          ai.riskLevel || item.riskLevel || (aiScore >= 70 ? 'low' : aiScore >= 45 ? 'medium' : 'high');
+        const diffAdd = Number(ai.diffLinesAdded ?? item.diffLinesAdded ?? 0);
+        const diffRem = Number(ai.diffLinesRemoved ?? item.diffLinesRemoved ?? 0);
+        const bloatPct = Number(ai.bloatRatioPct ?? item.bloatRatioPct ?? 0);
+        const stakeGold = Number(item.stakeGold ?? item.stakedGold ?? 0);
+        const bucket = item.poolBucket === 'peripheral' ? 'peripheral' : 'core';
+
+        const cardCls = riskLevel === 'high' ? 'slop-risk' : riskLevel === 'medium' ? 'med-risk' : 'clean-pr';
+        const aiBadgeText =
+          riskLevel === 'high'
+            ? t('review.aiScoreSlop', { score: aiScore })
+            : riskLevel === 'medium'
+              ? t('review.aiScoreMed', { score: aiScore })
+              : t('review.aiScoreGood', { score: aiScore });
+
+        const rejectLabel =
+          stakeGold > 0
+            ? t('review.rejectBtnWithStake', { stake: stakeGold })
+            : t('review.rejectBtn');
+
+        const flagsHtml = (lr.flags || []).length
+          ? `<div class="review-flags-row">${lr.flags
+              .map((f) => `<span class="badge ${riskLevel === 'high' ? 'red' : riskLevel === 'medium' ? 'amber' : 'green'}">${escapeHtml(f)}</span>`)
+              .join('')}</div>`
+          : '';
+
+        const prLine = item.prUrl ? `\nPR: ${item.prUrl}` : '';
+
+        return `
+          <article class="review-card ${cardCls}" data-review-card="${escapeHtml(item.id)}">
+            <div class="review-card-top">
+              <div style="min-width: 0; flex: 1;">
+                <h4 class="card-title">${escapeHtml(lr.taskTitle)}</h4>
+                <div class="badge-row" style="margin-top: 5px;">
+                  <span class="badge">📦 ${escapeHtml(lr.projectName)}</span>
+                  <span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>
+                  <span class="badge cyan">${escapeHtml(t('review.submitterPrefix', { name: lr.submitterName }))}</span>
+                  ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('review.stakeBadge', { stake: stakeGold }))}</span>` : ''}
+                </div>
+              </div>
+              <span class="review-ai-pill ${escapeHtml(riskLevel)}">${escapeHtml(aiBadgeText)}</span>
+            </div>
+
+            <div class="review-diff-row">
+              <span class="diff-added">+${diffAdd.toLocaleString()}</span>
+              <span>/</span>
+              <span class="diff-removed">-${diffRem.toLocaleString()}</span>
+              <span>·</span>
+              <span class="diff-bloat ${bloatPct >= 40 ? 'danger' : ''}">${escapeHtml(t('review.diffBloat', { bloat: bloatPct }))}</span>
+              ${item.contributionPoints ? `<span class="badge pink">✨ +${item.contributionPoints} pt</span>` : ''}
+            </div>
+
+            ${lr.summary ? `<p class="review-summary-text">${escapeHtml(lr.summary)}</p>` : ''}
+            ${flagsHtml}
+
+            <details class="review-preview-details">
+              <summary>${escapeHtml(t('review.previewSummary'))}</summary>
+              <pre class="review-preview-code">${escapeHtml(`${lr.contentPreview || ''}${prLine}`)}</pre>
+            </details>
+
+            <div class="review-actions-row">
+              <button type="button" class="btn btn-sm btn-green" data-decide-review="${escapeHtml(item.id)}" data-review-decision="approve">
+                ${escapeHtml(t('review.approveBtn'))}
+              </button>
+              <button type="button" class="btn btn-sm btn-danger" data-decide-review="${escapeHtml(item.id)}" data-review-decision="reject">
+                ${escapeHtml(rejectLabel)}
+              </button>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+  }
+
+  // Recent review verdict history
+  const history = Array.isArray(app.state?.reviewHistory) ? app.state.reviewHistory : [];
+  if (histWrap && histEl) {
+    if (history.length === 0) {
+      histWrap.style.display = 'none';
+      histEl.innerHTML = '';
+    } else {
+      histWrap.style.display = 'flex';
+      const tasks = app.state?.tasks || [];
+      const projects = app.state?.projects || [];
+      histEl.innerHTML = history
+        .slice(0, 6)
+        .map((h) => {
+          const lr = localizeReviewItem(h, loc, { tasks, projects });
+          const approved = h.decision === 'approve' || h.status === 'approved';
+          const stakeSlashed = Number(h.slashedStakeGold ?? h.stakeSlashedGold ?? h.stakeGold ?? 0);
+          const rewardGold = Number(h.reviewerRewardGold ?? 15);
+          const outcomeText = approved
+            ? t('review.historyReward', { gold: rewardGold })
+            : stakeSlashed > 0
+              ? t('review.historySlashed', { stake: stakeSlashed })
+              : '0 pt';
+          return `
+            <div class="ledger-row" style="flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span class="badge ${approved ? 'green' : 'red'}">${escapeHtml(approved ? t('review.historyApproved') : t('review.historyRejected'))}</span>
+                <strong>${escapeHtml(lr.taskTitle)}</strong>
+                <span class="mono" style="font-size: 11px; color: var(--text-muted);">${escapeHtml(lr.submitterName)}</span>
+              </div>
+              <span class="mono" style="font-size: 11px; font-weight: 800; color: ${approved ? 'var(--accent-green)' : 'var(--accent-gold)'};">${escapeHtml(outcomeText)}</span>
+            </div>
+          `;
+        })
+        .join('');
+    }
+  }
+}
+
+async function refreshReviewsNow({ showFeedback = false } = {}) {
+  try {
+    const res = await apiFetch('/api/reviews');
+    if (app.state) {
+      if (Array.isArray(res.reviewQueue)) app.state.reviewQueue = res.reviewQueue;
+      if (Array.isArray(res.reviewHistory)) app.state.reviewHistory = res.reviewHistory;
+      if (typeof res.peerReviewRequired === 'boolean') {
+        app.state.settings = { ...(app.state.settings || {}), peerReviewRequired: res.peerReviewRequired };
+      }
+      renderReviewQueuePanel();
+    }
+    if (showFeedback) {
+      soundFX.playClick();
+      showToast(t('toast.reviewRefreshed'), 'info', 2000);
+    }
+  } catch (err) {
+    if (showFeedback) showToast(err.message, 'error');
+  }
+}
+
+async function decideReviewItem(reviewId, decision, triggerBtn = null) {
+  if (!reviewId || !decision) return;
+  if (triggerBtn) triggerBtn.disabled = true;
+  try {
+    app.lastLocalMutationAt = Date.now();
+    const res = await apiFetch(`/api/reviews/${encodeURIComponent(reviewId)}/decide`, {
+      method: 'POST',
+      body: { decision },
+    });
+    if (res.state) {
+      applyNewState(res.state);
+    } else {
+      await refreshBootstrapNow();
+    }
+
+    if (decision === 'approve') {
+      soundFX.playVerify();
+      setTimeout(() => soundFX.playCoin(), 200);
+      const rewardGold = Number(res.reviewerRewardGold ?? res.reviewerReward?.gold ?? 15);
+      const rewardPts = Number(res.reviewerRewardPoints ?? res.reviewerReward?.points ?? 5);
+      showToast(
+        t('toast.reviewApproved', { gold: rewardGold, pts: rewardPts }),
+        'success',
+        5000,
+      );
+    } else {
+      soundFX.playCoin();
+      const slashed = Number(
+        res.slashedStakeGold ?? res.stakeSlashedGold ?? res.seizedGold ?? res.reviewItem?.stakeGold ?? 0,
+      );
+      showToast(
+        slashed > 0
+          ? t('toast.reviewRejected', { stake: slashed })
+          : t('toast.reviewRejectedNoStake'),
+        'achievement',
+        5200,
+      );
+    }
+  } catch (err) {
+    soundFX.playReject();
+    showToast(t('toast.reviewDecideFailed', { err: err.message }), 'error', 4500);
+  } finally {
+    if (triggerBtn) triggerBtn.disabled = false;
+  }
+}
+
 function renderGuildTab() {
+  renderReviewQueuePanel();
   const loc = getLocale();
   const projFilter = $('guild-project-filter');
   const workerSelect = $('guild-worker-select');
@@ -1072,18 +1364,22 @@ function renderGuildTab() {
       const proj = projectMap.get(task.projectId);
       const lp = proj ? localizeProject(proj, loc) : null;
       const isCompleted = task.status === 'completed';
+      const isPendingReview = task.status === 'pending_review';
       const isWorking = task.status === 'in_progress';
       const assignedWorker = workerMap.get(task.assignedWorkerId || task.submission?.workerId || '');
       const lw = assignedWorker ? localizeWorker(assignedWorker, loc) : null;
       const netUsd = Number((task.cashBountyUsd * 0.9).toFixed(2));
       const feeUsd = Number((task.cashBountyUsd * 0.1).toFixed(2));
+      const bucket = getTaskBucketSafe(task);
+      const stakeGold = getTaskStakeSafe(task);
+      const minRep = getTaskMinRepSafe(task);
 
       const workerChipHtml =
-        assignedWorker && (isWorking || isCompleted)
+        assignedWorker && (isWorking || isCompleted || isPendingReview)
           ? `
             <div class="task-worker-chip ${isCompleted ? 'completed' : ''}">
               <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(assignedWorker.roleClass || 'pro_architect')}" data-portrait-skin="${escapeHtml(assignedWorker.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'celebrate'}"></canvas>
-              <span>${isWorking ? '⚔️' : '✅'} ${escapeHtml(lw.name)} ${escapeHtml(isWorking ? t('guild.workerBusyTag') : t('guild.workerDoneTag'))}</span>
+              <span>${isWorking ? '⚔️' : isPendingReview ? '⚖️' : '✅'} ${escapeHtml(lw.name)} ${escapeHtml(isWorking ? t('guild.workerBusyTag') : isPendingReview ? t('badge.guildPendingReview') : t('guild.workerDoneTag'))}</span>
             </div>
           `
           : '';
@@ -1098,13 +1394,18 @@ function renderGuildTab() {
             ${
               isCompleted
                 ? `<span class="badge green">${escapeHtml(t('badge.guildCompleted'))}</span>`
-                : isWorking
-                  ? `<span class="badge cyan">${escapeHtml(t('badge.guildWorking'))}</span>`
-                  : `<span class="badge amber">${escapeHtml(t('badge.guildOpen'))}</span>`
+                : isPendingReview
+                  ? `<span class="badge pink">${escapeHtml(t('badge.guildPendingReview'))}</span>`
+                  : isWorking
+                    ? `<span class="badge cyan">${escapeHtml(t('badge.guildWorking'))}</span>`
+                    : `<span class="badge amber">${escapeHtml(t('badge.guildOpen'))}</span>`
             }
           </div>
           ${workerChipHtml}
           <div class="badge-row">
+            <span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>
+            ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
+            ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
             <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
             <span class="badge amber">🖥️ ${escapeHtml(task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
             <span class="badge gold">🪙 +${task.goldReward}G</span>
@@ -1123,9 +1424,11 @@ function renderGuildTab() {
               ${
                 isCompleted
                   ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('factory.inspect'))} (${task.verification?.score ?? 90})</button>`
-                  : `<button type="button" class="btn btn-sm btn-amber" data-open-guild="${escapeHtml(task.id)}">
-                      ${escapeHtml(isWorking ? t('guild.claimResume') : t('guild.claimOpen'))}
-                    </button>`
+                  : isPendingReview
+                    ? `<button type="button" class="btn btn-sm btn-pink" data-jump-review-queue="1">${escapeHtml(t('review.jumpToQueue'))}</button>`
+                    : `<button type="button" class="btn btn-sm btn-amber" data-open-guild="${escapeHtml(task.id)}">
+                        ${escapeHtml(isWorking ? t('guild.claimResume') : t('guild.claimOpen'))}
+                      </button>`
               }
             </div>
           </div>
@@ -1178,6 +1481,11 @@ function renderIncubatorTab() {
       const ideaHashShort = p.ideaHash ? p.ideaHash.slice(0, 10) : 'GENESIS';
       const originatedStr = fmtUtcShort(p.originatedAt || p.createdAt);
 
+      const coreCapPct = Number(p.poolCaps?.coreSharePct ?? 70);
+      const periphCapPct = Number(p.poolCaps?.peripheralSharePct ?? 30);
+      const corePts = Object.values(p.bucketPoints?.core || {}).reduce((s, v) => s + Number(v || 0), 0);
+      const periphPts = Object.values(p.bucketPoints?.peripheral || {}).reduce((s, v) => s + Number(v || 0), 0);
+
       const votePct = Math.min(100, Math.round(((p.votes || 0) / (p.votesRequired || 10)) * 100));
       const votesLeft = Math.max(0, (p.votesRequired || 10) - (p.votes || 0));
 
@@ -1221,6 +1529,17 @@ function renderIncubatorTab() {
               <div class="split-mini-seg spark" style="width: 19%;">${escapeHtml(t('incubator.splitSpark'))}</div>
               <div class="split-mini-seg merit" style="width: 65%;">${escapeHtml(t('incubator.splitMerit'))}</div>
               <div class="split-mini-seg platform" style="width: 16%;">${escapeHtml(t('incubator.splitPlatform'))}</div>
+            </div>
+            <!-- 🛡️ 防稀釋配額條（核心實幹池 70% vs 週邊微任務池 ≤30%） -->
+            <div class="bucket-quota-box">
+              <div class="bucket-quota-head">
+                <span>${escapeHtml(t('gov.quotaHeader'))}</span>
+                <span class="mono" style="color: var(--accent-cyan);">${escapeHtml(t('gov.quotaProofHint'))}</span>
+              </div>
+              <div class="bucket-mini-bar" title="${escapeHtml(`${coreCapPct}% Core (${corePts} pt) / <=${periphCapPct}% Peripheral (${periphPts} pt)`)}">
+                <div class="bucket-mini-seg core" style="width: ${coreCapPct}%;">${escapeHtml(t('gov.coreBarLabel', { cap: coreCapPct, pts: corePts }))}</div>
+                <div class="bucket-mini-seg peripheral" style="width: ${periphCapPct}%;">${escapeHtml(t('gov.periphBarLabel', { cap: periphCapPct, pts: periphPts }))}</div>
+              </div>
             </div>
           </div>
 
@@ -1318,6 +1637,12 @@ function renderWorkersAndShopTab() {
           )
           .join('');
         const skinFrameClass = w.skin && w.skin !== 'default' ? escapeHtml(w.skin) : '';
+        const cooldownSec = getWorkerCooldownRemainingSec(w);
+        const slopStrikes = Number(w.slopStrikes || 0);
+        const statusBadgeHtml =
+          cooldownSec > 0
+            ? `<span class="badge cooldown-pill">${escapeHtml(t('workers.cooldownBadge', { sec: cooldownSec }))}</span>`
+            : `<span class="badge ${w.status === 'working' ? 'cyan' : 'green'}">${escapeHtml(w.status === 'working' ? t('workers.statusWorking') : t('workers.statusIdle'))}</span>`;
 
         return `
           <article class="pixel-card">
@@ -1327,11 +1652,14 @@ function renderWorkersAndShopTab() {
                   <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(w.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(w.skin || 'default')}" data-portrait-anim="${w.status === 'working' ? 'work' : 'idle'}"></canvas>
                 </div>
                 <div class="worker-card-info">
-                  <h3 class="card-title">${escapeHtml(lw.name)} <span class="badge cyan">Lv.${w.level}</span></h3>
+                  <h3 class="card-title">
+                    ${escapeHtml(lw.name)} <span class="badge cyan">Lv.${w.level}</span>
+                    ${slopStrikes > 0 ? `<span class="badge amber" style="margin-left: 4px;">${escapeHtml(t('workers.strikesBadge', { strikes: slopStrikes }))}</span>` : ''}
+                  </h3>
                   <p class="card-subtitle">${escapeHtml(lw.roleName)} ｜ ${escapeHtml(lw.providerLabel)}</p>
                 </div>
               </div>
-              <span class="badge ${w.status === 'working' ? 'cyan' : 'green'}">${escapeHtml(w.status === 'working' ? t('workers.statusWorking') : t('workers.statusIdle'))}</span>
+              ${statusBadgeHtml}
             </div>
 
             <div class="progress-wrap">
@@ -1367,6 +1695,7 @@ function renderWorkersAndShopTab() {
       .join('');
     hydrateWorkerPortraits(workerList);
   }
+  syncWorkerCooldownTicker();
 
   // Genesis Achievements Wall
   const achievements = app.state.achievements || [];
@@ -1623,6 +1952,14 @@ function renderMayorAdminSection() {
   if (toggleEl) toggleEl.checked = strictOn;
   if (labelEl) labelEl.classList.toggle('active', strictOn);
   if (badgeEl) badgeEl.textContent = strictOn ? t('admin.strictOn') : t('admin.strictOff');
+
+  const peerOn = getPeerReviewRequiredFlag();
+  const peerToggle = $('toggle-peer-review-required');
+  const peerLabel = $('peer-review-label');
+  const peerBadge = $('peer-review-badge');
+  if (peerToggle) peerToggle.checked = peerOn;
+  if (peerLabel) peerLabel.classList.toggle('active', peerOn);
+  if (peerBadge) peerBadge.textContent = peerOn ? t('admin.peerReviewOn') : t('admin.peerReviewOff');
 
   // Devices list
   const pending = app.adminData?.pendingDevices || [];
@@ -1895,8 +2232,15 @@ async function openGuildWorkbench(taskId) {
   const lw = assignedWorker ? localizeWorker(assignedWorker, loc) : null;
   app.activeGuildTaskId = freshTask.id;
 
+  const bucket = getTaskBucketSafe(freshTask);
+  const stakeGold = getTaskStakeSafe(freshTask);
+  const minRep = getTaskMinRepSafe(freshTask);
+
   $('guild-modal-title').textContent = t('modal.guild.titleWithTask', { title: lt.title });
   $('guild-modal-meta').innerHTML = `
+    <span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>
+    ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
+    ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
     <span class="badge">📦 ${escapeHtml(lp?.shortName || freshTask.projectId)}</span>
     <span class="badge cyan">${escapeHtml(t('modal.guild.workerBadge', { name: lw?.name || 'Worker' }))}</span>
     <span class="badge gold">🪙 +${freshTask.goldReward}G</span>
@@ -1918,6 +2262,22 @@ async function openGuildWorkbench(taskId) {
   $('guild-submit-pr-url').value = '';
   $('guild-pr-verify-result').textContent = '';
   $('guild-submit-content').value = '';
+
+  const reviewCheck = $('guild-submit-for-review');
+  const reviewLabel = $('guild-submit-review-label');
+  const peerEnforced = getPeerReviewRequiredFlag();
+  if (reviewCheck) {
+    reviewCheck.checked = peerEnforced;
+  }
+  if (reviewLabel) {
+    reviewLabel.classList.toggle('active', Boolean(reviewCheck?.checked));
+    const span = reviewLabel.querySelector('span');
+    if (span) {
+      span.textContent = peerEnforced
+        ? t('modal.guild.submitForReviewEnforced')
+        : t('modal.guild.submitForReview');
+    }
+  }
 
   openModal('modal-guild');
 }
@@ -1985,6 +2345,7 @@ async function submitGuildTask() {
   const workerId = task?.assignedWorkerId || $('guild-worker-select')?.value;
   const content = $('guild-submit-content').value.trim();
   const prUrl = $('guild-submit-pr-url').value.trim();
+  const submitForReview = Boolean($('guild-submit-for-review')?.checked);
 
   if (!content && !prUrl) {
     showToast(t('toast.needGuildContent'), 'warn');
@@ -2002,12 +2363,27 @@ async function submitGuildTask() {
         workerId,
         content,
         prUrl,
+        submitForReview,
         executionMode: 'byot_workbench',
       },
     });
     applyNewState(res.state);
 
-    if (res.passed) {
+    if (res.pendingReview) {
+      soundFX.playVerify();
+      closeModal('modal-guild');
+      const aiScore =
+        res.reviewItem?.aiReview?.aiScore ??
+        res.reviewItem?.aiReport?.aiScore ??
+        res.reviewItem?.aiScore ??
+        res.verification?.score ??
+        85;
+      showToast(t('toast.guildQueuedForReview', { score: aiScore }), 'info', 5200);
+      const panel = $('review-queue-panel');
+      if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } else if (res.passed) {
       soundFX.playVerify();
       setTimeout(() => soundFX.playCoin(), 220);
       app.engine?.triggerTaskComplete(workerId, res.rewards);
@@ -2543,6 +2919,8 @@ function connectSse() {
     'settings_updated',
     'project_updated',
     'project_proposed',
+    'review_queued',
+    'review_decided',
     'state_sync',
   ]) {
     sse.addEventListener(evtName, () => {
@@ -3003,6 +3381,27 @@ function bindEvents() {
     }
   });
 
+  $('toggle-peer-review-required').addEventListener('change', async (e) => {
+    const peerReviewRequired = Boolean(e.target.checked);
+    try {
+      const res = await apiFetch('/api/admin/settings', {
+        method: 'PATCH',
+        body: { peerReviewRequired },
+      });
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      soundFX.playClick();
+      showToast(
+        t('toast.adminPeerReviewChanged', { state: peerReviewRequired ? t('admin.peerReviewOn') : t('admin.peerReviewOff') }),
+        'info',
+      );
+    } catch (err) {
+      e.target.checked = !peerReviewRequired;
+      soundFX.playReject();
+      showToast(err.message, 'error');
+    }
+  });
+
   $('admin-code-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const rewardType = $('admin-code-type').value;
@@ -3078,6 +3477,11 @@ function bindEvents() {
 
   // Guild filters & Workbench actions
   $('guild-project-filter').addEventListener('change', renderGuildTab);
+  $('btn-refresh-reviews').addEventListener('click', () => refreshReviewsNow({ showFeedback: true }));
+  $('guild-submit-for-review').addEventListener('change', (e) => {
+    $('guild-submit-review-label')?.classList.toggle('active', Boolean(e.target.checked));
+    soundFX.playClick();
+  });
   $('btn-copy-context-pack').addEventListener('click', () => {
     copyText($('guild-context-pack').value, t('toast.contextPackCopied'));
   });
@@ -3397,6 +3801,24 @@ function bindEvents() {
     const guildBtn = e.target.closest('[data-open-guild]');
     if (guildBtn) {
       openGuildWorkbench(guildBtn.dataset.openGuild);
+      return;
+    }
+
+    const decideReviewBtn = e.target.closest('[data-decide-review]');
+    if (decideReviewBtn) {
+      const reviewId = decideReviewBtn.dataset.decideReview;
+      const decision = decideReviewBtn.dataset.reviewDecision;
+      await decideReviewItem(reviewId, decision, decideReviewBtn);
+      return;
+    }
+
+    const jumpReviewBtn = e.target.closest('[data-jump-review-queue]');
+    if (jumpReviewBtn) {
+      soundFX.playClick();
+      const panel = $('review-queue-panel');
+      if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       return;
     }
 

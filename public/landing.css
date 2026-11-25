@@ -938,6 +938,92 @@ code {
 .math-pill.platform { border-color: var(--accent-purple); color: var(--accent-purple); }
 .math-pill.total { border-color: var(--accent-green); color: var(--accent-green); background: rgba(82, 229, 154, 0.15); }
 
+/* 4-Layer Anti-Slop & Anti-Dilution Moat Card inside #manifesto */
+.moat-showcase-card {
+  margin-top: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(16, 22, 46, 0.94), rgba(29, 17, 46, 0.95));
+  border: 3px solid var(--accent-cyan);
+  box-shadow: var(--shadow-pixel), 0 0 30px rgba(77, 238, 234, 0.16);
+}
+
+.moat-showcase-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.moat-showcase-head h3 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.moat-showcase-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.split-formula-pill.cyan {
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  background: rgba(77, 238, 234, 0.1);
+}
+
+.moat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.moat-card {
+  padding: 16px 15px;
+  background: rgba(11, 9, 24, 0.78);
+  border: 2px solid var(--border-pixel);
+  box-shadow: var(--shadow-pixel-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+
+.moat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-amber);
+}
+
+.moat-layer-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--accent-amber);
+}
+
+.moat-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.moat-card h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.moat-card p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-sub);
+  line-height: 1.55;
+}
+
 /* ==========================================================================
    Install Hub (#install)
    ========================================================================== */
@@ -1590,7 +1676,8 @@ code {
   }
   .stats-grid,
   .pricing-grid,
-  .security-grid {
+  .security-grid,
+  .moat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .install-tabs {
@@ -1615,7 +1702,8 @@ code {
   .stage-legend,
   .manifesto-pillars,
   .split-legend-grid,
-  .compare-grid {
+  .compare-grid,
+  .moat-grid {
     grid-template-columns: 1fr;
   }
   .split-visual-bar {

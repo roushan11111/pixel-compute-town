@@ -2368,6 +2368,366 @@ body[data-theme='day'] .prov-hash-code {
 }
 
 /* ==========================================================================
+   Anti-Dilution Governance: Peer Review Queue, Bucket Quota Bar & Cooldown
+   ========================================================================== */
+.review-queue-panel {
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(24, 18, 48, 0.96), rgba(32, 16, 40, 0.94));
+  border: 2px solid var(--accent-amber);
+  box-shadow: var(--shadow-pixel-sm), 0 0 18px rgba(255, 183, 77, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+body[data-theme='day'] .review-queue-panel {
+  background: linear-gradient(135deg, #fffdf4, #fff7ed);
+  border-color: #d97706;
+  box-shadow: var(--shadow-pixel-sm);
+}
+
+.review-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.review-panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.review-panel-title {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--accent-gold);
+}
+
+body[data-theme='day'] .review-panel-title {
+  color: #92400e;
+}
+
+.review-badge-pulse {
+  font-weight: 900;
+  box-shadow: 0 0 0 1px rgba(255, 94, 108, 0.4);
+}
+
+.review-badge-pulse.has-items {
+  animation: reviewPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes reviewPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 94, 108, 0.55); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 94, 108, 0); }
+}
+
+.review-panel-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+.review-panel-desc strong {
+  color: var(--accent-gold);
+}
+
+body[data-theme='day'] .review-panel-desc strong {
+  color: #b45309;
+}
+
+.review-card {
+  padding: 11px 12px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-bright);
+  box-shadow: var(--shadow-pixel-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-card.clean-pr {
+  border-color: rgba(82, 229, 154, 0.7);
+  border-left: 4px solid var(--accent-green);
+}
+
+.review-card.slop-risk {
+  border-color: rgba(255, 94, 108, 0.85);
+  border-left: 4px solid var(--accent-red);
+  background: linear-gradient(135deg, rgba(46, 16, 30, 0.72), rgba(26, 20, 48, 0.92));
+}
+
+body[data-theme='day'] .review-card.slop-risk {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.review-card.med-risk {
+  border-color: rgba(255, 183, 77, 0.75);
+  border-left: 4px solid var(--accent-amber);
+}
+
+.review-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.review-ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  border: 2px solid;
+  white-space: nowrap;
+}
+
+.review-ai-pill.low {
+  color: var(--accent-green);
+  border-color: var(--accent-green);
+  background: rgba(82, 229, 154, 0.14);
+}
+
+.review-ai-pill.medium {
+  color: var(--accent-amber);
+  border-color: var(--accent-amber);
+  background: rgba(255, 183, 77, 0.14);
+}
+
+.review-ai-pill.high {
+  color: var(--accent-red);
+  border-color: var(--accent-red);
+  background: rgba(255, 94, 108, 0.18);
+}
+
+body[data-theme='day'] .review-ai-pill.low {
+  color: #15803d;
+  background: #ecfdf5;
+}
+
+body[data-theme='day'] .review-ai-pill.high {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.review-diff-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 8px;
+  background: var(--bg-input);
+  border: 1px dashed var(--border-pixel);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.diff-added {
+  color: var(--accent-green);
+  font-weight: 800;
+}
+
+.diff-removed {
+  color: var(--accent-red);
+  font-weight: 800;
+}
+
+.diff-bloat {
+  font-weight: 800;
+  color: var(--text-sub);
+}
+
+.diff-bloat.danger {
+  color: var(--accent-red);
+}
+
+body[data-theme='day'] .diff-added { color: #15803d; }
+body[data-theme='day'] .diff-removed,
+body[data-theme='day'] .diff-bloat.danger { color: #b91c1c; }
+
+.review-summary-text {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin: 0;
+}
+
+.review-flags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.review-preview-details {
+  background: var(--bg-input);
+  border: 1px solid var(--border-pixel);
+  padding: 6px 8px;
+}
+
+.review-preview-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent-cyan);
+  user-select: none;
+}
+
+.review-preview-code {
+  margin: 6px 0 0;
+  padding: 8px;
+  background: var(--bg-code);
+  border: 1px solid var(--border-pixel);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-code);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.review-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-pixel);
+}
+
+.review-history-wrap {
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-bright);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-history-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+/* Task bucket / stake / rep / cooldown pills */
+.badge.core-pool {
+  border-color: var(--accent-amber);
+  color: var(--accent-gold);
+  background: rgba(255, 183, 77, 0.14);
+}
+
+.badge.periph-pool {
+  border-color: var(--border-bright);
+  color: var(--accent-cyan);
+  background: rgba(77, 238, 234, 0.08);
+}
+
+.badge.stake-pill {
+  border-color: rgba(255, 94, 168, 0.65);
+  color: var(--accent-pink);
+  background: rgba(255, 94, 168, 0.1);
+}
+
+.badge.cooldown-pill {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: rgba(255, 94, 108, 0.18);
+  font-weight: 900;
+}
+
+body[data-theme='day'] .badge.core-pool {
+  color: #9a3412;
+  border-color: #ea580c;
+  background: #ffedd5;
+}
+
+body[data-theme='day'] .badge.periph-pool {
+  color: #0e7490;
+  border-color: #0891b2;
+  background: #ecfeff;
+}
+
+body[data-theme='day'] .badge.stake-pill {
+  color: #be185d;
+  border-color: #db2777;
+  background: #fdf2f8;
+}
+
+body[data-theme='day'] .badge.cooldown-pill {
+  color: #b91c1c;
+  border-color: #dc2626;
+  background: #fee2e2;
+}
+
+.review-submit-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 8px 10px;
+}
+
+/* Anti-Dilution 70/30 Bucket Quota Bar inside Incubator Project Cards */
+.bucket-quota-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(255, 217, 90, 0.28);
+}
+
+.bucket-quota-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: var(--text-sub);
+  font-weight: 700;
+}
+
+.bucket-mini-bar {
+  display: flex;
+  width: 100%;
+  height: 18px;
+  border: 1px solid var(--border-bright);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.bucket-mini-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bucket-mini-seg.core {
+  background: linear-gradient(90deg, #ff9800, #ff5ea8);
+  color: #160918;
+  border-right: 1px solid rgba(0, 0, 0, 0.45);
+}
+
+.bucket-mini-seg.peripheral {
+  background: linear-gradient(90deg, #3b82f6, #4deeea);
+  color: #06131c;
+}
+
+/* ==========================================================================
    Responsive Design
    ========================================================================== */
 @media (max-width: 1280px) {

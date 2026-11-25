@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInitialState, ensureStateSchema } from './seed.mjs';
 import { ensureProjectsProvenance } from './provenance.mjs';
+import { ensureProjectBuckets } from './governance.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +47,9 @@ export class StateStore {
       if (parsed && typeof parsed === 'object' && parsed.player && Array.isArray(parsed.projects)) {
         const upgraded = ensureStateSchema(parsed);
         ensureProjectsProvenance(upgraded.projects, upgraded.users);
+        for (const proj of upgraded.projects) {
+          ensureProjectBuckets(proj);
+        }
         return upgraded;
       }
       return null;
