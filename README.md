@@ -13,7 +13,10 @@
 [![Proof of First Spark](https://img.shields.io/badge/Protocol-5%25%20Spark%20%7C%2085%25%20Merit%20%7C%2010%25%20Platform-f43f5e?style=for-the-badge)](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議)
 [![Zero-Trust BYOK](https://img.shields.io/badge/Security-Zero--Trust%20BYOK%20%2F%20BYOT-22d3ee?style=for-the-badge)](#零信任與合規安全架構)
 [![i18n](https://img.shields.io/badge/i18n-100%25%20繁中%20%7C%20简中%20%7C%20EN-f59e0b?style=for-the-badge)](#-核心特色一覽)
-[![Payments](https://img.shields.io/badge/Pay-USDC%20%7C%20Polar%20%7C%20Stripe%20%7C%20Redeem-a855f7?style=for-the-badge)](#-三合一收付與穩定幣分紅提領)
+[![Payments](https://img.shields.io/badge/Pay-USDC%20%7C%20Afdian%20%7C%20Polar%20%7C%20Stripe-a855f7?style=for-the-badge)](#-三合一收付與穩定幣分紅提領)
+[![Afdian](https://img.shields.io/badge/%E2%9A%A1%20%E6%84%9B%E7%99%BC%E9%9B%BB-ifdian.net%2Fa%2Fpixelcompute-946ce6?style=for-the-badge)](https://ifdian.net/a/pixelcompute)
+
+🌐 **線上官方站**：[https://pixel-compute-town.onrender.com](https://pixel-compute-town.onrender.com) · ⚡ **官方愛發電創作者主頁（贊助與卡密小舖）**：[https://ifdian.net/a/pixelcompute](https://ifdian.net/a/pixelcompute)
 
 [💡 創意溯源與 5/85/10 協議](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議) ·
 [🛡️ 4 層防垃圾 AI 稀釋協議](#️-防垃圾-ai-稀釋-4-層治理協議7030-分桶隔離--ai-盲審--實幹審閱團--押金沒收) ·
