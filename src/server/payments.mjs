@@ -155,11 +155,32 @@ export function isStripeEnabled() {
   return Object.values(STRIPE_PRODUCT_ENV_MAP).some((k) => Boolean((process.env[k] || '').trim()));
 }
 
+export function getAfdianStoreUrl(productId = null) {
+  const map = {
+    'shop-pro-pass': 'AFDIAN_PRO_URL',
+    'shop-genesis-pack': 'AFDIAN_GENESIS_URL',
+    'billboard-ad': 'AFDIAN_BILLBOARD_URL',
+    'bounty-topup': 'AFDIAN_BOUNTY_URL',
+  };
+  const specificKey = productId ? map[productId] : null;
+  const specific = specificKey ? (process.env[specificKey] || '').trim() : '';
+  return specific || (process.env.AFDIAN_STORE_URL || process.env.REDEEM_STORE_URL || '').trim();
+}
+
 export function getPaymentConfig() {
+  const afdianStoreUrl = getAfdianStoreUrl();
   return {
     polarEnabled: isPolarEnabled(),
     stripeEnabled: isStripeEnabled(),
-    redeemStoreUrl: (process.env.REDEEM_STORE_URL || '').trim(),
+    afdianEnabled: Boolean(afdianStoreUrl),
+    redeemStoreUrl: afdianStoreUrl,
+    afdianUrls: {
+      default: afdianStoreUrl,
+      'shop-pro-pass': getAfdianStoreUrl('shop-pro-pass'),
+      'shop-genesis-pack': getAfdianStoreUrl('shop-genesis-pack'),
+      'billboard-ad': getAfdianStoreUrl('billboard-ad'),
+      'bounty-topup': getAfdianStoreUrl('bounty-topup'),
+    },
     stablecoinChains: [...STABLECOIN_CHAINS],
     stablecoinTokens: [...STABLECOIN_TOKENS],
     minPayoutUsd: MIN_PAYOUT_USD,
@@ -1153,6 +1174,139 @@ export async function handleAdminGenerateCodes(req, res, body, store, sseHub) {
 // ============================================================================
 // Batch Payout Reconciliation & Founder Manual Order Confirmation
 // ============================================================================
+
+export async function handleAfdianWebhook(req, res, rawBody, store, sseHub) {
+  // Optional shared token check via query ?token=... or header x-afdian-token when AFDIAN_WEBHOOK_TOKEN is set
+  const expectedToken = (process.env.AFDIAN_WEBHOOK_TOKEN || '').trim();
+  if (expectedToken) {
+    let queryToken = '';
+    try {
+      const u = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      queryToken = (u.searchParams.get('token') || '').trim();
+    } catch {}
+    const headerToken = String(req.headers['x-afdian-token'] || '').trim();
+    if (queryToken !== expectedToken && headerToken !== expectedToken) {
+      return sendJson(res, 401, { ec: 401, em: 'Invalid Afdian webhook token' });
+    }
+  }
+
+  let payload = {};
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    return sendJson(res, 400, { ec: 400, em: 'Invalid JSON payload' });
+  }
+
+  const afOrder = payload?.data?.order;
+  if (!afOrder || typeof afOrder !== 'object') {
+    // Afdian webhook ping / connectivity test expects { ec: 200, em: "" }
+    return sendJson(res, 200, { ec: 200, em: '', ok: true, ping: true });
+  }
+
+  const outTradeNo = sanitizeText(String(afOrder.out_trade_no || ''), 64) || uid('afd');
+  const remark = sanitizeText(String(afOrder.remark || ''), 160);
+  const planTitle = sanitizeText(String(afOrder.plan_title || afOrder.sku_detail?.[0]?.name || ''), 80);
+  const cnyAmount = Number(afOrder.total_amount || afOrder.show_amount || 0);
+  const usdEstimate = cnyAmount > 0 ? round2(cnyAmount / 7.2) : 0;
+
+  let fulfilledOrderId = null;
+  let recordedOrderId = null;
+
+  const { state } = await store.mutate((s) => {
+    ensureStateSchema(s);
+    // Idempotency check by out_trade_no
+    const existing = (s.paymentOrders || []).find((o) => o.txHash === `afdian:${outTradeNo}`);
+    if (existing) {
+      recordedOrderId = existing.id;
+      return;
+    }
+
+    // Determine product from planTitle or remark
+    const titleLower = `${planTitle} ${remark}`.toLowerCase();
+    let product = PAYMENT_PRODUCTS['shop-pro-pass'];
+    if (titleLower.includes('billboard') || titleLower.includes('廣告') || titleLower.includes('广告')) {
+      product = PAYMENT_PRODUCTS['billboard-ad'];
+    } else if (titleLower.includes('pack') || titleLower.includes('skin') || titleLower.includes('禮包') || titleLower.includes('礼包')) {
+      product = PAYMENT_PRODUCTS['shop-genesis-pack'];
+    }
+
+    // Match user by email / username / userId written in buyer's Afdian remark (optional)
+    let targetUser = null;
+    if (remark) {
+      const tokens = remark.split(/[\s,;|]+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+      targetUser = Object.values(s.users || {}).find((u) => {
+        if (!u) return false;
+        const candidates = [u.id, u.username, u.email].filter(Boolean).map((v) => String(v).toLowerCase());
+        return tokens.some((tk) => candidates.includes(tk));
+      }) || null;
+    }
+
+    const now = new Date().toISOString();
+    const order = {
+      id: uid('ord'),
+      method: 'afdian',
+      provider: 'afdian',
+      userId: targetUser ? targetUser.id : null,
+      userName: targetUser ? targetUser.displayName : (remark || '愛發電贊助者'),
+      productId: product.id,
+      productName: planTitle || product.name,
+      targetProjectId: product.requiresProject ? (s.projects[0]?.id || null) : null,
+      billboardText: '',
+      amountUsd: usdEstimate > 0 ? usdEstimate : product.priceUsd,
+      amountCny: cnyAmount,
+      chain: null,
+      token: 'CNY',
+      receiverAddress: null,
+      memoCode: `AFD-${outTradeNo.slice(-6).toUpperCase()}`,
+      status: targetUser ? 'confirmed' : 'pending',
+      txHash: `afdian:${outTradeNo}`,
+      sandboxSimulated: false,
+      createdAt: now,
+      expiresAt: null,
+      confirmedAt: targetUser ? now : null,
+    };
+
+    s.paymentOrders.unshift(order);
+    if (s.paymentOrders.length > 200) s.paymentOrders.length = 200;
+    recordedOrderId = order.id;
+
+    if (targetUser) {
+      fulfillProductForUser(s, targetUser, {
+        product,
+        amountUsd: order.amountUsd,
+        targetProjectId: order.targetProjectId,
+        channelLabel: `愛發電 Webhook (${outTradeNo.slice(-6)})`,
+      });
+      fulfilledOrderId = order.id;
+    } else {
+      pushFeed(s, {
+        type: 'payment',
+        icon: '⚡',
+        message: `收到愛發電新訂單 ${order.memoCode}（¥${cnyAmount || 0} / ${order.productName}）`,
+      });
+    }
+  });
+
+  store.appendAudit?.(
+    'afdian_webhook_order',
+    `Afdian order ${outTradeNo} (¥${cnyAmount || 0}) recorded=${recordedOrderId} autoFulfilled=${Boolean(fulfilledOrderId)}`,
+  );
+  if (fulfilledOrderId) {
+    sseHub?.broadcast('payment_confirmed', { orderId: fulfilledOrderId, provider: 'afdian' });
+  } else {
+    sseHub?.broadcast('payment_order_created', { orderId: recordedOrderId, provider: 'afdian' });
+  }
+  sseHub?.broadcast('state_sync', { updatedAt: state.updatedAt });
+
+  // Afdian strictly requires HTTP 200 with { ec: 200, em: "" }
+  return sendJson(res, 200, {
+    ec: 200,
+    em: '',
+    ok: true,
+    orderId: recordedOrderId,
+    fulfilledOrderId,
+  });
+}
 
 export async function handleAdminPayoutBatch(req, res, url, store) {
   const state = await store.load();

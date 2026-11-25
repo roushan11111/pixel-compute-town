@@ -75,6 +75,7 @@ import {
   handleAdminGenerateCodes,
   handleAdminMarkPayoutPaid,
   handleAdminPayoutBatch,
+  handleAfdianWebhook,
   handleFiatCheckout,
   handlePaymentWebhook,
   handlePayoutRequest,
@@ -2198,6 +2199,10 @@ export function createAppServer(options = {}) {
       if (pathname === '/api/webhooks/stripe' && method === 'POST') {
         const rawBody = await readRawBody(req);
         return await handlePaymentWebhook(req, res, 'stripe', rawBody, store, sseHub);
+      }
+      if (pathname === '/api/webhooks/afdian' && method === 'POST') {
+        const rawBody = await readRawBody(req);
+        return await handleAfdianWebhook(req, res, rawBody, store, sseHub);
       }
 
       // GitHub Webhook Auto-Settlement: POST /api/webhooks/github

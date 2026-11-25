@@ -461,6 +461,7 @@
             <input class="input mono" id="gen-count" type="number" min="1" max="20" value="3" style="width:70px;" />
             <input class="input" id="gen-note" type="text" placeholder="備註（例：愛發電首批）" style="width:180px;" />
             <button type="submit" class="btn green">✨ 批次產生卡密</button>
+            <button type="button" class="btn primary" id="btn-copy-afdian-codes" title="複製目前選中類型的全部未使用卡密（一行一碼，直接貼進愛發電自動發貨）">📋 複製未用卡密貼愛發電</button>
           </form>
         </div>
         <div class="table-wrap">
@@ -1102,6 +1103,18 @@
         showToast(`✅ 成功產生 ${data.codes.length} 組新卡密！`);
         document.getElementById('gen-note').value = '';
         await loadOverview();
+      });
+
+      document.getElementById('btn-copy-afdian-codes').addEventListener('click', () => {
+        const rewardType = document.getElementById('gen-reward-type').value;
+        const unused = (cachedData?.redeemCodes || [])
+          .filter((c) => !c.used && !c.usedByUserId && !c.disabledByLiveMode && c.rewardType === rewardType)
+          .map((c) => c.code);
+        if (!unused.length) {
+          return showToast(`目前「${rewardType}」沒有未使用的卡密，請先點「✨ 批次產生卡密」！`, true);
+        }
+        copyText(unused.join('\n'));
+        showToast(`📋 已複製 ${unused.length} 組「${rewardType}」卡密（一行一碼），可直接貼進愛發電自動發貨！`);
       });
 
       document.getElementById('btn-launch-clean-mode').addEventListener('click', async () => {

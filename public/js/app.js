@@ -336,9 +336,15 @@ function syncLiveModeSandboxControls() {
     demoCodesWrap.style.display = live ? 'none' : '';
   }
 
-  // Optional external Redeem Store link (Afdian / Ko-fi)
+  // Optional external Redeem Store link (Afdian / Ko-fi — supports per-product deep links)
   const storeBtn = $('btn-pay-redeem-store');
-  const storeUrl = (app.paymentConfig?.redeemStoreUrl || '').trim();
+  const activeProdId = app.payModal?.productId || null;
+  const storeUrl = (
+    (activeProdId && app.paymentConfig?.afdianUrls?.[activeProdId])
+    || app.paymentConfig?.afdianUrls?.default
+    || app.paymentConfig?.redeemStoreUrl
+    || ''
+  ).trim();
   if (storeBtn) {
     if (storeUrl && /^https?:\/\//i.test(storeUrl)) {
       storeBtn.href = storeUrl;
@@ -1200,6 +1206,7 @@ function openPaymentModal({ productId, targetProjectId = null, displayName = '',
   if (orderBox) orderBox.style.display = 'none';
   const cardBox = $('pay-card-sandbox-box');
   if (cardBox) cardBox.style.display = 'none';
+  syncLiveModeSandboxControls();
   const txInput = $('pay-tx-hash');
   if (txInput) txInput.value = '';
   const redeemInput = $('pay-redeem-code');

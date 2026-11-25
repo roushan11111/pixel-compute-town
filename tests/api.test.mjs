@@ -3538,4 +3538,100 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('37. Afdian (愛發電) Webhook auto-fulfillment, token guard, idempotency & storefront config', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-afdian-'));
+    const prevStore = process.env.AFDIAN_STORE_URL;
+    const prevPro = process.env.AFDIAN_PRO_URL;
+    const prevTok = process.env.AFDIAN_WEBHOOK_TOKEN;
+    process.env.AFDIAN_STORE_URL = 'https://afdian.com/a/pixelcompute';
+    process.env.AFDIAN_PRO_URL = 'https://afdian.com/item/pro-pass-9usd';
+    process.env.AFDIAN_WEBHOOK_TOKEN = 'afdian-secret-tok-999';
+
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      const boot = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      assert.equal(boot.json.paymentConfig.afdianEnabled, true);
+      assert.equal(boot.json.paymentConfig.afdianUrls.default, 'https://afdian.com/a/pixelcompute');
+      assert.equal(boot.json.paymentConfig.afdianUrls['shop-pro-pass'], 'https://afdian.com/item/pro-pass-9usd');
+
+      // Wrong token must return 401
+      const badTok = await fetch(`${isoUrl}/api/webhooks/afdian?token=wrong`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ec: 200, data: { type: 'order' } }),
+      });
+      assert.equal(badTok.status, 401);
+
+      // Connectivity ping returns Afdian-required { ec: 200, em: '' }
+      const ping = await fetch(`${isoUrl}/api/webhooks/afdian?token=afdian-secret-tok-999`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ec: 200, em: '', data: { type: 'ping' } }),
+      });
+      const pingJson = await ping.json();
+      assert.equal(ping.status, 200);
+      assert.equal(pingJson.ec, 200);
+      assert.equal(pingJson.em, '');
+
+      // Register a buyer and simulate Afdian order webhook with buyer email in remark -> auto-upgrades to Pro!
+      const reg = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'afdian-fan@pixelcompute.test',
+        password: 'afdian-password-123',
+        displayName: 'Afdian Supporter',
+      });
+      assert.equal(reg.status, 201);
+      const fanCookie = reg.cookie;
+
+      const orderPayload = {
+        ec: 200,
+        em: '',
+        data: {
+          type: 'order',
+          order: {
+            out_trade_no: '202611250001AFDIAN',
+            total_amount: '65.00',
+            plan_title: '像素鎮 Pro 通行證（月）',
+            remark: 'afdian-fan@pixelcompute.test',
+          },
+        },
+      };
+
+      const wh1 = await fetch(`${isoUrl}/api/webhooks/afdian?token=afdian-secret-tok-999`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload),
+      });
+      const wh1Json = await wh1.json();
+      assert.equal(wh1.status, 200);
+      assert.equal(wh1Json.ec, 200);
+      assert.equal(wh1Json.em, '');
+      assert.ok(wh1Json.fulfilledOrderId, 'Order matching buyer remark email must auto-fulfill');
+
+      const fanAfter = await apiJson(isoUrl, 'GET', '/api/auth/me', undefined, fanCookie);
+      assert.equal(fanAfter.json.user.isPro, true);
+
+      // Duplicate webhook delivery must be idempotent
+      const wh2 = await fetch(`${isoUrl}/api/webhooks/afdian?token=afdian-secret-tok-999`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload),
+      });
+      const wh2Json = await wh2.json();
+      assert.equal(wh2.status, 200);
+      assert.equal(wh2Json.orderId, wh1Json.orderId);
+      assert.equal(wh2Json.fulfilledOrderId, null, 'Duplicate out_trade_no must not double-fulfill');
+    } finally {
+      if (prevStore === undefined) delete process.env.AFDIAN_STORE_URL;
+      else process.env.AFDIAN_STORE_URL = prevStore;
+      if (prevPro === undefined) delete process.env.AFDIAN_PRO_URL;
+      else process.env.AFDIAN_PRO_URL = prevPro;
+      if (prevTok === undefined) delete process.env.AFDIAN_WEBHOOK_TOKEN;
+      else process.env.AFDIAN_WEBHOOK_TOKEN = prevTok;
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });
