@@ -14,52 +14,54 @@
       <div class="brand-titles">
         <div class="brand-name">
           <span data-i18n="brand.name">像素算力鎮</span>
-          <span class="alpha-pill">ALPHA v1.0</span>
+          <span class="alpha-pill">v1.0</span>
         </div>
         <div class="brand-sub" data-i18n="brand.sub">PixelCompute Town · BYOK + BYOT 雙軌孵化</div>
       </div>
     </div>
 
     <div class="hud-metrics">
-      <div class="hud-pill gold" title="小鎮金幣餘額（可用於商店裝扮與小人咖啡）">
+      <div class="hud-pill gold" data-i18n-title="hud.goldTitle" title="小鎮金幣餘額（可用於商店裝扮與小人咖啡）">
         <span>🪙</span>
         <span id="hud-gold">0 G</span>
       </div>
-      <div class="hud-pill usd" title="累計懸賞實得與項目分紅收益（USD）">
+      <div class="hud-pill usd" data-i18n-title="hud.usdTitle" title="累計懸賞實得與項目分紅收益（USD）">
         <span>💵</span>
         <span id="hud-usd">$0.00</span>
       </div>
-      <div class="hud-pill rep" title="驗收信譽分（防刷單 Proof of Accepted Work）">
+      <div class="hud-pill rep" data-i18n-title="hud.repTitle" title="驗收信譽分（防刷單 Proof of Accepted Work）">
         <span>🛡️</span>
         <span><span data-i18n="hud.repPrefix">信譽</span> <strong id="hud-rep">100</strong></span>
       </div>
-      <button type="button" class="hud-pill byok-pill" id="btn-byok-pill" title="點擊設定瀏覽器端 BYOK 金鑰（絕不傳給伺服器）">
+      <button type="button" class="hud-pill byok-pill" id="btn-byok-pill" data-i18n-title="hud.byokTitle" title="點擊設定瀏覽器端 BYOK 金鑰（絕不傳給伺服器）">
         <span class="status-dot" id="hud-byok-dot"></span>
         <span id="hud-byok-label">BYOK：擬真體驗</span>
       </button>
     </div>
 
     <div class="hud-actions">
-      <div class="lang-switch" id="lang-switch" role="group" aria-label="語言切換">
+      <a class="btn btn-sm" id="btn-hud-home" href="/" data-i18n="hud.homeBtn">🏠 官網</a>
+      <a class="btn btn-sm btn-primary" id="btn-hud-install" href="/#install" data-i18n="hud.installBtn">📦 安裝小人</a>
+      <div class="lang-switch" id="lang-switch" role="group" aria-label="Language Switcher">
         <button type="button" class="lang-btn active" data-lang="zh-TW">繁中</button>
         <button type="button" class="lang-btn" data-lang="zh-CN">简中</button>
         <button type="button" class="lang-btn" data-lang="en">EN</button>
       </div>
-      <div class="user-badge" id="hud-user-badge">
+      <button type="button" class="user-badge user-badge-btn" id="hud-user-badge" data-i18n-title="hud.userTitle" title="點擊開啟帳號登入、註冊與切換">
         <span class="user-avatar-dot" id="hud-user-avatar">🧑‍💻</span>
-        <span id="hud-user-name">創始開發者</span>
-      </div>
+        <span id="hud-user-name">創始鎮長 (Demo)</span>
+      </button>
       <a class="btn btn-sm btn-primary" id="btn-github-login" href="/api/auth/github" style="display: none;" data-i18n="hud.githubLogin">GitHub 登入</a>
       <button type="button" class="btn btn-sm" id="btn-logout" style="display: none;" data-i18n="hud.logout">登出</button>
-      <button type="button" class="btn btn-icon" id="btn-day-night" title="切換賽博暖夜 / 清晨白天模式">🌙</button>
-      <button type="button" class="btn btn-icon" id="btn-sound-toggle" title="切換 8-bit 復古音效">🔇</button>
-      <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" title="預覽並下載像素風算力打工證 PNG" data-i18n="hud.certBtn">🪪 打工證</button>
-      <button type="button" class="btn btn-sm" id="btn-open-settings" title="BYOK API Key 與本機 CLI 設定" data-i18n="hud.settingsBtn">⚙️ 設定</button>
+      <button type="button" class="btn btn-icon" id="btn-day-night" data-i18n-title="hud.dayNightTitle" title="切換賽博暖夜 / 清晨白天模式">🌙</button>
+      <button type="button" class="btn btn-icon" id="btn-sound-toggle" data-i18n-title="hud.soundTitle" title="切換 8-bit 復古音效">🔇</button>
+      <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" data-i18n="hud.certBtn">🪪 打工證</button>
+      <button type="button" class="btn btn-sm" id="btn-open-settings" data-i18n="hud.settingsBtn">⚙️ 設定</button>
     </div>
   </header>
 
   <!-- 3 步新手導引條（可收合、隨進度自動打勾） -->
-  <section class="onboarding-wrap" aria-label="新手 3 步快速體驗">
+  <section class="onboarding-wrap" aria-label="Quickstart Guide">
     <div class="onboarding-bar" id="onboarding-bar">
       <div class="onboarding-head">
         <div class="onboarding-title">
@@ -93,16 +95,16 @@
         <div class="stage-header">
           <div class="marquee-box">
             <span class="marquee-tag">LIVE</span>
-            <span class="marquee-text" id="stage-marquee">像素算力鎮連線中... 歡迎把閒置算力派上場！</span>
+            <span class="marquee-text" id="stage-marquee" data-i18n="stage.marqueeDefault">像素算力鎮運行中！歡迎把閒置算力派上場！</span>
           </div>
-          <div class="sse-badge" title="Server-Sent Events 即時事件通道">
+          <div class="sse-badge" title="Server-Sent Events">
             <span class="status-dot" id="sse-dot"></span>
-            <span id="sse-label">SSE 連線中</span>
+            <span id="sse-label" data-i18n="stage.sseConnecting">SSE 連線中</span>
           </div>
         </div>
 
         <div class="quick-nav-bar">
-          <div class="quick-nav-chips" role="tablist" aria-label="HD 場景切換">
+          <div class="quick-nav-chips" role="tablist" aria-label="HD Scene Switcher">
             <span class="mono quick-nav-label" data-i18n="stage.quickNav">HD 場景：</span>
             <button type="button" class="quick-chip active" data-scene="factory" data-building="factory" role="tab" aria-selected="true" data-i18n="stage.navFactory">🏭 自動工坊</button>
             <button type="button" class="quick-chip" data-scene="guild" data-building="guild" role="tab" aria-selected="false" data-i18n="stage.navGuild">⚔️ 懸賞工會</button>
@@ -111,7 +113,7 @@
             <button type="button" class="quick-chip" data-scene="vault" data-building="vault" role="tab" aria-selected="false" data-i18n="stage.navVault">💰 創作者金庫</button>
             <button type="button" class="quick-chip" data-scene="town" data-building="town" role="tab" aria-selected="false" data-i18n="stage.navTown">🗺️ 小鎮總覽</button>
           </div>
-          <label class="scene-sync-toggle active" id="scene-sync-label" title="切換右側 5 大分頁時，左側畫布自動無縫切進專屬 HD 室內場景">
+          <label class="scene-sync-toggle active" id="scene-sync-label" data-i18n-title="stage.autoFollowTitle" title="切換右側 5 大分頁時，左側畫布自動無縫切進專屬 HD 室內場景">
             <input type="checkbox" id="toggle-scene-sync" checked />
             <span data-i18n="stage.autoFollow">🔗 自動跟隨分頁</span>
           </label>
@@ -123,7 +125,7 @@
         </div>
 
         <div class="stage-worker-strip" id="stage-worker-strip">
-          <span>正在同步算力小人狀態...</span>
+          <span data-i18n="stage.loadingWorkers">正在同步算力小人狀態...</span>
         </div>
       </div>
 
@@ -142,7 +144,7 @@
           </div>
         </div>
         <div class="terminal-feed" id="activity-feed">
-          <div class="empty-state">等待小鎮事件寫入...</div>
+          <div class="empty-state" data-i18n="terminal.waiting">等待小鎮事件寫入...</div>
         </div>
       </div>
     </section>
@@ -181,18 +183,18 @@
 
         <div class="section-toolbar">
           <div class="toolbar-group">
-            <select class="select select-inline" id="factory-project-filter" aria-label="篩選項目">
+            <select class="select select-inline" id="factory-project-filter" aria-label="Filter Project">
               <option value="all" data-i18n="factory.allProjects">全部項目</option>
             </select>
-            <select class="select select-inline" id="factory-status-filter" aria-label="篩選狀態">
+            <select class="select select-inline" id="factory-status-filter" aria-label="Filter Status">
               <option value="all" data-i18n="factory.allStatus">全部狀態</option>
               <option value="open" data-i18n="factory.statusOpen">可接單</option>
               <option value="completed" data-i18n="factory.statusCompleted">已驗收</option>
             </select>
           </div>
           <div class="toolbar-group">
-            <select class="select select-inline" id="factory-worker-select" aria-label="選擇 API 小人"></select>
-            <label class="autopilot-toggle" id="autopilot-label" title="每 6 秒自動為閒置 API 小人接單並執行驗收">
+            <select class="select select-inline" id="factory-worker-select" aria-label="Select API Worker"></select>
+            <label class="autopilot-toggle" id="autopilot-label" data-i18n-title="factory.autopilotTitle" title="每 6 秒自動為閒置 API 小人接單並執行驗收">
               <input type="checkbox" id="toggle-autopilot" />
               <span data-i18n="factory.autopilot">🤖 自動掛機</span>
             </label>
@@ -200,7 +202,7 @@
         </div>
 
         <div class="card-list" id="factory-task-list">
-          <div class="empty-state">載入工坊任務中...</div>
+          <div class="empty-state" data-i18n="factory.loading">載入工坊任務中...</div>
         </div>
       </div>
 
@@ -218,11 +220,11 @@
           </div>
           <div class="github-import-row">
             <input class="input mono" id="gh-import-repo" type="text" required data-i18n-placeholder="guild.importPlaceholder" placeholder="輸入 owner/repo 或完整 GitHub 網址（例：vercel/next.js）" />
-            <select class="select select-inline" id="gh-import-track" aria-label="匯入軌道">
+            <select class="select select-inline" id="gh-import-track" aria-label="Import Track">
               <option value="guild_bounty" data-i18n="guild.importTrackGuild">懸賞工會 (BYOT)</option>
               <option value="api_auto" data-i18n="guild.importTrackApi">自動工坊 (API)</option>
             </select>
-            <select class="select select-inline" id="gh-import-project" aria-label="歸屬項目">
+            <select class="select select-inline" id="gh-import-project" aria-label="Target Project">
               <option value="" data-i18n="guild.importAutoProj">自動建立對應項目</option>
             </select>
             <button type="submit" class="btn btn-primary" id="btn-gh-import" data-i18n="guild.importBtn">📥 匯入 Issue</button>
@@ -232,25 +234,25 @@
 
         <div class="section-toolbar">
           <div class="toolbar-group">
-            <select class="select select-inline" id="guild-project-filter" aria-label="篩選工會項目">
+            <select class="select select-inline" id="guild-project-filter" aria-label="Filter Guild Project">
               <option value="all" data-i18n="factory.allProjects">全部項目</option>
             </select>
           </div>
           <div class="toolbar-group">
             <span class="mono" style="font-size: 11px; color: var(--text-muted);" data-i18n="guild.workerLabel">派駐工會小人：</span>
-            <select class="select select-inline" id="guild-worker-select" aria-label="選擇工會小人"></select>
+            <select class="select select-inline" id="guild-worker-select" aria-label="Select Guild Worker"></select>
           </div>
         </div>
 
         <div class="card-list" id="guild-task-list">
-          <div class="empty-state">載入工會懸賞中...</div>
+          <div class="empty-state" data-i18n="guild.loading">載入工會懸賞中...</div>
         </div>
       </div>
 
       <!-- Tab 3: 孵化廣場 -->
       <div class="tab-pane" id="tab-incubator" data-pane="incubator">
         <div class="section-toolbar">
-          <div class="mono" style="font-size: 12px; color: var(--text-sub);" id="incubator-summary">
+          <div class="mono" style="font-size: 12px; color: var(--text-sub);" id="incubator-summary" data-i18n="incubator.summaryDefault">
             投票立項 → 雙軌共建 → 上線透明分紅（30% 發起人 / 60% 貢獻者 / 10% 平臺）
           </div>
           <div class="toolbar-group">
@@ -260,7 +262,7 @@
         </div>
 
         <div class="card-list" id="project-list">
-          <div class="empty-state">載入孵化項目中...</div>
+          <div class="empty-state" data-i18n="incubator.loading">載入孵化項目中...</div>
         </div>
       </div>
 
@@ -270,7 +272,7 @@
           <span data-i18n="workers.myWorkers">🤖 我的算力小人（管理體力上限與裝扮）</span>
         </div>
         <div class="card-list" id="worker-list">
-          <div class="empty-state">載入算力小人中...</div>
+          <div class="empty-state" data-i18n="workers.loading">載入算力小人中...</div>
         </div>
 
         <div class="subsection-title">
@@ -278,7 +280,7 @@
           <span class="badge gold" id="achievements-summary">0 / 6</span>
         </div>
         <div class="achievements-grid" id="achievements-list">
-          <div class="empty-state">載入創世成就中...</div>
+          <div class="empty-state" data-i18n="workers.achievementsLoading">載入創世成就中...</div>
         </div>
 
         <div class="subsection-title">
@@ -287,24 +289,24 @@
         <form class="recruit-box" id="recruit-form">
           <div class="form-grid">
             <div class="form-field">
-              <label class="form-label" for="recruit-name">小人代號 / 名稱</label>
-              <input class="input" id="recruit-name" type="text" placeholder="例如：霓虹畫師阿咪" required maxlength="28" />
+              <label class="form-label" for="recruit-name" data-i18n="workers.recruitNameLabel">小人代號 / 名稱</label>
+              <input class="input" id="recruit-name" type="text" data-i18n-placeholder="workers.recruitNamePlaceholder" placeholder="例如：霓虹畫師阿咪" required maxlength="28" />
             </div>
             <div class="form-field">
-              <label class="form-label" for="recruit-role">職業與軌道</label>
+              <label class="form-label" for="recruit-role" data-i18n="workers.recruitRoleLabel">職業與軌道</label>
               <select class="select" id="recruit-role">
-                <option value="flash_worker">⚡ 閃電工程師（API 軌道）</option>
-                <option value="pixel_artist">🎨 像素美術師（API 軌道）</option>
-                <option value="pro_architect">🧠 首席架構師（月/週額度工會）</option>
-                <option value="guild_artisan">🔨 工會匠人（月/週額度工會）</option>
+                <option value="flash_worker" data-i18n="workers.roleOptFlash">⚡ 閃電工程師（API 軌道）</option>
+                <option value="pixel_artist" data-i18n="workers.roleOptArtist">🎨 像素美術師（API 軌道）</option>
+                <option value="pro_architect" data-i18n="workers.roleOptPro">🧠 首席架構師（月/週額度工會）</option>
+                <option value="guild_artisan" data-i18n="workers.roleOptArtisan">🔨 工會匠人（月/週額度工會）</option>
               </select>
             </div>
             <div class="form-field">
-              <label class="form-label" for="recruit-provider">算力來源標籤</label>
+              <label class="form-label" for="recruit-provider" data-i18n="workers.recruitProviderLabel">算力來源標籤</label>
               <input class="input" id="recruit-provider" type="text" value="Gemini 2.5 Flash" maxlength="40" />
             </div>
             <div class="form-field">
-              <label class="form-label" for="recruit-cap">每日體力上限（Token / 次數）</label>
+              <label class="form-label" for="recruit-cap" data-i18n="workers.recruitCapLabel">每日體力上限（Token / 次數）</label>
               <input class="input" id="recruit-cap" type="number" min="10" max="5000000" value="300000" />
             </div>
           </div>
@@ -317,7 +319,7 @@
           <span data-i18n="workers.shopTitle">🛍️ 像素外觀、機房裝潢與 Pro 會員商店</span>
         </div>
         <div class="two-col-grid" id="shop-list">
-          <div class="empty-state">載入商店品項中...</div>
+          <div class="empty-state" data-i18n="workers.shopLoading">載入商店品項中...</div>
         </div>
 
         <div class="subsection-title">
@@ -332,7 +334,7 @@
         </div>
       </div>
 
-      <!-- Tab 5: 創作者收益與排行榜 -->
+      <!-- Tab 5: 創作者收益、穩定幣提領與鎮長管理 -->
       <div class="tab-pane" id="tab-revenue" data-pane="revenue">
         <div class="revenue-hero">
           <div>
@@ -340,8 +342,8 @@
             <div class="revenue-hero-amount" id="rev-total-usd">$0.00</div>
           </div>
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-            <span class="badge green">透明帳本即時結算</span>
-            <button type="button" class="btn btn-sm btn-danger" id="btn-reset-world" title="重置測試世界資料" data-i18n="revenue.resetBtn">🔄 重置示範世界</button>
+            <span class="badge green" data-i18n="revenue.transparentBadge">透明帳本即時結算</span>
+            <button type="button" class="btn btn-sm btn-danger" id="btn-reset-world" data-i18n="revenue.resetBtn">🔄 重置示範世界</button>
           </div>
         </div>
 
@@ -349,22 +351,22 @@
           <div class="kpi-card">
             <div class="kpi-label" data-i18n="revenue.kpiBounty">⚔️ 現金懸賞 10% 託管抽成</div>
             <div class="kpi-value" id="rev-bounty-fees">$0.00</div>
-            <div class="kpi-sub">每筆現金懸賞驗收自動結算</div>
+            <div class="kpi-sub" data-i18n="revenue.kpiBountySub">每筆現金懸賞驗收自動結算</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" data-i18n="revenue.kpiCarry">🚀 孵化分紅池 10% Carry</div>
             <div class="kpi-value" id="rev-incubation-carry">$0.00</div>
-            <div class="kpi-sub">項目上線與後續營收自動入帳</div>
+            <div class="kpi-sub" data-i18n="revenue.kpiCarrySub">項目上線與後續營收自動入帳</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" data-i18n="revenue.kpiAds">📺 像素廣場霓虹廣告位</div>
             <div class="kpi-value" id="rev-billboard-ads">$0.00</div>
-            <div class="kpi-sub">$29/位 · 同步點亮小鎮霓虹招牌</div>
+            <div class="kpi-sub" data-i18n="revenue.kpiAdsSub">$29/位 · 同步點亮小鎮霓虹招牌</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" data-i18n="revenue.kpiPro">✨ 像素皮膚與 Pro 會員</div>
             <div class="kpi-value" id="rev-pro-skins">$0.00</div>
-            <div class="kpi-sub">純外觀與效率加成，絕不賣戰力</div>
+            <div class="kpi-sub" data-i18n="revenue.kpiProSub">純外觀與效率加成，絕不賣戰力</div>
           </div>
         </div>
 
@@ -372,15 +374,132 @@
           <span data-i18n="revenue.historyTitle">📒 平臺營收流水紀錄</span>
         </div>
         <div class="ledger-list" id="rev-history-list">
-          <div class="empty-state">尚無營收流水，快去驗收懸賞、租用廣告位或發布項目吧！</div>
+          <div class="empty-state" data-i18n="revenue.historyEmpty">尚無營收流水，快去驗收懸賞、租用廣告位或發布項目吧！</div>
         </div>
 
         <div class="subsection-title">
           <span data-i18n="revenue.leaderboardTitle">🏆 全鎮創世貢獻排行榜</span>
         </div>
         <div class="ledger-list" id="leaderboard-list">
-          <div class="empty-state">載入排行榜中...</div>
+          <div class="empty-state" data-i18n="revenue.leaderboardLoading">載入排行榜中...</div>
         </div>
+
+        <!-- 💸 穩定幣分紅提領區 -->
+        <section class="v1-section-box" id="payout-section">
+          <div class="subsection-title" style="margin-top: 0;">
+            <span data-i18n="payout.sectionTitle">💸 穩定幣分紅提領（USDC / USDT）</span>
+            <span class="badge green" id="payout-balance-badge">$0.00</span>
+          </div>
+
+          <div class="wallet-status-bar mono" id="wallet-bound-status" data-i18n="payout.unboundStatus">
+            尚未綁定穩定幣收款錢包，綁定後滿 $5 即可提領分紅與懸賞收益。
+          </div>
+
+          <form class="form-grid" id="wallet-bind-form">
+            <div class="form-field">
+              <label class="form-label" for="wallet-chain" data-i18n="payout.walletChainLabel">收款公鏈</label>
+              <select class="select" id="wallet-chain">
+                <option value="base">Base (USDC / USDT)</option>
+                <option value="polygon">Polygon (USDC / USDT)</option>
+                <option value="arbitrum">Arbitrum (USDC / USDT)</option>
+                <option value="solana">Solana (USDC / USDT)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="wallet-address" data-i18n="payout.walletAddressLabel">個人收款錢包地址（EVM 0x... 或 Solana）</label>
+              <input class="input mono" id="wallet-address" type="text" data-i18n-placeholder="payout.walletPlaceholder" placeholder="0x... 或 Solana 錢包地址" required />
+            </div>
+            <div class="form-field full" style="flex-direction: row; justify-content: flex-end;">
+              <button type="submit" class="btn btn-sm btn-primary" id="btn-bind-wallet" data-i18n="payout.bindBtn">🔗 綁定收款錢包</button>
+            </div>
+          </form>
+
+          <form class="form-grid" id="payout-request-form" style="padding-top: 8px; border-top: 1px dashed var(--border-pixel);">
+            <div class="form-field">
+              <label class="form-label" for="payout-amount" data-i18n="payout.amountLabel">提領金額（USD，最低 $5）</label>
+              <input class="input mono" id="payout-amount" type="number" min="5" step="0.5" value="5" required />
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="payout-token" data-i18n="payout.tokenLabel">提領幣種</label>
+              <select class="select" id="payout-token">
+                <option value="USDC">USDC</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </div>
+            <div class="form-field full" style="flex-direction: row; justify-content: flex-end; gap: 6px; flex-wrap: wrap;">
+              <button type="submit" class="btn btn-sm btn-green" id="btn-request-payout" data-i18n="payout.requestBtn">💸 申請穩定幣提領</button>
+              <button type="button" class="btn btn-sm btn-amber" id="btn-request-payout-instant" data-i18n="payout.instantBtn">⚡ 沙盒即時出款</button>
+            </div>
+          </form>
+
+          <div class="subsection-title" style="font-size: 12px;">
+            <span data-i18n="payout.historyTitle">提領紀錄</span>
+          </div>
+          <div class="ledger-list" id="payout-history-list">
+            <div class="empty-state" data-i18n="payout.historyEmpty">尚無穩定幣提領紀錄。</div>
+          </div>
+        </section>
+
+        <!-- 🛡️ 鎮長管理面板（可折疊） -->
+        <section class="v1-section-box admin-box" id="mayor-admin-section">
+          <div class="subsection-title" style="margin-top: 0;">
+            <span data-i18n="admin.sectionTitle">🛡️ 鎮長管理面板（裝置審核與卡密生成）</span>
+            <button type="button" class="btn btn-sm" id="btn-toggle-admin" data-i18n="admin.toggleLabel">顯示 / 收合管理區</button>
+          </div>
+
+          <div class="admin-panel-body" id="mayor-admin-body">
+            <!-- 嚴格裝置審核模式開關 -->
+            <div class="admin-switch-row">
+              <div>
+                <div style="font-weight: 800; font-size: 12px;" data-i18n="admin.strictTitle">嚴格裝置審核模式（防刷保護）</div>
+                <div class="card-subtitle" data-i18n="admin.strictDesc">開啟後，新裝置透過 /onboard 核准將進入待審核清單，需鎮長手動放行。</div>
+              </div>
+              <label class="autopilot-toggle" id="strict-review-label">
+                <input type="checkbox" id="toggle-strict-device-review" />
+                <span id="strict-review-badge" data-i18n="admin.strictOff">🔓 自動放行</span>
+              </label>
+            </div>
+
+            <!-- 待審核與已綁定裝置清單 -->
+            <div class="subsection-title" style="font-size: 12px;">
+              <span data-i18n="admin.devicesTitle">待審核與已綁定裝置清單</span>
+              <span class="badge amber" id="admin-devices-count">0</span>
+            </div>
+            <div class="ledger-list" id="admin-devices-list">
+              <div class="empty-state" data-i18n="admin.devicesEmpty">目前沒有待審核裝置。</div>
+            </div>
+
+            <!-- 卡密生成器 -->
+            <div class="subsection-title" style="font-size: 12px; margin-top: 10px;">
+              <span data-i18n="admin.codesTitle">🎟️ 卡密兌換碼生成器（愛發電 / Ko-fi / Gumroad 販售用）</span>
+            </div>
+            <form class="form-grid" id="admin-code-form">
+              <div class="form-field">
+                <label class="form-label" for="admin-code-type" data-i18n="admin.codeRewardLabel">獎勵類型</label>
+                <select class="select" id="admin-code-type">
+                  <option value="pro" data-i18n="admin.codeRewardPro">💎 Pro 通行證（$9）</option>
+                  <option value="genesis_pack" data-i18n="admin.codeRewardPack">🎁 創世限定外觀大禮包（$15）</option>
+                  <option value="gold_500" data-i18n="admin.codeRewardGold">🪙 500 金幣禮包</option>
+                  <option value="billboard" data-i18n="admin.codeRewardBillboard">📺 霓虹廣告兌換券</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="admin-code-count" data-i18n="admin.codeCountLabel">數量</label>
+                <input class="input mono" id="admin-code-count" type="number" min="1" max="20" value="1" />
+              </div>
+              <div class="form-field full">
+                <label class="form-label" for="admin-code-note" data-i18n="admin.codeNoteLabel">備註（選填）</label>
+                <input class="input" id="admin-code-note" type="text" data-i18n-placeholder="admin.codeNotePlaceholder" placeholder="例如：愛發電 11 月贊助批次" maxlength="60" />
+              </div>
+              <div class="form-field full" style="flex-direction: row; justify-content: flex-end;">
+                <button type="submit" class="btn btn-sm btn-pink" id="btn-generate-codes" data-i18n="admin.generateCodeBtn">⚡ 一鍵生成卡密</button>
+              </div>
+            </form>
+            <div class="ledger-list" id="admin-codes-list">
+              <div class="empty-state" data-i18n="admin.codesEmpty">尚未生成卡密。</div>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -389,43 +508,43 @@
   <div class="modal-backdrop" id="modal-settings" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h2 class="modal-title" id="settings-modal-title">⚙️ BYOK 零信任金鑰與本機 CLI 設定</h2>
-        <button type="button" class="btn btn-sm" data-close-modal="modal-settings">✕ 關閉</button>
+        <h2 class="modal-title" id="settings-modal-title" data-i18n="modal.settings.title">⚙️ BYOK 零信任金鑰與本機 CLI 設定</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-settings" data-i18n="btn.close">✕ 關閉</button>
       </div>
       <div class="modal-body">
-        <div class="zero-trust-callout">
+        <div class="zero-trust-callout" data-i18n-html="modal.settings.callout">
           🔒 <strong>零信任安全承諾</strong>：你的 API Key <strong>只儲存在你本機瀏覽器的 localStorage</strong>，並由瀏覽器直接呼叫 Gemini / OpenAI 相容端點，<strong>絕不傳送到像素算力鎮伺服器</strong>。未填 Key 時可免門檻使用高品質擬真體驗模式。
         </div>
 
         <div class="form-grid">
           <div class="form-field">
-            <label class="form-label" for="byok-provider">模型介面協議</label>
+            <label class="form-label" for="byok-provider" data-i18n="modal.settings.providerLabel">模型介面協議</label>
             <select class="select" id="byok-provider">
-              <option value="gemini">Google Gemini API（一等公民 · 瀏覽器直連）</option>
-              <option value="openai_compat">OpenAI 相容 Endpoint（OpenRouter / DeepSeek / Ollama）</option>
+              <option value="gemini" data-i18n="modal.settings.providerGemini">Google Gemini API（一等公民 · 瀏覽器直連）</option>
+              <option value="openai_compat" data-i18n="modal.settings.providerOpenai">OpenAI 相容 Endpoint（OpenRouter / DeepSeek / Ollama）</option>
             </select>
           </div>
           <div class="form-field">
-            <label class="form-label" for="byok-model-presets">快速選擇預設模型</label>
+            <label class="form-label" for="byok-model-presets" data-i18n="modal.settings.presetsLabel">快速選擇預設模型</label>
             <select class="select" id="byok-model-presets"></select>
           </div>
           <div class="form-field full">
-            <label class="form-label" for="byok-model">模型名稱（可自訂輸入）</label>
+            <label class="form-label" for="byok-model" data-i18n="modal.settings.modelLabel">模型名稱（可自訂輸入）</label>
             <input class="input mono" id="byok-model" type="text" placeholder="gemini-2.5-flash" />
           </div>
           <div class="form-field full" id="byok-baseurl-wrap" style="display: none;">
-            <label class="form-label" for="byok-base-url">OpenAI 相容 Base URL</label>
-            <input class="input mono" id="byok-base-url" type="url" placeholder="https://openrouter.ai/api/v1 或 http://localhost:11434/v1" />
+            <label class="form-label" for="byok-base-url" data-i18n="modal.settings.baseUrlLabel">OpenAI 相容 Base URL</label>
+            <input class="input mono" id="byok-base-url" type="url" data-i18n-placeholder="modal.settings.baseUrlPlaceholder" placeholder="https://openrouter.ai/api/v1 或 http://localhost:11434/v1" />
           </div>
           <div class="form-field full">
-            <label class="form-label" for="byok-api-key">API Key（留空即使用免金鑰擬真體驗模式）</label>
+            <label class="form-label" for="byok-api-key" data-i18n="modal.settings.apiKeyLabel">API Key（留空即使用免金鑰擬真體驗模式）</label>
             <div style="display: flex; gap: 6px;">
-              <input class="input mono" id="byok-api-key" type="password" placeholder="AIzaSy... 或 sk-..." autocomplete="off" />
+              <input class="input mono" id="byok-api-key" type="password" data-i18n-placeholder="modal.settings.apiKeyPlaceholder" placeholder="AIzaSy... 或 sk-..." autocomplete="off" />
               <button type="button" class="btn" id="btn-toggle-key-vis">👁️</button>
             </div>
           </div>
           <div class="form-field full">
-            <label class="form-label" for="byok-max-tokens">單次任務最大輸出 Token 上限（成本保護防爆倉）</label>
+            <label class="form-label" for="byok-max-tokens" data-i18n="modal.settings.maxTokensLabel">單次任務最大輸出 Token 上限（成本保護防爆倉）</label>
             <input class="input mono" id="byok-max-tokens" type="number" min="256" max="16384" step="256" value="2048" />
           </div>
         </div>
@@ -433,20 +552,20 @@
         <div id="byok-test-result" class="code-box" style="display: none;"></div>
 
         <div class="subsection-title">
-          <span>🖥️ 本機月／週額度 CLI 橋接器（BYOT）</span>
+          <span data-i18n="modal.settings.cliTitle">🖥️ 本機月／週額度 CLI 橋接器（BYOT）</span>
         </div>
-        <div class="card-subtitle">
+        <div class="card-subtitle" data-i18n="modal.settings.cliDesc">
           擁有 Gemini CLI / Claude Code / Codex 訂閱？在終端機執行下方指令即可把本機真實幹活進度直播同步到像素小鎮：
         </div>
         <div style="display: flex; gap: 6px; align-items: stretch;">
           <div class="code-box" id="cli-quick-cmd" style="flex: 1; padding: 8px;">node bin/pixel-worker.mjs --demo</div>
-          <button type="button" class="btn btn-sm" id="btn-copy-quick-cli">📋 複製</button>
+          <button type="button" class="btn btn-sm" id="btn-copy-quick-cli" data-i18n="btn.copy">📋 複製</button>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-danger" id="btn-clear-byok">🗑️ 清除金鑰</button>
-        <button type="button" class="btn" id="btn-test-byok">🔌 測試連線</button>
-        <button type="button" class="btn btn-green" id="btn-save-byok">💾 儲存於瀏覽器</button>
+        <button type="button" class="btn btn-danger" id="btn-clear-byok" data-i18n="modal.settings.clearBtn">🗑️ 清除金鑰</button>
+        <button type="button" class="btn" id="btn-test-byok" data-i18n="modal.settings.testBtn">🔌 測試連線</button>
+        <button type="button" class="btn btn-green" id="btn-save-byok" data-i18n="modal.settings.saveBtn">💾 儲存於瀏覽器</button>
       </div>
     </div>
   </div>
@@ -455,8 +574,8 @@
   <div class="modal-backdrop" id="modal-guild" role="dialog" aria-modal="true" aria-labelledby="guild-modal-title">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h2 class="modal-title" id="guild-modal-title">⚔️ 工會懸賞接單工作台（BYOT）</h2>
-        <button type="button" class="btn btn-sm" data-close-modal="modal-guild">✕ 關閉</button>
+        <h2 class="modal-title" id="guild-modal-title" data-i18n="modal.guild.title">⚔️ 工會懸賞接單工作台（BYOT）</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-guild" data-i18n="btn.close">✕ 關閉</button>
       </div>
       <div class="modal-body">
         <div class="badge-row" id="guild-modal-meta"></div>
@@ -464,40 +583,40 @@
 
         <div class="form-field">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <label class="form-label" for="guild-context-pack">步驟 1：複製標準化 CLI / Prompt Context Pack</label>
-            <button type="button" class="btn btn-sm btn-primary" id="btn-copy-context-pack">📋 一鍵複製 Context Pack</button>
+            <label class="form-label" for="guild-context-pack" data-i18n="modal.guild.step1">步驟 1：複製標準化 CLI / Prompt Context Pack</label>
+            <button type="button" class="btn btn-sm btn-primary" id="btn-copy-context-pack" data-i18n="modal.guild.copyPack">📋 一鍵複製 Context Pack</button>
           </div>
           <textarea class="textarea" id="guild-context-pack" readonly rows="5"></textarea>
         </div>
 
         <div class="form-field">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <label class="form-label">步驟 2（可選）：在本機執行 pixel-worker 即時同步動畫</label>
-            <button type="button" class="btn btn-sm" id="btn-copy-cli-cmd">📋 複製指令</button>
+            <label class="form-label" data-i18n="modal.guild.step2">步驟 2（可選）：在本機執行 pixel-worker 即時同步動畫</label>
+            <button type="button" class="btn btn-sm" id="btn-copy-cli-cmd" data-i18n="modal.guild.copyCmd">📋 複製指令</button>
           </div>
           <div class="code-box" id="guild-cli-cmd" style="padding: 8px;"></div>
         </div>
 
         <div class="form-field">
-          <label class="form-label" for="guild-submit-pr-url">步驟 3（可選）：貼上 GitHub PR 連結並驗證</label>
+          <label class="form-label" for="guild-submit-pr-url" data-i18n="modal.guild.step3">步驟 3（可選）：貼上 GitHub PR 連結並驗證</label>
           <div style="display: flex; gap: 6px;">
             <input class="input mono" id="guild-submit-pr-url" type="url" placeholder="https://github.com/owner/repo/pull/123" />
-            <button type="button" class="btn btn-sm" id="btn-verify-pr">🔍 驗證 PR</button>
+            <button type="button" class="btn btn-sm" id="btn-verify-pr" data-i18n="modal.guild.verifyPr">🔍 驗證 PR</button>
           </div>
           <div id="guild-pr-verify-result" class="mono" style="font-size: 11px; color: var(--accent-cyan);"></div>
         </div>
 
         <div class="form-field">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;">
-            <label class="form-label" for="guild-submit-content">步驟 4：貼上本機 AI 產出成果送交 Proof of Accepted Work 驗收</label>
-            <button type="button" class="btn btn-sm btn-amber" id="btn-guild-sim-cli">⚡ 模擬本機 CLI 交付（一鍵體驗）</button>
+            <label class="form-label" for="guild-submit-content" data-i18n="modal.guild.step4">步驟 4：貼上本機 AI 產出成果送交 Proof of Accepted Work 驗收</label>
+            <button type="button" class="btn btn-sm btn-amber" id="btn-guild-sim-cli" data-i18n="modal.guild.simCli">⚡ 模擬本機 CLI 交付（一鍵體驗）</button>
           </div>
-          <textarea class="textarea" id="guild-submit-content" rows="6" placeholder="貼上程式碼、Diff 說明、測試輸出或結構化交付報告（空白或灌水將被防作弊系統攔截並扣信譽分）..."></textarea>
+          <textarea class="textarea" id="guild-submit-content" rows="6" data-i18n-placeholder="modal.guild.contentPlaceholder" placeholder="貼上程式碼、Diff 說明、測試輸出或結構化交付報告（空白或灌水將被防作弊系統攔截並扣信譽分）..."></textarea>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn" data-close-modal="modal-guild">稍後提交</button>
-        <button type="button" class="btn btn-green" id="btn-guild-submit">📤 提交成果並驗收結算</button>
+        <button type="button" class="btn" data-close-modal="modal-guild" data-i18n="modal.guild.laterBtn">稍後提交</button>
+        <button type="button" class="btn btn-green" id="btn-guild-submit" data-i18n="modal.guild.submitBtn">📤 提交成果並驗收結算</button>
       </div>
     </div>
   </div>
@@ -506,45 +625,45 @@
   <div class="modal-backdrop" id="modal-propose" role="dialog" aria-modal="true" aria-labelledby="propose-modal-title">
     <div class="modal-dialog" style="max-width: 540px;">
       <div class="modal-header">
-        <h2 class="modal-title" id="propose-modal-title">🚀 提案新孵化項目</h2>
-        <button type="button" class="btn btn-sm" data-close-modal="modal-propose">✕ 關閉</button>
+        <h2 class="modal-title" id="propose-modal-title" data-i18n="modal.propose.title">🚀 提案新孵化項目</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-propose" data-i18n="btn.close">✕ 關閉</button>
       </div>
       <form id="propose-form">
         <div class="modal-body">
           <div class="info-banner pink">
-            <span>提案上牆後由社群投票，達標後將<strong>自動破土動工並生成雙軌任務</strong>！上線後收益按 30% 發起人 / 60% 貢獻者 / 10% 平臺透明分紅。</span>
+            <span data-i18n-html="modal.propose.banner">提案上牆後由社群投票，達標後將<strong>自動破土動工並生成雙軌任務</strong>！上線後收益按 30% 發起人 / 60% 貢獻者 / 10% 平臺透明分紅。</span>
           </div>
           <div class="form-field">
-            <label class="form-label" for="propose-name">項目名稱 *</label>
-            <input class="input" id="propose-name" type="text" required maxlength="48" placeholder="例如：PixelMetrics（開源輕量統計看板）" />
+            <label class="form-label" for="propose-name" data-i18n="modal.propose.nameLabel">項目名稱 *</label>
+            <input class="input" id="propose-name" type="text" required maxlength="48" data-i18n-placeholder="modal.propose.namePlaceholder" placeholder="例如：PixelMetrics（開源輕量統計看板）" />
           </div>
           <div class="form-field">
-            <label class="form-label" for="propose-desc">項目簡介與願景 *</label>
-            <textarea class="textarea" id="propose-desc" required rows="3" placeholder="用 1-2 句話說明這套產品要解決什麼痛點、目標用戶是誰..."></textarea>
+            <label class="form-label" for="propose-desc" data-i18n="modal.propose.descLabel">項目簡介與願景 *</label>
+            <textarea class="textarea" id="propose-desc" required rows="3" data-i18n-placeholder="modal.propose.descPlaceholder" placeholder="用 1-2 句話說明這套產品要解決什麼痛點、目標用戶是誰..."></textarea>
           </div>
           <div class="form-grid">
             <div class="form-field">
-              <label class="form-label" for="propose-category">產品類型</label>
+              <label class="form-label" for="propose-category" data-i18n="modal.propose.catLabel">產品類型</label>
               <select class="select" id="propose-category">
-                <option value="devtools">開發者工具</option>
-                <option value="indie_saas">獨立 SaaS</option>
-                <option value="oss_plugin">開源插件</option>
-                <option value="pixel_game">像素互動工具</option>
+                <option value="devtools" data-i18n="modal.propose.catDevtools">開發者工具</option>
+                <option value="indie_saas" data-i18n="modal.propose.catSaas">獨立 SaaS</option>
+                <option value="oss_plugin" data-i18n="modal.propose.catPlugin">開源插件</option>
+                <option value="pixel_game" data-i18n="modal.propose.catGame">像素互動工具</option>
               </select>
             </div>
             <div class="form-field">
-              <label class="form-label" for="propose-bounty">初期現金懸賞預算（USD，可填 0）</label>
+              <label class="form-label" for="propose-bounty" data-i18n="modal.propose.bountyLabel">初期現金懸賞預算（USD，可填 0）</label>
               <input class="input mono" id="propose-bounty" type="number" min="0" max="10000" value="50" />
             </div>
           </div>
           <div class="form-field">
-            <label class="form-label" for="propose-repo">GitHub 倉庫連結（選填）</label>
+            <label class="form-label" for="propose-repo" data-i18n="modal.propose.repoLabel">GitHub 倉庫連結（選填）</label>
             <input class="input mono" id="propose-repo" type="url" placeholder="https://github.com/your-org/your-repo" />
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn" data-close-modal="modal-propose">取消</button>
-          <button type="submit" class="btn btn-pink">🚀 送出提案上牆投票</button>
+          <button type="button" class="btn" data-close-modal="modal-propose" data-i18n="btn.cancel">取消</button>
+          <button type="submit" class="btn btn-pink" data-i18n="modal.propose.submitBtn">🚀 送出提案上牆投票</button>
         </div>
       </form>
     </div>
@@ -554,21 +673,21 @@
   <div class="modal-backdrop" id="modal-report" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h2 class="modal-title" id="report-modal-title">📋 AI 交付物與 Proof of Accepted Work 驗收報告</h2>
-        <button type="button" class="btn btn-sm" data-close-modal="modal-report">✕ 關閉</button>
+        <h2 class="modal-title" id="report-modal-title" data-i18n="modal.report.title">📋 AI 交付物與 Proof of Accepted Work 驗收報告</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-report" data-i18n="btn.close">✕ 關閉</button>
       </div>
       <div class="modal-body">
         <div class="badge-row" id="report-summary-bar"></div>
-        <div class="subsection-title"><span>🔍 三層自動化防作弊驗收結果</span></div>
+        <div class="subsection-title"><span data-i18n="modal.report.checksTitle">🔍 三層自動化防作弊驗收結果</span></div>
         <div class="verifier-check-list" id="report-checks-list"></div>
         <div class="subsection-title">
-          <span>📦 交付成果原文</span>
-          <button type="button" class="btn btn-sm" id="btn-copy-report">📋 複製成果</button>
+          <span data-i18n="modal.report.deliverableTitle">📦 交付成果原文</span>
+          <button type="button" class="btn btn-sm" id="btn-copy-report" data-i18n="modal.report.copyBtn">📋 複製成果</button>
         </div>
         <pre class="code-box" id="report-deliverable-code"></pre>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-close-modal="modal-report">關閉</button>
+        <button type="button" class="btn btn-primary" data-close-modal="modal-report" data-i18n="btn.closeSimple">關閉</button>
       </div>
     </div>
   </div>
@@ -577,18 +696,165 @@
   <div class="modal-backdrop" id="modal-cert" role="dialog" aria-modal="true" aria-labelledby="cert-modal-title">
     <div class="modal-dialog" style="max-width: 640px;">
       <div class="modal-header">
-        <h2 class="modal-title" id="cert-modal-title">🪪 像素算力鎮 · 算力打工證與分紅結算單</h2>
-        <button type="button" class="btn btn-sm" data-close-modal="modal-cert">✕ 關閉</button>
+        <h2 class="modal-title" id="cert-modal-title" data-i18n="modal.cert.title">🪪 像素算力鎮 · 算力打工證與分紅結算單</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="modal-cert" data-i18n="btn.close">✕ 關閉</button>
       </div>
       <div class="modal-body">
         <div class="cert-preview-wrap">
-          <img id="cert-preview-img" alt="算力打工證 PNG 預覽" />
+          <img id="cert-preview-img" alt="Pixel Work Certificate PNG" />
         </div>
-        <div class="card-subtitle" id="cert-preview-caption">點擊下方按鈕下載高清復古像素 PNG，附帶社群貼文文案直接發推炫耀！</div>
+        <div class="card-subtitle" id="cert-preview-caption" data-i18n="modal.cert.captionDefault">點擊下方按鈕下載高清復古像素 PNG，附帶社群貼文文案直接發推炫耀！</div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn" id="btn-copy-share-text">📋 複製發推炫耀文案</button>
-        <button type="button" class="btn btn-green" id="btn-modal-download-cert">⬇️ 下載打工證 PNG</button>
+        <button type="button" class="btn" id="btn-copy-share-text" data-i18n="modal.cert.copyShareBtn">📋 複製發推炫耀文案</button>
+        <button type="button" class="btn btn-green" id="btn-modal-download-cert" data-i18n="modal.cert.downloadBtn">⬇️ 下載打工證 PNG</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6: 🔐 帳號註冊與登入彈窗 (#auth-modal) -->
+  <div class="modal-backdrop" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+    <div class="modal-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="auth-modal-title" data-i18n="auth.title">🔐 帳號註冊與登入</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="auth-modal" data-i18n="btn.close">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-banner" id="auth-current-status"></div>
+
+        <div class="modal-tabs" role="tablist">
+          <button type="button" class="modal-tab-btn active" id="auth-tab-login" data-auth-mode="login" data-i18n="auth.tabLogin">🔑 登入帳號</button>
+          <button type="button" class="modal-tab-btn" id="auth-tab-register" data-auth-mode="register" data-i18n="auth.tabRegister">✨ 免費註冊</button>
+        </div>
+
+        <form id="auth-form" class="v1-form-stack">
+          <div class="form-field" id="auth-display-name-wrap" style="display: none;">
+            <label class="form-label" for="auth-display-name" data-i18n="auth.displayNameLabel">顯示暱稱（選填）</label>
+            <input class="input" id="auth-display-name" type="text" maxlength="32" data-i18n-placeholder="auth.displayNamePlaceholder" placeholder="例如：像素工程師 Alex" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="auth-email" data-i18n="auth.emailLabel">電子信箱</label>
+            <input class="input mono" id="auth-email" type="email" required autocomplete="email" data-i18n-placeholder="auth.emailPlaceholder" placeholder="you@example.com" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="auth-password" data-i18n="auth.passwordLabel">密碼（至少 6 字元）</label>
+            <input class="input mono" id="auth-password" type="password" required minlength="6" autocomplete="current-password" data-i18n-placeholder="auth.passwordPlaceholder" placeholder="請輸入密碼" />
+          </div>
+          <div class="auth-error-msg" id="auth-error-msg" style="display: none;"></div>
+          <button type="submit" class="btn btn-green" id="auth-submit-btn" style="width: 100%;" data-i18n="auth.loginBtn">🚀 立即登入</button>
+        </form>
+
+        <div class="modal-divider"><span data-i18n="auth.divider">或使用快速登入方式</span></div>
+
+        <div class="auth-oauth-grid">
+          <a class="btn btn-primary" id="auth-btn-github" href="/api/auth/github" data-i18n="auth.githubBtn">🐙 GitHub 一鍵登入</a>
+          <a class="btn" id="auth-btn-google" href="/api/auth/google" data-i18n="auth.googleBtn">🌐 Google 一鍵登入</a>
+          <button type="button" class="btn btn-amber" id="auth-btn-demo" data-i18n="auth.demoBtn">🎮 遊客 Demo 模式</button>
+          <button type="button" class="btn btn-danger" id="auth-btn-logout" data-i18n="auth.logoutBtn">🚪 登出目前帳號</button>
+        </div>
+
+        <div class="card-subtitle" data-i18n="auth.multiUserTip">💡 註冊獨立帳號可保存專屬金幣、像素小人與收款錢包，同時與全鎮共享開源孵化池與排行榜！</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 7: 💎 三合一付費結帳彈窗 (#payment-modal) -->
+  <div class="modal-backdrop" id="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="payment-modal-title" data-i18n="pay.title">💎 三合一透明結帳中心</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="payment-modal" data-i18n="btn.close">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-banner pink" id="pay-product-summary"></div>
+
+        <div class="modal-tabs three-col" role="tablist">
+          <button type="button" class="modal-tab-btn active" id="pay-tab-stablecoin" data-pay-tab="stablecoin" data-i18n="pay.tabStablecoin">💎 穩定幣 (USDC/USDT)</button>
+          <button type="button" class="modal-tab-btn" id="pay-tab-card" data-pay-tab="card" data-i18n="pay.tabCard">💳 信用卡 (Polar/Stripe)</button>
+          <button type="button" class="modal-tab-btn" id="pay-tab-redeem" data-pay-tab="redeem" data-i18n="pay.tabRedeem">🎟️ 兌換碼 (愛發電/Ko-fi)</button>
+        </div>
+
+        <!-- Track 1: Stablecoin -->
+        <div class="pay-pane active" id="pay-pane-stablecoin" data-pay-pane="stablecoin">
+          <div class="form-grid">
+            <div class="form-field">
+              <label class="form-label" for="pay-chain" data-i18n="pay.chainLabel">選擇公鏈網路</label>
+              <select class="select" id="pay-chain">
+                <option value="base">Base (Low Gas)</option>
+                <option value="polygon">Polygon</option>
+                <option value="arbitrum">Arbitrum</option>
+                <option value="solana">Solana</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="pay-token" data-i18n="pay.tokenLabel">選擇穩定幣種</label>
+              <select class="select" id="pay-token">
+                <option value="USDC">USDC</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-pay-create-order" style="width: 100%;" data-i18n="pay.createOrderBtn">🧾 產生專屬穩定幣收款訂單</button>
+
+          <div class="pay-order-box" id="pay-order-box" style="display: none;">
+            <div class="pay-order-row">
+              <span class="form-label" data-i18n="pay.receiverLabel">官方金庫收款地址</span>
+              <button type="button" class="btn btn-sm" id="btn-copy-pay-addr" data-i18n="pay.copyAddrBtn">📋 複製地址</button>
+            </div>
+            <div class="code-box mono" id="pay-receiver-addr" style="padding: 7px;"></div>
+            <div class="pay-order-meta">
+              <div>
+                <span class="form-label" data-i18n="pay.amountLabel">精準應付金額</span>
+                <div class="mono pay-highlight" id="pay-exact-amount">$0.00 USDC</div>
+              </div>
+              <div>
+                <span class="form-label" data-i18n="pay.memoLabel">訂單備註碼</span>
+                <div class="mono pay-highlight" id="pay-memo-code">PCT-XXXXXX</div>
+              </div>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="pay-tx-hash" data-i18n="pay.txHashLabel">貼上鏈上交易雜湊（TxHash）驗證到帳</label>
+              <input class="input mono" id="pay-tx-hash" type="text" data-i18n-placeholder="pay.txHashPlaceholder" placeholder="0x...（EVM 64位 Hex）或 Solana Signature" />
+            </div>
+            <div class="toolbar-group" style="justify-content: flex-end;">
+              <button type="button" class="btn btn-green" id="btn-pay-verify-tx" data-i18n="pay.verifyTxBtn">✅ 驗證上鏈到帳</button>
+              <button type="button" class="btn btn-amber" id="btn-pay-sim-tx" data-i18n="pay.simTxBtn">⚡ 沙盒模擬上鏈支付</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Track 2: Card (Polar / Stripe) -->
+        <div class="pay-pane" id="pay-pane-card" data-pay-pane="card">
+          <div class="card-subtitle" data-i18n="pay.cardDesc">支援 Polar.sh 與 Stripe 國際信用卡／Apple Pay 安全結帳；本機未設定真實金鑰時提供一鍵沙盒刷卡體驗。</div>
+          <div class="auth-oauth-grid">
+            <button type="button" class="btn btn-primary" id="btn-pay-polar" data-i18n="pay.polarBtn">❄️ 使用 Polar.sh 結帳</button>
+            <button type="button" class="btn btn-pink" id="btn-pay-stripe" data-i18n="pay.stripeBtn">💳 使用 Stripe 結帳</button>
+          </div>
+          <div class="pay-order-box" id="pay-card-sandbox-box" style="display: none;">
+            <div class="card-subtitle" id="pay-card-sandbox-msg"></div>
+            <button type="button" class="btn btn-green" id="btn-pay-sandbox-complete" style="width: 100%;" data-i18n="pay.sandboxCompleteBtn">⚡ 模擬刷卡完成結帳</button>
+          </div>
+        </div>
+
+        <!-- Track 3: Redeem Code (Afdian / Ko-fi / Gumroad) -->
+        <div class="pay-pane" id="pay-pane-redeem" data-pay-pane="redeem">
+          <div class="card-subtitle" data-i18n="pay.redeemDesc">在愛發電 / Ko-fi / Gumroad 贊助取得的卡密兌換碼，可於此一鍵兌換入帳！</div>
+          <div class="zero-trust-callout" data-i18n="pay.redeemHint">🎁 內建測試體驗碼：PIXEL-PRO-2026（Pro 會員）｜PIXEL-PACK-2026（創世禮包）｜PIXEL-GOLD-500（500 金幣）</div>
+          <div class="badge-row">
+            <button type="button" class="quick-chip" data-fill-redeem="PIXEL-PRO-2026">PIXEL-PRO-2026</button>
+            <button type="button" class="quick-chip" data-fill-redeem="PIXEL-PACK-2026">PIXEL-PACK-2026</button>
+            <button type="button" class="quick-chip" data-fill-redeem="PIXEL-GOLD-500">PIXEL-GOLD-500</button>
+          </div>
+          <form id="pay-redeem-form" class="v1-form-stack">
+            <div class="form-field">
+              <label class="form-label" for="pay-redeem-code" data-i18n="pay.redeemCodeLabel">輸入卡密兌換碼</label>
+              <input class="input mono" id="pay-redeem-code" type="text" required data-i18n-placeholder="pay.redeemCodePlaceholder" placeholder="例如：PIXEL-PRO-2026" />
+            </div>
+            <button type="submit" class="btn btn-amber" id="btn-pay-redeem" style="width: 100%;" data-i18n="pay.redeemBtn">🎟️ 立即兌換</button>
+          </form>
+        </div>
+
+        <div class="code-box" id="pay-status-msg" style="display: none;"></div>
       </div>
     </div>
   </div>

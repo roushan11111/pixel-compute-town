@@ -1,5 +1,7 @@
 // PixelCompute Town — Initial World Seed, Shop Items & Dynamic Task Generator
 
+import crypto from 'node:crypto';
+
 export const REVENUE_SPLIT = Object.freeze({
   creatorPct: 30,
   contributorsPct: 60,
@@ -350,6 +352,224 @@ export function generateTasksForProject(project) {
       verification: null,
     },
   ];
+}
+
+export function createInitialRedeemCodes(now = new Date().toISOString()) {
+  return [
+    {
+      code: 'PIXEL-PRO-2026',
+      rewardType: 'pro',
+      note: '創世開通 Pro 會員測試碼（愛發電 / Ko-fi 範例）',
+      used: false,
+      usedBy: null,
+      usedByName: null,
+      usedAt: null,
+      createdAt: now,
+    },
+    {
+      code: 'PIXEL-PACK-2026',
+      rewardType: 'genesis_pack',
+      note: '解鎖全部 3 款創世限定塗裝大禮包測試碼',
+      used: false,
+      usedBy: null,
+      usedByName: null,
+      usedAt: null,
+      createdAt: now,
+    },
+    {
+      code: 'PIXEL-GOLD-500',
+      rewardType: 'gold_500',
+      note: '創世 500 金幣啟動紅包測試碼',
+      used: false,
+      usedBy: null,
+      usedByName: null,
+      usedAt: null,
+      createdAt: now,
+    },
+  ];
+}
+
+export function createStarterWorkersForUser(userId) {
+  const short = String(userId || 'usr').replace(/[^a-z0-9]/gi, '').slice(-6) || 'usr';
+  return [
+    {
+      id: `w-${short}-flash`,
+      name: '閃電小吉 (Flash-01)',
+      roleClass: 'flash_worker',
+      track: 'api',
+      providerLabel: 'Gemini 2.5 Flash',
+      modelHint: 'gemini-2.5-flash',
+      dailyTokenCap: 500000,
+      usedTokensToday: 0,
+      stamina: 100,
+      maxStamina: 100,
+      level: 1,
+      xp: 0,
+      xpToNext: 100,
+      status: 'idle',
+      currentTaskId: null,
+      currentProjectId: null,
+      currentZone: 'lounge',
+      skin: 'default',
+      autoMode: false,
+      completedCount: 0,
+      earnedGold: 0,
+      earnedPoints: 0,
+      lastMessage: '剛入鎮報到，隨時可接自動工坊 API 任務！',
+      lastHeartbeatAt: null,
+    },
+    {
+      id: `w-${short}-pro`,
+      name: '架構師阿瓜 (Pro-01)',
+      roleClass: 'pro_architect',
+      track: 'quota',
+      providerLabel: 'Gemini CLI / 週額度',
+      modelHint: 'gemini-2.5-pro / cli',
+      dailyTokenCap: 100,
+      usedTokensToday: 0,
+      stamina: 100,
+      maxStamina: 100,
+      level: 1,
+      xp: 0,
+      xpToNext: 100,
+      status: 'idle',
+      currentTaskId: null,
+      currentProjectId: null,
+      currentZone: 'lounge',
+      skin: 'default',
+      autoMode: false,
+      completedCount: 0,
+      earnedGold: 0,
+      earnedPoints: 0,
+      lastMessage: '本機 CLI 橋接器待命中，隨時可領懸賞大單！',
+      lastHeartbeatAt: null,
+    },
+  ];
+}
+
+export function ensureStateSchema(state) {
+  if (!state || typeof state !== 'object') return state;
+  const now = new Date().toISOString();
+
+  if (!Array.isArray(state.achievements) || state.achievements.length === 0) {
+    state.achievements = createInitialAchievements();
+  }
+  if (!Array.isArray(state.workers)) {
+    state.workers = [];
+  }
+  if (!state.settings || typeof state.settings !== 'object') {
+    state.settings = {
+      strictDeviceReview: false,
+      sessionSecret: crypto.randomBytes(32).toString('hex'),
+    };
+  } else {
+    if (typeof state.settings.strictDeviceReview !== 'boolean') {
+      state.settings.strictDeviceReview = false;
+    }
+    if (!state.settings.sessionSecret) {
+      state.settings.sessionSecret = crypto.randomBytes(32).toString('hex');
+    }
+  }
+
+  if (!state.sessions || typeof state.sessions !== 'object') {
+    state.sessions = {};
+  }
+  if (!Array.isArray(state.paymentOrders)) {
+    state.paymentOrders = [];
+  }
+  if (!Array.isArray(state.payouts)) {
+    state.payouts = [];
+  }
+  if (!Array.isArray(state.redeemCodes) || state.redeemCodes.length === 0) {
+    state.redeemCodes = createInitialRedeemCodes(now);
+  }
+  if (!state.deviceAuthorizations || typeof state.deviceAuthorizations !== 'object') {
+    state.deviceAuthorizations = {};
+  }
+
+  // Upgrade or initialize multi-user map
+  if (!state.users || typeof state.users !== 'object') {
+    state.users = {};
+  }
+
+  const legacyPlayer = state.player || {};
+  const founderId = 'founder-demo';
+  if (!state.users[founderId]) {
+    state.users[founderId] = {
+      id: founderId,
+      email: legacyPlayer.email || 'founder@pixelcompute.town',
+      username: legacyPlayer.username || 'founder-dev',
+      displayName: legacyPlayer.displayName || '創始鎮長 (Demo)',
+      avatarUrl: legacyPlayer.avatarUrl || '',
+      role: 'founder',
+      authMode: legacyPlayer.authMode || 'demo',
+      passwordHash: null,
+      gold: Number.isFinite(legacyPlayer.gold) ? legacyPlayer.gold : 420,
+      usdBalance: Number.isFinite(legacyPlayer.usdBalance) ? legacyPlayer.usdBalance : 12.5,
+      reputation: Number.isFinite(legacyPlayer.reputation) ? legacyPlayer.reputation : 100,
+      completedTasks: Number.isFinite(legacyPlayer.completedTasks) ? legacyPlayer.completedTasks : 2,
+      totalContribution: Number.isFinite(legacyPlayer.totalContribution) ? legacyPlayer.totalContribution : 120,
+      isPro: Boolean(legacyPlayer.isPro),
+      ownedSkins: Array.isArray(legacyPlayer.ownedSkins) ? [...legacyPlayer.ownedSkins] : ['default'],
+      ownedDecor: Array.isArray(legacyPlayer.ownedDecor) ? [...legacyPlayer.ownedDecor] : [],
+      ownedItems: Array.isArray(legacyPlayer.ownedItems) ? [...legacyPlayer.ownedItems] : [],
+      votedProjectIds: Array.isArray(legacyPlayer.votedProjectIds) ? [...legacyPlayer.votedProjectIds] : [],
+      autoPilotEnabled: Boolean(legacyPlayer.autoPilotEnabled),
+      walletAddress: legacyPlayer.walletAddress || '',
+      walletChain: legacyPlayer.walletChain || '',
+      achievements: Array.isArray(state.achievements) ? state.achievements : createInitialAchievements(),
+      workers: Array.isArray(state.workers) ? state.workers : [],
+      createdAt: state.createdAt || now,
+    };
+  }
+
+  // Keep every user's structure complete
+  for (const [uidKey, u] of Object.entries(state.users)) {
+    if (!u || typeof u !== 'object') continue;
+    u.id = u.id || uidKey;
+    u.role = u.role || (u.id === founderId ? 'founder' : 'user');
+    u.ownedSkins = Array.isArray(u.ownedSkins) ? u.ownedSkins : ['default'];
+    u.ownedDecor = Array.isArray(u.ownedDecor) ? u.ownedDecor : [];
+    u.ownedItems = Array.isArray(u.ownedItems) ? u.ownedItems : [];
+    u.votedProjectIds = Array.isArray(u.votedProjectIds) ? u.votedProjectIds : [];
+    u.walletAddress = typeof u.walletAddress === 'string' ? u.walletAddress : '';
+    u.walletChain = typeof u.walletChain === 'string' ? u.walletChain : '';
+    if (!Array.isArray(u.achievements) || u.achievements.length === 0) {
+      u.achievements = createInitialAchievements();
+    }
+    if (!Array.isArray(u.workers)) {
+      u.workers = createStarterWorkersForUser(u.id);
+    }
+  }
+
+  // Keep legacy top-level mirrors synced to founder-demo for backward-compatible disk reads
+  const founder = state.users[founderId];
+  state.player = {
+    id: founder.id,
+    email: founder.email,
+    username: founder.username,
+    displayName: founder.displayName,
+    avatarUrl: founder.avatarUrl || '',
+    role: founder.role,
+    authMode: founder.authMode,
+    gold: founder.gold,
+    usdBalance: founder.usdBalance,
+    reputation: founder.reputation,
+    completedTasks: founder.completedTasks,
+    totalContribution: founder.totalContribution,
+    isPro: founder.isPro,
+    ownedSkins: founder.ownedSkins,
+    ownedDecor: founder.ownedDecor,
+    ownedItems: founder.ownedItems,
+    votedProjectIds: founder.votedProjectIds,
+    autoPilotEnabled: Boolean(founder.autoPilotEnabled),
+    walletAddress: founder.walletAddress,
+    walletChain: founder.walletChain,
+  };
+  state.workers = founder.workers;
+  state.achievements = founder.achievements;
+
+  return state;
 }
 
 export function createInitialState() {
@@ -993,28 +1213,64 @@ export function createInitialState() {
     },
   ];
 
-  return {
+  const founderAchievements = createInitialAchievements();
+  const founderUser = {
+    id: 'founder-demo',
+    email: 'founder@pixelcompute.town',
+    username: 'founder-dev',
+    displayName: '創始鎮長 (Demo)',
+    avatarUrl: '',
+    role: 'founder',
+    authMode: 'demo',
+    passwordHash: null,
+    gold: 420,
+    usdBalance: 12.5,
+    reputation: 100,
+    completedTasks: 2,
+    totalContribution: 120,
+    isPro: false,
+    ownedSkins: ['default'],
+    ownedDecor: [],
+    ownedItems: [],
+    votedProjectIds: [],
+    autoPilotEnabled: false,
+    walletAddress: '',
+    walletChain: '',
+    achievements: founderAchievements,
+    workers,
+    createdAt: now,
+  };
+
+  return ensureStateSchema({
     version: '1.0.0',
     createdAt: now,
     updatedAt: now,
     player: {
-      id: 'founder-demo',
-      username: 'founder-dev',
-      displayName: '創始鎮長 (Demo)',
-      avatarUrl: '',
-      authMode: 'demo',
-      gold: 420,
-      usdBalance: 12.5,
-      reputation: 100,
-      completedTasks: 2,
-      totalContribution: 120,
-      isPro: false,
-      ownedSkins: ['default'],
-      ownedDecor: [],
-      ownedItems: [],
-      votedProjectIds: [],
-      autoPilotEnabled: false,
+      id: founderUser.id,
+      email: founderUser.email,
+      username: founderUser.username,
+      displayName: founderUser.displayName,
+      avatarUrl: founderUser.avatarUrl,
+      role: founderUser.role,
+      authMode: founderUser.authMode,
+      gold: founderUser.gold,
+      usdBalance: founderUser.usdBalance,
+      reputation: founderUser.reputation,
+      completedTasks: founderUser.completedTasks,
+      totalContribution: founderUser.totalContribution,
+      isPro: founderUser.isPro,
+      ownedSkins: founderUser.ownedSkins,
+      ownedDecor: founderUser.ownedDecor,
+      ownedItems: founderUser.ownedItems,
+      votedProjectIds: founderUser.votedProjectIds,
+      autoPilotEnabled: founderUser.autoPilotEnabled,
+      walletAddress: founderUser.walletAddress,
+      walletChain: founderUser.walletChain,
     },
+    users: {
+      'founder-demo': founderUser,
+    },
+    sessions: {},
     workers,
     projects,
     tasks,
@@ -1023,6 +1279,14 @@ export function createInitialState() {
     dividendLedger: [],
     founderRevenue,
     activityFeed,
-    achievements: createInitialAchievements(),
-  };
+    achievements: founderAchievements,
+    paymentOrders: [],
+    payouts: [],
+    redeemCodes: createInitialRedeemCodes(now),
+    deviceAuthorizations: {},
+    settings: {
+      strictDeviceReview: false,
+      sessionSecret: crypto.randomBytes(32).toString('hex'),
+    },
+  });
 }

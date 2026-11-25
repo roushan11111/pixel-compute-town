@@ -17,6 +17,7 @@
  * Zero-dependency ES Module.
  */
 
+import * as I18N from './i18n.js';
 import {
   WORKER_ROLE_META,
   drawHDWorker,
@@ -39,6 +40,9 @@ export const WORLD_H = 300;
 export const LOGICAL_W = WORLD_W;
 export const LOGICAL_H = WORLD_H;
 
+const PRIMARY_LANG_STORAGE_KEY = 'pct_locale';
+const LANG_STORAGE_KEY = 'pixel_compute_town_lang_v1';
+
 export const SCENES = Object.freeze([
   'factory',
   'guild',
@@ -47,6 +51,381 @@ export const SCENES = Object.freeze([
   'vault',
   'town',
 ]);
+
+// ============================================================================
+// Built-in 3-Locale Canvas & Entity Fallbacks (Aligned with public/js/i18n.js)
+// ============================================================================
+
+function fmtTpl(tpl, vars) {
+  let out = String(tpl ?? '');
+  if (vars && typeof vars === 'object') {
+    for (const [k, v] of Object.entries(vars)) {
+      out = out.replaceAll(`{${k}}`, String(v ?? ''));
+    }
+  }
+  return out;
+}
+
+function normalizeLocale(locale) {
+  if (locale === 'zh-TW' || locale === 'zh-CN' || locale === 'en') return locale;
+  const s = String(locale || '').toLowerCase();
+  if (s.startsWith('en')) return 'en';
+  if (s === 'zh-cn' || s === 'zh-hans' || s === 'zh-sg') return 'zh-CN';
+  if (s.startsWith('zh')) return 'zh-TW';
+  return 'zh-TW';
+}
+
+function readInitialLocale() {
+  try {
+    if (typeof I18N.getLocale === 'function') {
+      const l = I18N.getLocale();
+      if (l) return normalizeLocale(l);
+    }
+    if (typeof I18N.getLang === 'function') {
+      const l = I18N.getLang();
+      if (l) return normalizeLocale(l);
+    }
+    if (typeof localStorage !== 'undefined') {
+      const primary = localStorage.getItem(PRIMARY_LANG_STORAGE_KEY);
+      if (primary) return normalizeLocale(primary);
+      const saved = localStorage.getItem(LANG_STORAGE_KEY);
+      if (saved) return normalizeLocale(saved);
+    }
+  } catch {
+    // ignore storage errors in non-browser runtimes
+  }
+  return 'zh-TW';
+}
+
+const FALLBACK_CANVAS_I18N = Object.freeze({
+  'zh-TW': {
+    factoryTitle: '🏭 自動工坊 · 超算中心',
+    factoryThroughput: 'API 吞吐儀表板',
+    factoryQueueOpen: '待接',
+    factoryQueueDone: '完成',
+    factoryAutoOn: '● AUTO-PILOT 運行中',
+    factoryByokReady: '● BYOK 零信任就緒',
+    factoryCoreLoad: '⚡ 核心負載',
+    factoryIdleDesk: '待機工位',
+    guildTitle: '⚔️ 懸賞工會 · 匠人會館',
+    guildBoardTitle: '📜 懸賞佈告欄',
+    guildPool: '懸賞池',
+    guildOpenUnit: '單開放',
+    guildClickClaim: '點擊接單',
+    guildIdleDesk: '待命工位',
+    launchpadTitle: '🚀 孵化廣場 · 指揮中心',
+    launchpadSponsored: '★ 像素霓虹贊助廣告 ★',
+    launchpadKanban: '📋 項目看板',
+    launchpadVoteTitle: '🗳️ 社群投票',
+    launchpadProgress: '🏗️ 項目進度',
+    launchpadLaunched: '🎆 已上線',
+    launchpadCmdFallback: '孵化總控',
+    launchpadIdleDesk: '待機工位',
+    loungeTitle: '☕ 算力宿舍 · 生活館',
+    loungeCoffeeBar: '☕ 咖啡吧台',
+    loungeGoldCoffeeBar: '✨ 黃金手沖吧',
+    loungeTrophyCase: '🏆 創世成就櫃',
+    vaultTitle: '💰 創作者金庫 · 分紅銀行',
+    vaultTotalRevenue: '💰 總累積變現',
+    vaultPodiumTitle: '🏆 榮耀領獎台',
+    vaultStreamBounty: '懸賞 10%',
+    vaultStreamCarry: '孵化 10%',
+    vaultStreamAds: '霓虹廣告',
+    vaultStreamPro: '皮膚 Pro',
+    townSponsored: '★ 霓虹贊助 ★',
+    townPlaza: '⚡ 像素算力廣場 ⚡',
+    buildings: {
+      factory: { label: '🏭 自動工坊', subtitle: 'API 超算中心' },
+      guild: { label: '⚔️ 懸賞工會', subtitle: '匠人 CLI 會館' },
+      vault: { label: '💰 創作者金庫', subtitle: '黑金分紅銀行' },
+      lounge: { label: '☕ 算力宿舍', subtitle: '咖啡與獎盃館' },
+      launchpad: { label: '🚀 孵化中心', subtitle: '全息發射廣場' },
+    },
+    monitorIdle: '待機',
+    monitorStandbyReady: '● 待命就緒',
+    statusCli: '💻 CLI 即時同步',
+    statusWorking: '⚡ 執行任務中',
+    statusCelebrating: '🎉 驗收歡呼',
+    statusIdle: '☕ 待命中',
+    staminaLabel: '體力',
+    workerFallback: '算力小人',
+    dispatchGuildFallback: '工會懸賞任務',
+    dispatchApiFallback: 'API 流水線微任務',
+    bubbleVerified: '🎉 驗收通過！',
+    floatingPtsSuffix: '貢獻點',
+    floatingVerified: '✔ 驗收通過!',
+    launchFallbackTitle: '新創世項目',
+    launchBannerPrefix: '🚀 《',
+    launchBannerSuffix: '》正式上線！30/60/10 分紅結算中！',
+    bubbleLaunched: '🎆 上線啦！領分紅！',
+    cliDefaultMsg: '本機 CLI 同步中...',
+    tickerSponsoredSuffix: ' 贊助徵求算力貢獻者！',
+    tickerLaunchedSuffix: ' 已正式上線分紅中！',
+    tickerBrand: '像素算力鎮',
+    tickerProgressWord: '進度',
+    tickerSplitTail: '雙軌算力 30/60/10 透明分紅',
+    cliTerminalPrLine: 'PR 檢核中 · 0 warnings',
+    roles: {
+      flash_worker: '閃電機甲貓',
+      pro_architect: '紫金貓頭鷹架構師',
+      pixel_artist: '櫻粉像素狐狸畫師',
+      guild_artisan: '琥珀工會熊匠人',
+    },
+  },
+  'zh-CN': {
+    factoryTitle: '🏭 自动工坊 · 超算中心',
+    factoryThroughput: 'API 吞吐仪表板',
+    factoryQueueOpen: '待接',
+    factoryQueueDone: '完成',
+    factoryAutoOn: '● AUTO-PILOT 运行中',
+    factoryByokReady: '● BYOK 零信任就绪',
+    factoryCoreLoad: '⚡ 核心负载',
+    factoryIdleDesk: '待机工位',
+    guildTitle: '⚔️ 悬赏工会 · 匠人会馆',
+    guildBoardTitle: '📜 悬赏布告栏',
+    guildPool: '悬赏池',
+    guildOpenUnit: '单开放',
+    guildClickClaim: '点击接单',
+    guildIdleDesk: '待命工位',
+    launchpadTitle: '🚀 孵化广场 · 指挥中心',
+    launchpadSponsored: '★ 像素霓虹赞助广告 ★',
+    launchpadKanban: '📋 项目看板',
+    launchpadVoteTitle: '🗳️ 社区投票',
+    launchpadProgress: '🏗️ 项目进度',
+    launchpadLaunched: '🎆 已上线',
+    launchpadCmdFallback: '孵化总控',
+    launchpadIdleDesk: '待机工位',
+    loungeTitle: '☕ 算力宿舍 · 生活馆',
+    loungeCoffeeBar: '☕ 咖啡吧台',
+    loungeGoldCoffeeBar: '✨ 黄金手冲吧',
+    loungeTrophyCase: '🏆 创始成就柜',
+    vaultTitle: '💰 创作者金库 · 分红银行',
+    vaultTotalRevenue: '💰 总累计变现',
+    vaultPodiumTitle: '🏆 荣耀领奖台',
+    vaultStreamBounty: '悬赏 10%',
+    vaultStreamCarry: '孵化 10%',
+    vaultStreamAds: '霓虹广告',
+    vaultStreamPro: '皮肤 Pro',
+    townSponsored: '★ 霓虹赞助 ★',
+    townPlaza: '⚡ 像素算力广场 ⚡',
+    buildings: {
+      factory: { label: '🏭 自动工坊', subtitle: 'API 超算中心' },
+      guild: { label: '⚔️ 悬赏工会', subtitle: '匠人 CLI 会馆' },
+      vault: { label: '💰 创作者金库', subtitle: '黑金分红银行' },
+      lounge: { label: '☕ 算力宿舍', subtitle: '咖啡与奖杯馆' },
+      launchpad: { label: '🚀 孵化中心', subtitle: '全息发射广场' },
+    },
+    monitorIdle: '待机',
+    monitorStandbyReady: '● 待命就绪',
+    statusCli: '💻 CLI 实时同步',
+    statusWorking: '⚡ 执行任务中',
+    statusCelebrating: '🎉 验收欢呼',
+    statusIdle: '☕ 待命中',
+    staminaLabel: '体力',
+    workerFallback: '算力小人',
+    dispatchGuildFallback: '工会悬赏任务',
+    dispatchApiFallback: 'API 流水线微任务',
+    bubbleVerified: '🎉 验收通过！',
+    floatingPtsSuffix: '贡献点',
+    floatingVerified: '✔ 验收通过!',
+    launchFallbackTitle: '新创始项目',
+    launchBannerPrefix: '🚀 《',
+    launchBannerSuffix: '》正式上线！30/60/10 分红结算中！',
+    bubbleLaunched: '🎆 上线啦！领分红！',
+    cliDefaultMsg: '本机 CLI 同步中...',
+    tickerSponsoredSuffix: ' 赞助征求算力贡献者！',
+    tickerLaunchedSuffix: ' 已正式上线分红中！',
+    tickerBrand: '像素算力镇',
+    tickerProgressWord: '进度',
+    tickerSplitTail: '双轨算力 30/60/10 透明分红',
+    cliTerminalPrLine: 'PR 检核中 · 0 warnings',
+    roles: {
+      flash_worker: '闪电机械猫',
+      pro_architect: '紫金猫头鹰架构师',
+      pixel_artist: '樱粉像素狐狸画师',
+      guild_artisan: '琥珀工会熊匠人',
+    },
+  },
+  en: {
+    factoryTitle: '🏭 Auto Factory · HQ',
+    factoryThroughput: 'API Throughput',
+    factoryQueueOpen: 'Open',
+    factoryQueueDone: 'Done',
+    factoryAutoOn: '● AUTO-PILOT LIVE',
+    factoryByokReady: '● BYOK ZERO-TRUST',
+    factoryCoreLoad: '⚡ Core Load',
+    factoryIdleDesk: 'Idle Desk',
+    guildTitle: '⚔️ Bounty Guild · Hall',
+    guildBoardTitle: '📜 Bounty Board',
+    guildPool: 'Pool',
+    guildOpenUnit: 'Open',
+    guildClickClaim: 'Click to Claim',
+    guildIdleDesk: 'Standby Desk',
+    launchpadTitle: '🚀 Launchpad · Command',
+    launchpadSponsored: '★ PIXEL NEON SPONSORED ★',
+    launchpadKanban: '📋 Project Kanban',
+    launchpadVoteTitle: '🗳️ Community Vote',
+    launchpadProgress: '🏗️ Progress',
+    launchpadLaunched: '🎆 Launched',
+    launchpadCmdFallback: 'Launch Cmd',
+    launchpadIdleDesk: 'Idle Desk',
+    loungeTitle: '☕ Compute Lounge',
+    loungeCoffeeBar: '☕ Coffee Bar',
+    loungeGoldCoffeeBar: '✨ Gold Espresso',
+    loungeTrophyCase: '🏆 Trophy Case',
+    vaultTitle: '💰 Creator Vault · Bank',
+    vaultTotalRevenue: '💰 Total Revenue',
+    vaultPodiumTitle: '🏆 Honor Podium',
+    vaultStreamBounty: 'Bounty 10%',
+    vaultStreamCarry: 'Carry 10%',
+    vaultStreamAds: 'Neon Ads',
+    vaultStreamPro: 'Skins Pro',
+    townSponsored: '★ SPONSORED ★',
+    townPlaza: '⚡ TOWN PLAZA ⚡',
+    buildings: {
+      factory: { label: '🏭 Auto Factory', subtitle: 'API Compute HQ' },
+      guild: { label: '⚔️ Bounty Guild', subtitle: 'Artisan CLI Hall' },
+      vault: { label: '💰 Creator Vault', subtitle: 'Dividend Bank' },
+      lounge: { label: '☕ Compute Lounge', subtitle: 'Cafe & Trophies' },
+      launchpad: { label: '🚀 Launchpad', subtitle: 'Holo Launch Plaza' },
+    },
+    monitorIdle: 'IDLE',
+    monitorStandbyReady: '● STANDBY READY',
+    statusCli: '💻 CLI Live Sync',
+    statusWorking: '⚡ Working',
+    statusCelebrating: '🎉 Verified!',
+    statusIdle: '☕ Standby',
+    staminaLabel: 'Stamina',
+    workerFallback: 'Worker',
+    dispatchGuildFallback: 'Guild Bounty Task',
+    dispatchApiFallback: 'API Pipeline Task',
+    bubbleVerified: '🎉 Verified!',
+    floatingPtsSuffix: 'pts',
+    floatingVerified: '✔ Verified!',
+    launchFallbackTitle: 'Genesis Project',
+    launchBannerPrefix: '🚀 "',
+    launchBannerSuffix: '" Launched! 30/60/10 Split Live!',
+    bubbleLaunched: '🎆 Launched! Dividends!',
+    cliDefaultMsg: 'Local CLI syncing...',
+    tickerSponsoredSuffix: ' Sponsored · Seeking Contributors!',
+    tickerLaunchedSuffix: ' is LIVE & Sharing Dividends!',
+    tickerBrand: 'PixelCompute Town',
+    tickerProgressWord: 'Progress',
+    tickerSplitTail: 'Dual-Track 30/60/10 Revenue Split',
+    cliTerminalPrLine: 'PR review · 0 warnings',
+    roles: {
+      flash_worker: 'Cyber Volt-Bot',
+      pro_architect: 'Sage Architect',
+      pixel_artist: 'Pixel Fox Artist',
+      guild_artisan: 'Forge Artisan',
+    },
+  },
+});
+
+const FALLBACK_WORKERS = Object.freeze({
+  'w-flash-01': {
+    'zh-TW': { name: '閃電小吉 (Flash-01)', providerLabel: 'Gemini 2.5 Flash' },
+    'zh-CN': { name: '闪电小吉 (Flash-01)', providerLabel: 'Gemini 2.5 Flash' },
+    en: { name: 'Volt Flash (Flash-01)', providerLabel: 'Gemini 2.5 Flash' },
+  },
+  'w-pro-01': {
+    'zh-TW': { name: '架構師阿瓜 (Pro-01)', providerLabel: 'Gemini CLI / 週額度' },
+    'zh-CN': { name: '架构师阿瓜 (Pro-01)', providerLabel: 'Gemini CLI / 周额度' },
+    en: { name: 'Sage Owl (Pro-01)', providerLabel: 'Gemini CLI / Weekly' },
+  },
+});
+
+const FALLBACK_PROJECTS = Object.freeze({
+  'proj-meta': {
+    'zh-TW': { name: '像素算力鎮 v1.0', shortName: '像素算力鎮 v1.0', billboardText: '' },
+    'zh-CN': { name: '像素算力镇 v1.0', shortName: '像素算力镇 v1.0', billboardText: '' },
+    en: { name: 'PixelCompute Town v1.0', shortName: 'PixelCompute v1.0', billboardText: '' },
+  },
+  'proj-i18n': {
+    'zh-TW': {
+      name: 'i18n-PixelBot（開源多語系插件）',
+      shortName: 'i18n-PixelBot',
+      billboardText: '🔥 i18n-PixelBot $40/$25 現金懸賞徵求高手！',
+    },
+    'zh-CN': {
+      name: 'i18n-PixelBot（开源多语系插件）',
+      shortName: 'i18n-PixelBot',
+      billboardText: '🔥 i18n-PixelBot $40/$25 现金悬赏征求高手！',
+    },
+    en: {
+      name: 'i18n-PixelBot (Open-Source i18n Plugin)',
+      shortName: 'i18n-PixelBot',
+      billboardText: '🔥 i18n-PixelBot $40/$25 Cash Bounties Open Now!',
+    },
+  },
+  'proj-pomo': {
+    'zh-TW': { name: 'PixelPomo（像素番茄鐘獨立工具）', shortName: 'PixelPomo', billboardText: '' },
+    'zh-CN': { name: 'PixelPomo（像素番茄钟独立工具）', shortName: 'PixelPomo', billboardText: '' },
+    en: { name: 'PixelPomo (Retro Focus Timer)', shortName: 'PixelPomo', billboardText: '' },
+  },
+});
+
+const FALLBACK_TASKS = Object.freeze({
+  'task-meta-i18n': {
+    'zh-TW': '翻譯小鎮商店與公告介面為 en / ja 多語系 JSON',
+    'zh-CN': '翻译小镇商店与公告界面为 en / ja 多语系 JSON',
+    en: 'Translate Town Shop & Feed to en/ja JSON',
+  },
+  'task-meta-spec': {
+    'zh-TW': '制定夜市限定像素精靈與霓虹看板配色表 JSON',
+    'zh-CN': '制定夜市限定像素精灵与霓虹看板配色表 JSON',
+    en: 'Design Cyber Night Market Palette Spec JSON',
+  },
+  'task-meta-docs': {
+    'zh-TW': '整理 BYOK 零信任安全架構與防刷單白皮書摘要',
+    'zh-CN': '整理 BYOK 零信任安全架构与防刷单白皮书摘要',
+    en: 'Write BYOK Zero-Trust & PoAW Whitepaper',
+  },
+  'task-meta-pr': {
+    'zh-TW': '實作小鎮鍵盤快捷鍵導覽與快速切換建築視角 PR',
+    'zh-CN': '实现小镇键盘快捷键导航与快速切换建筑视角 PR',
+    en: 'Add Keyboard Shortcuts & Scene Switch PR',
+  },
+  'task-meta-bugfix': {
+    'zh-TW': '修復 SSE 斷線重連後小人動畫狀態閃爍問題',
+    'zh-CN': '修复 SSE 断线重连后小人动画状态闪烁问题',
+    en: 'Fix SSE Reconnect Worker Flicker Bug',
+  },
+  'task-i18n-locales': {
+    'zh-TW': '[$10 懸賞] 批次翻譯 CLI 錯誤碼表（zh-TW / en / ja / ko）',
+    'zh-CN': '[$10 悬赏] 批量翻译 CLI 错误码表（zh-TW / en / ja / ko）',
+    en: '[$10 Bounty] Batch Translate CLI Error Codes',
+  },
+  'task-i18n-tests': {
+    'zh-TW': '為 ICU 複數語法解析器撰寫邊界單元測試',
+    'zh-CN': '为 ICU 复数语法解析器撰写边界单元测试',
+    en: 'Write ICU Plural Parser Edge Unit Tests',
+  },
+  'task-i18n-qa': {
+    'zh-TW': '巡檢開源範本語系檔佔位符一致性與缺漏報告',
+    'zh-CN': '巡检开源模板语系档占位符一致性与缺漏报告',
+    en: 'Audit Locale Placeholder Consistency QA',
+  },
+  'task-i18n-ast-pr': {
+    'zh-TW': '[$40 現金懸賞] 支援 TypeScript JSX AST 自動抽取翻譯鍵值',
+    'zh-CN': '[$40 现金悬赏] 支持 TypeScript JSX AST 自动抽取翻译键值',
+    en: '[$40 Bounty] TS/JSX AST i18n Key Extractor',
+  },
+  'task-i18n-gh-action': {
+    'zh-TW': '[$25 現金懸賞] 修復 GitHub Action PR Comment 權限與重試邏輯',
+    'zh-CN': '[$25 现金悬赏] 修复 GitHub Action PR Comment 权限与重试逻辑',
+    en: '[$25 Bounty] Fix GitHub Action PR Retry',
+  },
+});
+
+const FALLBACK_LEADERBOARD = Object.freeze({
+  'npc-kuro': { 'zh-TW': '算力武士 Kuro', 'zh-CN': '算力武士 Kuro', en: 'Kuro Samurai' },
+  'npc-momo': { 'zh-TW': '像素貓 Momo', 'zh-CN': '像素猫 Momo', en: 'Momo Pixel' },
+  'npc-yuna': { 'zh-TW': '星雲織女 Yuna', 'zh-CN': '星云织女 Yuna', en: 'Yuna Nebula' },
+  'npc-rin': { 'zh-TW': '架構師 Rin', 'zh-CN': '架构师 Rin', en: 'Architect Rin' },
+  'founder-demo': { 'zh-TW': '創始鎮長', 'zh-CN': '创始镇长', en: 'Founder Mayor' },
+  'npc-zero': { 'zh-TW': '夜貓工程師 Zero', 'zh-CN': '夜猫工程师 Zero', en: 'Zero Byte' },
+});
 
 // ============================================================================
 // Scene Layouts (Tuned for 480x300 with ZERO overlap for 32x32 HD Workers + 58x28 Monitors)
@@ -166,7 +545,7 @@ const API_TERMINAL_LINES = [
 ];
 
 const CLI_TERMINAL_LINES = [
-  ['$ gemini-cli --watch', '> syncing PR diff +142', 'PR 檢核中 · 0 warnings'],
+  ['$ gemini-cli --watch', '> syncing PR diff +142', 'PR check · 0 warnings'],
   ['$ claude-code --bounty', '> AST refactor complete', '[OK] tests 100% green'],
   ['$ codex-cli --heartbeat', '> fixing SSE backoff', '> pushing patch branch'],
   ['$ pixel-worker --sync', '> BYOT local quota ok', '[PASS] ready for review'],
@@ -197,12 +576,13 @@ function truncateText(text, maxChars) {
   return str.length > maxChars ? `${str.slice(0, maxChars - 1)}…` : str;
 }
 
-function formatWorkerNameplate(name) {
-  if (!name) return '小人';
-  const cleaned = String(name)
+function formatWorkerNameplate(name, locale = 'zh-TW', fallback = '小人', maxOverride = null) {
+  const safeName = name ? String(name) : fallback;
+  const cleaned = safeName
     .replace(/\s*[（(][^）)]*[）)]\s*$/g, '')
     .trim();
-  return truncateText(cleaned || String(name).trim(), 9);
+  const limit = maxOverride ?? (locale === 'en' ? 12 : 9);
+  return truncateText(cleaned || safeName.trim(), limit);
 }
 
 function formatUsd(val) {
@@ -210,19 +590,20 @@ function formatUsd(val) {
   return `$${n.toFixed(n >= 100 ? 0 : 2)}`;
 }
 
-function getWorkerModelStyle(worker) {
+function getWorkerModelStyle(worker, providerOverride = null) {
   if (!worker) return MODEL_STYLES.api;
-  const prov = String(worker.providerLabel || '').toLowerCase();
+  const rawProv = providerOverride || worker.providerLabel || '';
+  const prov = String(rawProv).toLowerCase();
   if (worker.roleClass === 'pixel_artist') {
-    return { ...MODEL_STYLES.pixel, short: truncateText(worker.providerLabel || 'Pixel Flash', 13) };
+    return { ...MODEL_STYLES.pixel, short: truncateText(rawProv || 'Pixel Flash', 14) };
   }
   if (worker.roleClass === 'pro_architect' || prov.includes('gemini cli')) {
-    return { ...MODEL_STYLES.pro, short: truncateText(worker.providerLabel || 'Gemini CLI', 13) };
+    return { ...MODEL_STYLES.pro, short: truncateText(rawProv || 'Gemini CLI', 14) };
   }
   if (worker.roleClass === 'guild_artisan' || prov.includes('claude') || prov.includes('codex')) {
-    return { ...MODEL_STYLES.artisan, short: truncateText(worker.providerLabel || 'Claude CLI', 13) };
+    return { ...MODEL_STYLES.artisan, short: truncateText(rawProv || 'Claude CLI', 14) };
   }
-  return { ...MODEL_STYLES.api, short: truncateText(worker.providerLabel || 'Gemini Flash', 13) };
+  return { ...MODEL_STYLES.api, short: truncateText(rawProv || 'Gemini Flash', 14) };
 }
 
 function normalizeSceneId(id) {
@@ -258,6 +639,7 @@ export class PixelTownEngine {
    *   onSelectWorker?: (id: string) => void,
    *   onSceneChange?: (sceneId: string) => void,
    *   onSelectTask?: (taskId: string) => void,
+   *   locale?: 'zh-TW' | 'zh-CN' | 'en',
    * }} callbacks
    */
   constructor(canvas, callbacks = {}) {
@@ -272,6 +654,7 @@ export class PixelTownEngine {
     this.prevScene = null;
     this.transitionProgress = 1; // 0 -> 1 smooth wipe
     this.dayNight = 'night';
+    this.locale = this.callbacks.locale ? normalizeLocale(this.callbacks.locale) : readInitialLocale();
     this.destroyed = false;
     this.time = 0;
     this.lastFrameTs = 0;
@@ -337,6 +720,7 @@ export class PixelTownEngine {
     this.nextMeteorIn = 2.8;
     this.launchBannerTimer = 0;
     this.launchBannerText = '';
+    this.launchBannerProjectId = null;
     this.ambientFlash = 0;
     this.marqueeOffset = 0;
 
@@ -383,8 +767,51 @@ export class PixelTownEngine {
   }
 
   // ==========================================================================
-  // Public Contract API (100% Backward Compatible + 6-Scene Extensions)
+  // Public Contract API (100% Backward Compatible + 6-Scene + 3-Locale APIs)
   // ==========================================================================
+
+  setLocale(locale) {
+    const next = normalizeLocale(locale);
+    this.locale = next;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(PRIMARY_LANG_STORAGE_KEY, next);
+        localStorage.setItem(LANG_STORAGE_KEY, next);
+      }
+    } catch {
+      // ignore storage errors
+    }
+    const c = this._getCanvasI18n();
+    // Re-localize active launch banner if showing
+    if (this.launchBannerTimer > 0 && this.launchBannerProjectId) {
+      const proj = this.state.projects.find((p) => p.id === this.launchBannerProjectId);
+      const lp = proj ? this._localizeProject(proj) : null;
+      const title = lp ? truncateText(lp.shortName || lp.name, this.locale === 'en' ? 20 : 16) : c.launchFallbackTitle;
+      this.launchBannerText = c.launchBannerTpl
+        ? fmtTpl(c.launchBannerTpl, { name: title })
+        : `${c.launchBannerPrefix}${title}${c.launchBannerSuffix}`;
+    }
+    // Re-localize active floating reward texts
+    for (const ft of this.floatingTexts) {
+      if (ft.kind === 'pts') {
+        ft.text = c.floatPointsTpl ? fmtTpl(c.floatPointsTpl, { pts: ft.val }) : `+${ft.val} ${c.floatingPtsSuffix}`;
+      } else if (ft.kind === 'verified') {
+        ft.text = c.floatingVerified;
+      }
+    }
+    // Re-localize active system speech bubbles
+    for (const agent of this.agents.values()) {
+      if (agent.bubbleTimer <= 0) continue;
+      if (agent.bubbleKey === 'verified') agent.bubbleText = c.bubbleVerified;
+      else if (agent.bubbleKey === 'launched') agent.bubbleText = c.bubbleLaunched;
+      else if (agent.bubbleKey === 'cli_default') agent.bubbleText = `> ${truncateText(c.cliDefaultMsg, 18)}`;
+    }
+    return this.locale;
+  }
+
+  getLocale() {
+    return this.locale;
+  }
 
   setScene(sceneId) {
     const next = normalizeSceneId(sceneId);
@@ -406,6 +833,190 @@ export class PixelTownEngine {
 
   setDayNight(mode) {
     this.dayNight = mode === 'day' ? 'day' : 'night';
+  }
+
+  // ==========================================================================
+  // Dynamic 3-Locale Resolution Helpers (Aligned with public/js/i18n.js)
+  // ==========================================================================
+
+  _getCanvasI18n() {
+    const loc = this.locale || 'zh-TW';
+    const fb = FALLBACK_CANVAS_I18N[loc] || FALLBACK_CANVAS_I18N['zh-TW'];
+    let ext = null;
+    try {
+      if (typeof I18N.getCanvasI18n === 'function') {
+        ext = I18N.getCanvasI18n(loc);
+      }
+    } catch {
+      ext = null;
+    }
+    if (!ext || typeof ext !== 'object') return fb;
+    const sc = ext.scenes || {};
+    const wk = ext.worker || {};
+    const tk = ext.ticker || {};
+    return {
+      ...fb,
+      factoryTitle: sc.factory?.title || fb.factoryTitle,
+      factoryThroughput: sc.factory?.dashboard || fb.factoryThroughput,
+      factoryOpenDoneTpl: sc.factory?.openDone || null,
+      factoryAutoOn: sc.factory?.autoOn || fb.factoryAutoOn,
+      factoryByokReady: sc.factory?.byokReady || fb.factoryByokReady,
+      factoryCoreLoad: sc.factory?.coreLoad || fb.factoryCoreLoad,
+      factoryIdleDesk: sc.factory?.idleDesk || fb.factoryIdleDesk,
+      guildTitle: sc.guild?.title || fb.guildTitle,
+      guildBoardTitle: sc.guild?.boardTitle ? `📜 ${sc.guild.boardTitle.replace(/^📜\s*/, '')}` : fb.guildBoardTitle,
+      guildPoolSummaryTpl: sc.guild?.poolSummary || null,
+      guildClickClaim: sc.guild?.clickClaim || fb.guildClickClaim,
+      guildIdleDesk: sc.guild?.idleDesk || fb.guildIdleDesk,
+      launchpadTitle: sc.launchpad?.liveHeader || sc.launchpad?.title || fb.launchpadTitle,
+      launchpadSponsored: sc.launchpad?.sponsoredHeader || fb.launchpadSponsored,
+      launchpadKanban: sc.launchpad?.kanbanTitle ? `📋 ${sc.launchpad.kanbanTitle.replace(/^📋\s*/, '')}` : fb.launchpadKanban,
+      launchpadVoteTitle: sc.launchpad?.voteLabel ? `🗳️ ${sc.launchpad.voteLabel.replace(/^🗳️\s*/, '')}` : fb.launchpadVoteTitle,
+      launchpadProgress: sc.launchpad?.buildingTag || fb.launchpadProgress,
+      launchpadLaunched: sc.launchpad?.launchedTag || fb.launchpadLaunched,
+      launchpadCmdFallback: sc.launchpad?.fallbackTitle || fb.launchpadCmdFallback,
+      loungeTitle: sc.lounge?.title || fb.loungeTitle,
+      loungeCoffeeBar: sc.lounge?.coffeeBar || fb.loungeCoffeeBar,
+      loungeGoldCoffeeBar: sc.lounge?.goldCoffeeBar || fb.loungeGoldCoffeeBar,
+      loungeTrophyCaseTpl: sc.lounge?.trophyCase || null,
+      vaultTitle: sc.vault?.title || fb.vaultTitle,
+      vaultTotalRevTpl: sc.vault?.totalRev || null,
+      vaultPodiumTitle: sc.vault?.podiumTitle ? `🏆 ${sc.vault.podiumTitle.replace(/^🏆\s*/, '')}` : fb.vaultPodiumTitle,
+      vaultStreamBounty: sc.vault?.pillarBounty || fb.vaultStreamBounty,
+      vaultStreamCarry: sc.vault?.pillarCarry || fb.vaultStreamCarry,
+      vaultStreamAds: sc.vault?.pillarAds || fb.vaultStreamAds,
+      vaultStreamPro: sc.vault?.pillarPro || fb.vaultStreamPro,
+      statusCli: wk.statusCli || fb.statusCli,
+      statusWorking: wk.statusWorking || fb.statusWorking,
+      statusCelebrating: wk.statusCelebrate || fb.statusCelebrating,
+      statusIdle: wk.statusIdle || fb.statusIdle,
+      staminaTpl: wk.stamina || null,
+      workerFallback: wk.defaultName || fb.workerFallback,
+      dispatchApiFallback: wk.defaultApiTask || fb.dispatchApiFallback,
+      dispatchGuildFallback: wk.defaultGuildTask || fb.dispatchGuildFallback,
+      bubbleVerified: wk.bubblePassed || fb.bubbleVerified,
+      bubbleLaunched: wk.bubbleLaunched || fb.bubbleLaunched,
+      floatPointsTpl: wk.floatPoints || null,
+      floatingVerified: wk.floatPassed || fb.floatingVerified,
+      cliDefaultMsg: wk.cliSyncing || fb.cliDefaultMsg,
+      cliTerminalPrLine: wk.prChecking || fb.cliTerminalPrLine,
+      launchFallbackTitle: tk.newProjectFallback || fb.launchFallbackTitle,
+      launchBannerTpl: tk.launchBanner || null,
+      tickerSponsoredTpl: tk.sponsorFallback || null,
+      tickerLaunchedTpl: tk.launchedMsg || null,
+      tickerDefaultMetaTpl: tk.defaultMeta || null,
+      buildings: {
+        factory: { ...fb.buildings.factory, ...(ext.buildings?.factory || {}) },
+        guild: { ...fb.buildings.guild, ...(ext.buildings?.guild || {}) },
+        vault: { ...fb.buildings.vault, ...(ext.buildings?.vault || {}) },
+        lounge: { ...fb.buildings.lounge, ...(ext.buildings?.lounge || {}) },
+        launchpad: { ...fb.buildings.launchpad, ...(ext.buildings?.launchpad || {}) },
+      },
+      roles: {
+        ...fb.roles,
+        ...(ext.roles || {}),
+      },
+    };
+  }
+
+  _localizeWorker(worker) {
+    const loc = this.locale || 'zh-TW';
+    const c = this._getCanvasI18n();
+    const src = worker?.rawWorker || worker || {};
+    const fbEntry = FALLBACK_WORKERS[src.id]?.[loc] || null;
+    let ext = null;
+    try {
+      if (typeof I18N.localizeWorker === 'function') {
+        ext = I18N.localizeWorker(src, loc);
+      }
+    } catch {
+      ext = null;
+    }
+    const meta = WORKER_ROLE_META[src.roleClass] || WORKER_ROLE_META.flash_worker;
+    const rawProv = ext?.providerLabel || fbEntry?.providerLabel || src.providerLabel || '';
+    let providerLabel = rawProv;
+    if (loc === 'en' && /週額度|周额度/.test(providerLabel)) {
+      providerLabel = providerLabel.replace(/週額度|周额度/g, 'Weekly');
+    } else if (loc === 'zh-CN' && /週額度/.test(providerLabel)) {
+      providerLabel = providerLabel.replace(/週額度/g, '周额度');
+    }
+    return {
+      name: ext?.name || fbEntry?.name || src.name || src.id || c.workerFallback,
+      roleName: ext?.roleName || c.roles[src.roleClass] || meta.speciesName || meta.name,
+      providerLabel,
+      lastMessage: ext?.lastMessage || src.lastMessage || '',
+    };
+  }
+
+  _localizeProject(project) {
+    const loc = this.locale || 'zh-TW';
+    if (!project) return { name: '', shortName: '', billboardText: '' };
+    const fb = FALLBACK_PROJECTS[project.id]?.[loc] || null;
+    let ext = null;
+    try {
+      if (typeof I18N.localizeProject === 'function') {
+        ext = I18N.localizeProject(project, loc);
+      }
+    } catch {
+      ext = null;
+    }
+    const name = ext?.name || fb?.name || project.name || project.id || '';
+    const shortName =
+      ext?.shortName ||
+      fb?.shortName ||
+      (ext?.name ? ext.name.replace(/\s*[（(][^）)]*[）)]\s*$/g, '').trim() : null) ||
+      project.shortName ||
+      name;
+    const billboardText =
+      (project.billboardText && ext?.billboardText) ||
+      (project.billboardText && fb?.billboardText) ||
+      project.billboardText ||
+      '';
+    return { name, shortName, billboardText };
+  }
+
+  _localizeTask(task) {
+    const loc = this.locale || 'zh-TW';
+    if (!task) return { title: '' };
+    let ext = null;
+    try {
+      if (typeof I18N.localizeTask === 'function') {
+        ext = I18N.localizeTask(task, loc);
+      }
+    } catch {
+      ext = null;
+    }
+    const fbTitle = FALLBACK_TASKS[task.id]?.[loc] || null;
+    let title = ext?.title || fbTitle || task.title || '';
+    if (!ext?.title && !fbTitle && loc === 'en' && title) {
+      // Translate dynamically generated project tasks cleanly in fallback mode
+      const m = title.match(/《([^》]+)》/);
+      const proj = m ? m[1] : '';
+      if (task.category === 'i18n' && proj) title = `Generate i18n JSON for ${proj}`;
+      else if (task.category === 'pixel_spec' && proj) title = `Pixel Palette Spec for ${proj}`;
+      else if (task.category === 'unit_test' && proj) title = `Core Unit Tests for ${proj}`;
+      else if (task.category === 'feature_pr' && proj) title = `Core Feature & Shortcuts PR (${proj})`;
+      else if (task.category === 'bugfix' && proj) title = `Stability & Launch Script (${proj})`;
+    }
+    return { title };
+  }
+
+  _localizeLeaderboardEntry(entry) {
+    const loc = this.locale || 'zh-TW';
+    if (!entry) return { displayName: '', badge: '' };
+    let ext = null;
+    try {
+      if (typeof I18N.localizeLeaderboardEntry === 'function') {
+        ext = I18N.localizeLeaderboardEntry(entry, loc);
+      }
+    } catch {
+      ext = null;
+    }
+    const fbName = FALLBACK_LEADERBOARD[entry.userId]?.[loc] || null;
+    return {
+      displayName: ext?.displayName || fbName || entry.displayName || entry.userId || '',
+      badge: ext?.badge || entry.badge || '',
+    };
   }
 
   syncState(state) {
@@ -457,6 +1068,8 @@ export class PixelTownEngine {
         agent = {
           id: w.id,
           index: idx,
+          rawWorker: w,
+          rawTask: task,
           name: w.name || w.id,
           roleClass: w.roleClass || 'flash_worker',
           skinId: w.skin || w.skinId || 'default',
@@ -496,6 +1109,8 @@ export class PixelTownEngine {
         this.agents.set(w.id, agent);
       } else {
         agent.index = idx;
+        agent.rawWorker = w;
+        agent.rawTask = task;
         agent.name = w.name || agent.name;
         agent.roleClass = w.roleClass || agent.roleClass;
         agent.skinId = w.skin || w.skinId || 'default';
@@ -524,6 +1139,7 @@ export class PixelTownEngine {
   triggerWorkerDispatch(workerId, task = null, project = null) {
     const agent = this.agents.get(workerId);
     if (!agent) return;
+    const c = this._getCanvasI18n();
 
     const isGuild =
       (task && (task.track === 'guild_bounty' || task.track === 'quota')) ||
@@ -531,22 +1147,28 @@ export class PixelTownEngine {
       agent.roleClass === 'pro_architect' ||
       agent.roleClass === 'guild_artisan';
 
+    const locTask = task ? this._localizeTask(task) : null;
+    const locProj = project ? this._localizeProject(project) : null;
+
     agent.busy = true;
     agent.workTrack = isGuild ? 'guild' : 'factory';
+    agent.rawTask = task || agent.rawTask;
     agent.taskId = task?.id || agent.taskId;
-    agent.taskTitle = task?.title || agent.taskTitle || (isGuild ? '工會懸賞任務' : 'API 流水線微任務');
+    agent.taskTitle = locTask?.title || agent.taskTitle || (isGuild ? c.dispatchGuildFallback : c.dispatchApiFallback);
     agent.taskProgress = 12;
     agent.celebrateTimer = 0;
 
     this._syncSceneTargets(false);
 
-    const shortTitle = truncateText(agent.taskTitle, 14);
-    const projHint = project?.shortName || project?.name ? ` [${truncateText(project.shortName || project.name, 8)}]` : '';
+    const shortTitle = truncateText(agent.taskTitle, this.locale === 'en' ? 18 : 14);
+    const projName = locProj?.shortName || locProj?.name || '';
+    const projHint = projName ? ` [${truncateText(projName, this.locale === 'en' ? 12 : 8)}]` : '';
     this._setBubble(agent, `🚀 ${shortTitle}${projHint}`, 4.5, 'dispatch');
     this._spawnDataBurst(agent.x, agent.y - 18, isGuild ? '#f59e0b' : '#22d3ee', 10);
   }
 
   triggerTaskComplete(workerId, rewards = {}) {
+    const c = this._getCanvasI18n();
     const agent = this.agents.get(workerId);
     const originX = agent ? agent.x : 240;
     const originY = agent ? agent.y - 24 : 150;
@@ -555,7 +1177,7 @@ export class PixelTownEngine {
       agent.celebrateTimer = 3.2;
       agent.cliTimer = 0;
       agent.taskProgress = 100;
-      this._setBubble(agent, '🎉 驗收通過！', 3.2, 'success');
+      this._setBubble(agent, c.bubbleVerified, 3.2, 'success', 'verified');
     }
 
     const gold = Number(rewards.gold ?? rewards.goldReward ?? 0);
@@ -575,7 +1197,11 @@ export class PixelTownEngine {
       oy += 13;
     }
     if (pts > 0) {
-      this._spawnFloatingText(originX, originY - oy, `+${pts} 貢獻點`, '#38bdf8');
+      const ptsText = c.floatPointsTpl ? fmtTpl(c.floatPointsTpl, { pts }) : `+${pts} ${c.floatingPtsSuffix}`;
+      this._spawnFloatingText(originX, originY - oy, ptsText, '#38bdf8', {
+        kind: 'pts',
+        val: pts,
+      });
       oy += 13;
     }
     if (usd > 0) {
@@ -583,22 +1209,27 @@ export class PixelTownEngine {
       oy += 13;
     }
     if (oy === 0) {
-      this._spawnFloatingText(originX, originY, '✔ 驗收通過!', '#4ade80');
+      this._spawnFloatingText(originX, originY, c.floatingVerified, '#4ade80', { kind: 'verified' });
     }
 
     this._spawnCoins(originX, originY + 4, 10);
   }
 
   triggerProjectLaunch(projectId) {
+    const c = this._getCanvasI18n();
     const proj = this.state.projects.find((p) => p.id === projectId);
-    const title = proj ? truncateText(proj.shortName || proj.name, 16) : '新創世項目';
-    this.launchBannerText = `🚀 《${title}》正式上線！30/60/10 分紅結算中！`;
+    const locProj = proj ? this._localizeProject(proj) : null;
+    const title = locProj ? truncateText(locProj.shortName || locProj.name, this.locale === 'en' ? 20 : 16) : c.launchFallbackTitle;
+    this.launchBannerProjectId = projectId || null;
+    this.launchBannerText = c.launchBannerTpl
+      ? fmtTpl(c.launchBannerTpl, { name: title })
+      : `${c.launchBannerPrefix}${title}${c.launchBannerSuffix}`;
     this.launchBannerTimer = 6.0;
     this.ambientFlash = 0.72;
 
     for (const agent of this.agents.values()) {
       agent.celebrateTimer = 4.0;
-      this._setBubble(agent, '🎆 上線啦！領分紅！', 3.8, 'success');
+      this._setBubble(agent, c.bubbleLaunched, 3.8, 'success', 'launched');
     }
 
     // Multi-layered pixel fireworks + gold coin rain!
@@ -633,7 +1264,9 @@ export class PixelTownEngine {
     }
   }
 
-  triggerCliActivity(workerId, message = '本機 CLI 同步中...') {
+  triggerCliActivity(workerId, message = null) {
+    const c = this._getCanvasI18n();
+    const resolvedMsg = message || c.cliDefaultMsg;
     let agent = this.agents.get(workerId);
     if (!agent && this.agents.size > 0) {
       for (const a of this.agents.values()) {
@@ -647,12 +1280,12 @@ export class PixelTownEngine {
     if (!agent) return;
 
     agent.cliTimer = 9.0;
-    agent.cliMessage = truncateText(message || '$ gemini-cli --heartbeat', 22);
+    agent.cliMessage = truncateText(resolvedMsg || '$ gemini-cli --heartbeat', 22);
     agent.workTrack = 'guild';
     agent.taskProgress = clamp((agent.taskProgress || 25) + 14, 15, 96);
 
     this._syncSceneTargets(false);
-    this._setBubble(agent, `> ${truncateText(message, 18)}`, 4.8, 'cli');
+    this._setBubble(agent, `> ${truncateText(resolvedMsg, 18)}`, 4.8, 'cli', message ? null : 'cli_default');
     this._spawnDataBurst(agent.x, agent.y - 20, '#4ade80', 10);
   }
 
@@ -733,22 +1366,47 @@ export class PixelTownEngine {
   }
 
   _getBillboardTicker() {
+    const c = this._getCanvasI18n();
     const projects = this.state.projects || [];
     const sponsored = projects.filter((p) => p.sponsoredBillboard);
     const launched = projects.filter((p) => p.status === 'launched');
     if (sponsored.length > 0) {
       const msg = sponsored
-        .map((p) => p.billboardText || `★ ${p.shortName || p.name} 贊助徵求算力貢獻者！`)
+        .map((p) => {
+          const lp = this._localizeProject(p);
+          const nm = lp.shortName || lp.name;
+          return (
+            lp.billboardText ||
+            (c.tickerSponsoredTpl ? fmtTpl(c.tickerSponsoredTpl, { name: nm }) : `★ ${nm}${c.tickerSponsoredSuffix}`)
+          );
+        })
         .join('  ✦  ');
       return { text: `${msg}   ✦   `, isSponsored: true, isLaunched: false };
     }
     if (launched.length > 0) {
-      const msg = launched.map((p) => `🚀 ${p.shortName || p.name} 已正式上線分紅中！`).join('  ★  ');
+      const msg = launched
+        .map((p) => {
+          const lp = this._localizeProject(p);
+          const nm = lp.shortName || lp.name;
+          return c.tickerLaunchedTpl ? fmtTpl(c.tickerLaunchedTpl, { name: nm }) : `🚀 ${nm}${c.tickerLaunchedSuffix}`;
+        })
+        .join('  ★  ');
       return { text: `${msg}   ★   `, isSponsored: false, isLaunched: true };
     }
     const featured = this._getFeaturedProject();
+    const lf = this._localizeProject(featured);
+    const fName = lf.shortName || lf.name;
+    const pct = featured.progressPct ?? 0;
+    if (c.tickerDefaultMetaTpl) {
+      return {
+        text: `${fmtTpl(c.tickerDefaultMetaTpl, { name: fName, pct })}   ✦   `,
+        isSponsored: false,
+        isLaunched: false,
+      };
+    }
+    const wrappedName = this.locale === 'en' ? fName : `《${fName}》`;
     return {
-      text: `⚡ 像素算力鎮 · 《${featured.shortName || featured.name}》進度 ${featured.progressPct ?? 0}% · 雙軌算力 30/60/10 透明分紅   ✦   `,
+      text: `⚡ ${c.tickerBrand} · ${wrappedName} ${c.tickerProgressWord} ${pct}% · ${c.tickerSplitTail}   ✦   `,
       isSponsored: false,
       isLaunched: false,
     };
@@ -845,18 +1503,21 @@ export class PixelTownEngine {
     }
   }
 
-  _setBubble(agent, text, duration = 3.6, style = 'normal') {
+  _setBubble(agent, text, duration = 3.6, style = 'normal', bubbleKey = null) {
     agent.bubbleText = text;
     agent.bubbleTimer = duration;
     agent.bubbleStyle = style;
+    agent.bubbleKey = bubbleKey;
   }
 
-  _spawnFloatingText(x, y, text, color) {
+  _spawnFloatingText(x, y, text, color, meta = null) {
     this.floatingTexts.push({
       x,
       y,
       text,
       color,
+      kind: meta?.kind || null,
+      val: meta?.val ?? null,
       vy: -20,
       life: 2.0,
       maxLife: 2.0,
@@ -2864,6 +3525,8 @@ export class PixelTownEngine {
 
   _renderCrispMonitorScreens(ctx, isNight) {
     const s = this.scale;
+    const c = this._getCanvasI18n();
+    const isEn = this.locale === 'en';
     const blinkCursor = Math.floor(this.time * 2.8) % 2 === 0;
 
     for (const fm of this._frameMonitors) {
@@ -2889,12 +3552,19 @@ export class PixelTownEngine {
         ctx.fillText(desk.label, sx + sw / 2, sy + sh * 0.36);
         ctx.font = `600 ${Math.max(7, Math.round(4.0 * s))}px Consolas, "Microsoft JhengHei", monospace`;
         ctx.fillStyle = '#38bdf8';
-        ctx.fillText('待招募工位', sx + sw / 2, sy + sh * 0.68);
+        const idleDeskText =
+          sceneStyle === 'guild'
+            ? c.guildIdleDesk
+            : sceneStyle === 'launchpad'
+              ? c.launchpadIdleDesk
+              : c.factoryIdleDesk;
+        ctx.fillText(idleDeskText, sx + sw / 2, sy + sh * 0.68, sw - 4 * s);
         ctx.restore();
         continue;
       }
 
-      const ms = getWorkerModelStyle(worker);
+      const locW = this._localizeWorker(worker);
+      const ms = getWorkerModelStyle(worker, locW.providerLabel);
       const isCli = sceneStyle === 'guild' || worker.cliTimer > 0;
       const pct = Math.round(worker.busy || worker.cliTimer > 0 ? worker.taskProgress || 42 : 0);
 
@@ -2913,11 +3583,11 @@ export class PixelTownEngine {
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
       ctx.fillStyle = ms.text;
-      ctx.fillText(truncateText(ms.short, 11), sx + 1.8 * s, sy + 0.9 * s);
+      ctx.fillText(truncateText(ms.short, 11), sx + 1.8 * s, sy + 0.9 * s, sw * 0.68);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = isActive ? '#4ade80' : '#94a3b8';
-      ctx.fillText(isActive ? `${pct}%` : 'IDLE', sx + sw - 1.5 * s, sy + 0.9 * s);
+      ctx.fillText(isActive ? `${pct}%` : c.monitorIdle, sx + sw - 1.5 * s, sy + 0.9 * s);
 
       // Live Terminal Lines
       const bodyFont = Math.max(7, Math.round(4.3 * s));
@@ -2927,18 +3597,28 @@ export class PixelTownEngine {
       if (isActive) {
         const linePool = isCli ? CLI_TERMINAL_LINES : API_TERMINAL_LINES;
         const set = linePool[(desk.id + Math.floor(this.time * 0.45)) % linePool.length];
-        const titleLine = worker.taskTitle
-          ? truncateText(worker.taskTitle, 13)
+        const liveTask =
+          worker.rawTask ||
+          (worker.taskId ? (this.state.tasks || []).find((t) => t.id === worker.taskId) : null);
+        const locTaskTitle = liveTask ? this._localizeTask(liveTask).title : worker.taskTitle;
+        const featuredLoc = this._localizeProject(this._getFeaturedProject());
+        const titleLine = locTaskTitle
+          ? truncateText(locTaskTitle, isEn ? 17 : 13)
           : sceneStyle === 'launchpad'
-            ? truncateText(this._getFeaturedProject().shortName || '孵化總控', 13)
+            ? truncateText(featuredLoc.shortName || featuredLoc.name || c.launchpadCmdFallback, isEn ? 17 : 13)
             : set[0];
         const cmdLine = worker.cliTimer > 0 && worker.cliMessage ? worker.cliMessage : set[1];
 
         ctx.fillStyle = '#fef08a';
-        ctx.fillText(truncateText(titleLine, 14), sx + 1.8 * s, sy + 8.0 * s);
+        ctx.fillText(truncateText(titleLine, isEn ? 18 : 14), sx + 1.8 * s, sy + 8.0 * s, sw - 3.6 * s);
 
         ctx.fillStyle = isCli ? '#86efac' : '#a5f3fc';
-        ctx.fillText(truncateText(cmdLine, 17) + (blinkCursor ? '_' : ''), sx + 1.8 * s, sy + 14.2 * s);
+        ctx.fillText(
+          truncateText(cmdLine, 17) + (blinkCursor ? '_' : ''),
+          sx + 1.8 * s,
+          sy + 14.2 * s,
+          sw - 3.6 * s
+        );
 
         // Crisp Live Green/Cyan Progress Bar at bottom of screen
         const barX = sx + 2 * s;
@@ -2952,13 +3632,13 @@ export class PixelTownEngine {
       } else {
         // Standby readable screen
         ctx.fillStyle = '#94a3b8';
-        ctx.fillText('● STANDBY READY', sx + 2 * s, sy + 8.8 * s);
+        ctx.fillText(c.monitorStandbyReady, sx + 2 * s, sy + 8.8 * s, sw - 4 * s);
         ctx.fillStyle = '#38bdf8';
         const quotaTxt =
           worker.track === 'api'
             ? `CAP ${Math.round((worker.dailyTokenCap || 500000) / 1000)}K`
             : `LV.${worker.level} · BYOT`;
-        ctx.fillText(quotaTxt + (blinkCursor ? '_' : ''), sx + 2 * s, sy + 15.6 * s);
+        ctx.fillText(quotaTxt + (blinkCursor ? '_' : ''), sx + 2 * s, sy + 15.6 * s, sw - 4 * s);
       }
 
       ctx.restore();
@@ -2972,6 +3652,8 @@ export class PixelTownEngine {
   _renderSceneCrispHUD(ctx, isNight) {
     const s = this.scale;
     const dpr = this.dpr;
+    const c = this._getCanvasI18n();
+    const isEn = this.locale === 'en';
     const wx = (x) => this.offsetX + x * s;
     const wy = (y) => this.offsetY + y * s;
 
@@ -2986,21 +3668,24 @@ export class PixelTownEngine {
       ctx.fillStyle = '#67e8f9';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText('API 吞吐儀表板', wx(115), wy(11));
+      ctx.fillText(c.factoryThroughput, wx(115), wy(11), 106 * s);
       ctx.font = `700 ${Math.max(7.5, Math.round(4.4 * s))}px Consolas, "Microsoft JhengHei", monospace`;
       ctx.fillStyle = '#4ade80';
-      ctx.fillText(`待接 ${openApi} · 完成 ${doneApi}`, wx(115), wy(19.5));
+      const queueText = c.factoryOpenDoneTpl
+        ? fmtTpl(c.factoryOpenDoneTpl, { open: openApi, done: doneApi })
+        : `${c.factoryQueueOpen} ${openApi} · ${c.factoryQueueDone} ${doneApi}`;
+      ctx.fillText(queueText, wx(115), wy(19.5), 106 * s);
 
       // Center Marquee Sign
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `900 ${Math.max(9, Math.round(5.4 * s))}px "Microsoft JhengHei", Consolas, monospace`;
       ctx.fillStyle = '#a5f3fc';
-      ctx.fillText('🏭 自動工坊 · 超算中心', wx(294), wy(22));
+      ctx.fillText(c.factoryTitle, wx(294), wy(22), 108 * s);
       const autoOn = Boolean(this.state.player?.autoPilotEnabled);
       ctx.font = `700 ${Math.max(7.5, Math.round(4.2 * s))}px Consolas, "Microsoft JhengHei", monospace`;
       ctx.fillStyle = autoOn ? '#4ade80' : '#fde047';
-      ctx.fillText(autoOn ? '● AUTO-PILOT 運行中' : '● BYOK 零信任就緒', wx(294), wy(34));
+      ctx.fillText(autoOn ? c.factoryAutoOn : c.factoryByokReady, wx(294), wy(34), 108 * s);
       ctx.restore();
 
       // API Energy Core badge below pedestal
@@ -3011,7 +3696,7 @@ export class PixelTownEngine {
         ctx,
         wx(240),
         wy(214),
-        `⚡ 核心額度 ${totalUsedK}K/${totalCapK}K`,
+        `${c.factoryCoreLoad} ${totalUsedK}K/${totalCapK}K`,
         'rgba(8, 20, 38, 0.92)',
         '#22d3ee',
         8.6 * dpr,
@@ -3026,30 +3711,45 @@ export class PixelTownEngine {
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `900 ${Math.max(9, Math.round(5.2 * s))}px "Microsoft JhengHei", Consolas, monospace`;
+      ctx.font = `900 ${Math.max(8.5, Math.round(4.9 * s))}px "Microsoft JhengHei", Consolas, monospace`;
       ctx.fillStyle = '#fde68a';
-      ctx.fillText('⚔️ 懸賞工會大廳', wx(297), wy(22));
-      ctx.font = `700 ${Math.max(7.5, Math.round(4.2 * s))}px Consolas, "Microsoft JhengHei", monospace`;
+      ctx.fillText(c.guildTitle, wx(297), wy(22), 90 * s);
+      ctx.font = `700 ${Math.max(7.5, Math.round(4.1 * s))}px Consolas, "Microsoft JhengHei", monospace`;
       ctx.fillStyle = '#4ade80';
-      ctx.fillText(`懸賞池 $${bountyPool} · ${openGuild.length} 單開放`, wx(297), wy(33));
+      const poolText = c.guildPoolSummaryTpl
+        ? fmtTpl(c.guildPoolSummaryTpl, { pool: bountyPool, open: openGuild.length })
+        : `${c.guildPool} $${bountyPool} · ${openGuild.length} ${c.guildOpenUnit}`;
+      ctx.fillText(poolText, wx(297), wy(33), 90 * s);
       ctx.restore();
 
-      // Hovered Bounty Scroll Tooltip
+      // Bounty Board Caption or Hovered Bounty Scroll Tooltip
       if (this.hoveredBountyTaskId) {
         const hit = this._frameBountyRects.find((r) => r.task.id === this.hoveredBountyTaskId);
         if (hit) {
           const rewardTag = hit.task.cashBountyUsd > 0 ? `$${hit.task.cashBountyUsd} · ` : '';
+          const locTask = this._localizeTask(hit.task);
           this._drawPill(
             ctx,
             wx(188),
             wy(62),
-            `📜 ${rewardTag}${truncateText(hit.task.title, 18)} (點擊接單)`,
+            `📜 ${rewardTag}${truncateText(locTask.title, isEn ? 24 : 18)} (${c.guildClickClaim})`,
             '#1c120b',
             '#fde047',
-            8.8 * dpr,
+            8.6 * dpr,
             '#fef08a'
           );
         }
+      } else {
+        this._drawPill(
+          ctx,
+          wx(188),
+          wy(58),
+          c.guildBoardTitle,
+          'rgba(28, 18, 11, 0.90)',
+          '#f59e0b',
+          7.6 * dpr,
+          '#fde68a'
+        );
       }
     } else if (this.scene === 'launchpad') {
       // Scrolling Pixel Neon Billboard Text
@@ -3064,9 +3764,10 @@ export class PixelTownEngine {
       ctx.textBaseline = 'top';
       ctx.fillStyle = ticker.isSponsored ? '#f472b6' : '#38bdf8';
       ctx.fillText(
-        ticker.isSponsored ? '★ PIXEL NEON SPONSORED ★' : '🚀 孵化廣場指揮中心 · LIVE',
+        ticker.isSponsored ? c.launchpadSponsored : c.launchpadTitle,
         wx(240),
-        wy(12)
+        wy(12),
+        180 * s
       );
 
       ctx.font = `700 ${Math.max(8.5, Math.round(5.0 * s))}px "Microsoft JhengHei", Consolas, monospace`;
@@ -3080,15 +3781,28 @@ export class PixelTownEngine {
       ctx.fillText(ticker.text, scrollX + tw, wy(31));
       ctx.restore();
 
+      // Kanban Board Label
+      this._drawPill(
+        ctx,
+        wx(62),
+        wy(68),
+        c.launchpadKanban,
+        'rgba(15, 10, 36, 0.92)',
+        '#a855f7',
+        7.5 * dpr,
+        '#e9d5ff'
+      );
+
       // Featured Hologram Project Nameplate & LED Progress Bar
       const featured = this._getFeaturedProject();
+      const locFeatured = this._localizeProject(featured);
       const pct = clamp(Number(featured.progressPct ?? 0), 0, 100);
       const isLaunched = featured.status === 'launched' || pct >= 100;
       this._drawPill(
         ctx,
         wx(240),
         wy(234),
-        `${isLaunched ? '🎆 已上線' : '🏗️ 孵化中'} · ${truncateText(featured.shortName || featured.name, 14)} ${pct}%`,
+        `${isLaunched ? c.launchpadLaunched : c.launchpadProgress} · ${truncateText(locFeatured.shortName || locFeatured.name, isEn ? 18 : 14)} ${pct}%`,
         'rgba(15, 10, 36, 0.94)',
         isLaunched ? '#4ade80' : '#a855f7',
         9.0 * dpr,
@@ -3098,10 +3812,12 @@ export class PixelTownEngine {
       // Community Vote Pillar Labels
       for (const vp of this._frameVotePillars) {
         const p = vp.project;
+        const lp = this._localizeProject(p);
+        const pShort = truncateText(lp.shortName || lp.name, isEn ? 13 : 9);
         const label =
           p.status === 'voting'
-            ? `🗳️ ${truncateText(p.shortName || p.name, 9)} ${p.votes}/${p.votesRequired}`
-            : `✅ ${truncateText(p.shortName || p.name, 9)} ${p.progressPct ?? 0}%`;
+            ? `🗳️ ${pShort} ${p.votes}/${p.votesRequired}`
+            : `✅ ${pShort} ${p.progressPct ?? 0}%`;
         this._drawPill(
           ctx,
           wx(vp.x + vp.w / 2),
@@ -3113,13 +3829,39 @@ export class PixelTownEngine {
           '#f8fafc'
         );
       }
+      if (this._frameVotePillars.some((vp) => vp.project.status === 'voting')) {
+        this._drawPill(
+          ctx,
+          wx(240),
+          wy(78),
+          c.launchpadVoteTitle,
+          'rgba(24, 12, 42, 0.88)',
+          '#f472b6',
+          7.4 * dpr,
+          '#fbcfe8'
+        );
+      }
     } else if (this.scene === 'lounge') {
+      // Lounge Room Banner on Bookshelf Wall
+      this._drawPill(
+        ctx,
+        wx(405),
+        wy(56),
+        c.loungeTitle,
+        'rgba(24, 16, 36, 0.92)',
+        '#a855f7',
+        7.8 * dpr,
+        '#e9d5ff'
+      );
       // Achievement Trophy Case Caption
+      const trophyText = c.loungeTrophyCaseTpl
+        ? fmtTpl(c.loungeTrophyCaseTpl, { unlocked: this.unlockedAchievements })
+        : `${c.loungeTrophyCase} ${this.unlockedAchievements}/6`;
       this._drawPill(
         ctx,
         wx(236),
         wy(50),
-        `🏆 創世成就櫃 ${this.unlockedAchievements}/6`,
+        trophyText,
         'rgba(24, 16, 36, 0.92)',
         '#fde047',
         8.2 * dpr,
@@ -3130,21 +3872,46 @@ export class PixelTownEngine {
         ctx,
         wx(54),
         wy(72),
-        hasGoldCoffee ? '✨ 黃金手沖吧' : '☕ 咖啡吧台',
+        hasGoldCoffee ? c.loungeGoldCoffeeBar : c.loungeCoffeeBar,
         'rgba(24, 16, 36, 0.88)',
         hasGoldCoffee ? '#fde047' : '#f472b6',
         7.8 * dpr,
         hasGoldCoffee ? '#fef08a' : '#fbcfe8'
       );
     } else if (this.scene === 'vault') {
+      // Vault Wing Signs on Marble Wall
+      this._drawPill(
+        ctx,
+        wx(98),
+        wy(38),
+        c.vaultTitle,
+        'rgba(14, 10, 20, 0.92)',
+        '#f59e0b',
+        8.0 * dpr,
+        '#fde68a'
+      );
+      this._drawPill(
+        ctx,
+        wx(382),
+        wy(38),
+        c.vaultPodiumTitle,
+        'rgba(14, 10, 20, 0.92)',
+        '#fde047',
+        8.0 * dpr,
+        '#fef08a'
+      );
+
       // Total Revenue LED Display above/below Gold Mountain
       const rev = this.state.founderRevenue || {};
       const totalUsd = Number(rev.totalUsd ?? 0);
+      const totalRevText = c.vaultTotalRevTpl
+        ? fmtTpl(c.vaultTotalRevTpl, { amount: formatUsd(totalUsd) })
+        : `${c.vaultTotalRevenue} ${formatUsd(totalUsd)}`;
       this._drawPill(
         ctx,
         wx(240),
         wy(94),
-        `💰 創作者金庫總營收 ${formatUsd(totalUsd)}`,
+        totalRevText,
         'rgba(14, 10, 20, 0.95)',
         '#fde047',
         9.4 * dpr,
@@ -3153,10 +3920,10 @@ export class PixelTownEngine {
 
       // 4 Dynamic Revenue Pillar Labels & Live USD Values
       const streams = [
-        { label: '懸賞10%', val: Number(rev.bountyFeesUsd ?? 0), color: '#fde047' },
-        { label: '孵化10%', val: Number(rev.incubationCarryUsd ?? 0), color: '#e9d5ff' },
-        { label: '霓虹廣告', val: Number(rev.billboardAdsUsd ?? 0), color: '#fbcfe8' },
-        { label: 'Pro皮膚', val: Number(rev.proSkinsUsd ?? 0), color: '#a5f3fc' },
+        { label: c.vaultStreamBounty, val: Number(rev.bountyFeesUsd ?? 0), color: '#fde047' },
+        { label: c.vaultStreamCarry, val: Number(rev.incubationCarryUsd ?? 0), color: '#e9d5ff' },
+        { label: c.vaultStreamAds, val: Number(rev.billboardAdsUsd ?? 0), color: '#fbcfe8' },
+        { label: c.vaultStreamPro, val: Number(rev.proSkinsUsd ?? 0), color: '#a5f3fc' },
       ];
       ctx.save();
       ctx.textAlign = 'center';
@@ -3166,9 +3933,9 @@ export class PixelTownEngine {
         ctx.font = `700 ${Math.max(8, Math.round(4.8 * s))}px Consolas, monospace`;
         ctx.fillStyle = st.color;
         ctx.fillText(formatUsd(st.val), wx(cx), wy(130));
-        ctx.font = `700 ${Math.max(7.5, Math.round(4.4 * s))}px "Microsoft JhengHei", Consolas, monospace`;
+        ctx.font = `700 ${Math.max(7.2, Math.round(4.1 * s))}px "Microsoft JhengHei", Consolas, monospace`;
         ctx.fillStyle = '#f8fafc';
-        ctx.fillText(st.label, wx(cx), wy(258));
+        ctx.fillText(st.label, wx(cx), wy(258), 38 * s);
       });
       ctx.restore();
 
@@ -3183,7 +3950,8 @@ export class PixelTownEngine {
       ];
       for (const pm of podMeta) {
         if (!pm.entry) continue;
-        const nm = truncateText(formatWorkerNameplate(pm.entry.displayName), 6);
+        const locEntry = this._localizeLeaderboardEntry(pm.entry);
+        const nm = formatWorkerNameplate(locEntry.displayName, this.locale, c.workerFallback, isEn ? 8 : 6);
         this._drawPill(
           ctx,
           wx(pm.x),
@@ -3203,19 +3971,32 @@ export class PixelTownEngine {
         ctx.restore();
       }
     } else if (this.scene === 'town') {
-      // Crisp Building Plaques on Town Overview
+      // Crisp Building Plaques & Subtitles on Town Overview
       for (const b of Object.values(TOWN_BUILDINGS)) {
         const isHover = this.hoveredBuildingId === b.id;
+        const bText = c.buildings[b.id] || { label: b.label, subtitle: b.subtitle };
         this._drawPill(
           ctx,
           wx(b.x + b.w / 2),
           wy(b.y + 11),
-          b.label,
+          bText.label,
           isHover ? '#1e1b4b' : 'rgba(9, 13, 26, 0.92)',
           isHover ? '#fde047' : b.accent,
           8.4 * dpr,
           isHover ? '#fef08a' : '#f8fafc'
         );
+        if (bText.subtitle) {
+          this._drawPill(
+            ctx,
+            wx(b.x + b.w / 2),
+            wy(b.y + b.h - 6),
+            bText.subtitle,
+            'rgba(9, 13, 26, 0.84)',
+            isHover ? '#fde047' : 'rgba(148, 163, 184, 0.45)',
+            6.5 * dpr,
+            isHover ? '#fef08a' : '#cbd5e1'
+          );
+        }
       }
 
       // Crisp Billboard Ticker on Central Plaza
@@ -3224,11 +4005,11 @@ export class PixelTownEngine {
       ctx.beginPath();
       ctx.rect(wx(188), wy(106), 104 * s, 26 * s);
       ctx.clip();
-      ctx.font = `700 ${Math.max(7, Math.round(4.0 * s))}px Consolas, monospace`;
+      ctx.font = `700 ${Math.max(7, Math.round(4.0 * s))}px Consolas, "Microsoft JhengHei", monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillStyle = ticker.isSponsored ? '#f472b6' : '#38bdf8';
-      ctx.fillText(ticker.isSponsored ? '★ SPONSORED ★' : '⚡ TOWN PLAZA ⚡', wx(240), wy(108));
+      ctx.fillText(ticker.isSponsored ? c.townSponsored : c.townPlaza, wx(240), wy(108), 100 * s);
 
       ctx.font = `700 ${Math.max(7.5, Math.round(4.4 * s))}px "Microsoft JhengHei", Consolas, monospace`;
       ctx.textAlign = 'left';
@@ -3249,18 +4030,20 @@ export class PixelTownEngine {
   _renderCrispWorkerNameplates(ctx, isNight) {
     const s = this.scale;
     const dpr = this.dpr;
+    const c = this._getCanvasI18n();
     const sorted = [...this._frameWorkers].sort((a, b) => a.y - b.y);
 
     for (const fw of sorted) {
       const a = fw.agent;
       const meta = WORKER_ROLE_META[a.roleClass] || WORKER_ROLE_META.flash_worker;
-      const ms = getWorkerModelStyle(a);
+      const locW = this._localizeWorker(a);
+      const ms = getWorkerModelStyle(a, locW.providerLabel);
       const isFocus = a.id === this.selectedWorkerId || a.id === this.hoveredWorkerId;
       const sx = this.offsetX + fw.x * s;
       const sy = this.offsetY + fw.y * s;
 
       // 1. Crisp Name Pill below feet
-      const shortName = formatWorkerNameplate(a.name);
+      const shortName = formatWorkerNameplate(locW.name, this.locale, c.workerFallback);
       this._drawPill(
         ctx,
         sx,
@@ -3297,7 +4080,7 @@ export class PixelTownEngine {
     const s = this.scale;
     const dpr = this.dpr;
 
-    // Floating reward texts (+120G, +35 貢獻點, +$36.00)
+    // Floating reward texts (+120G, +35 pts, +$36.00)
     ctx.save();
     ctx.font = `900 ${Math.round(11 * dpr)}px "Microsoft JhengHei", Consolas, monospace`;
     ctx.textAlign = 'center';
@@ -3340,16 +4123,18 @@ export class PixelTownEngine {
 
     const s = this.scale;
     const dpr = this.dpr;
+    const c = this._getCanvasI18n();
     const meta = WORKER_ROLE_META[a.roleClass] || WORKER_ROLE_META.flash_worker;
+    const locW = this._localizeWorker(a);
     const staminaPct = clamp(Math.round((a.stamina / Math.max(1, a.maxStamina)) * 100), 0, 100);
     const statusText =
       a.cliTimer > 0
-        ? '💻 CLI 即時同步'
+        ? c.statusCli
         : a.busy
-          ? '⚡ 執行任務中'
+          ? c.statusWorking
           : a.celebrateTimer > 0
-            ? '🎉 驗收歡呼'
-            : '☕ 待命中';
+            ? c.statusCelebrating
+            : c.statusIdle;
 
     const cardW = Math.min(this.viewRect.w - 20, Math.round(256 * s));
     const cardH = Math.round(32 * s);
@@ -3368,7 +4153,14 @@ export class PixelTownEngine {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(`${meta.badge} ${formatWorkerNameplate(a.name)} · ${meta.speciesName || meta.name}`, cx + 8 * dpr, cy + 4 * dpr);
+    const workerLabel = formatWorkerNameplate(locW.name, this.locale, c.workerFallback);
+    const cleanRole = String(locW.roleName || '').replace(/^[^\p{L}\p{N}]+\s*/u, '');
+    ctx.fillText(
+      `${meta.badge} ${workerLabel} · ${cleanRole || locW.roleName}`,
+      cx + 8 * dpr,
+      cy + 4 * dpr,
+      cardW - 52 * dpr
+    );
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#fde047';
@@ -3387,7 +4179,8 @@ export class PixelTownEngine {
     const barY = cy + 18 * dpr;
     ctx.textAlign = 'right';
     ctx.fillStyle = '#cbd5e1';
-    ctx.fillText(`體力 ${staminaPct}%`, barX - 5 * dpr, cy + 17 * dpr);
+    const staText = c.staminaTpl ? fmtTpl(c.staminaTpl, { pct: staminaPct }) : `${c.staminaLabel} ${staminaPct}%`;
+    ctx.fillText(staText, barX - 5 * dpr, cy + 17 * dpr);
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(barX, barY, barW, barH);
     ctx.fillStyle = staminaPct >= 50 ? '#22c55e' : staminaPct >= 25 ? '#f59e0b' : '#ef4444';

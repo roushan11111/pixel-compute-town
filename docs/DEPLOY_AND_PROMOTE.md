@@ -38,17 +38,33 @@ git push -u origin main
 
 ---
 
-### Step 2：申請 GitHub OAuth App（約 2 分鐘）
+### Step 2：申請 GitHub / Google OAuth 與收款環境變數（約 3 分鐘）
 
-> 💡 若你只想先用「免登入 Demo 創始開發者模式」快速測試，可先跳過此步，待上線網址確定後再補填環境變數即可！
+> 💡 若你只想先用「免登入 Demo 創始開發者模式」或「內建信箱＋密碼多用戶註冊」快速上線，OAuth 與金流憑證皆可留空，系統會自動啟用內建沙盒模式，待上線後隨時補填即可！
 
+#### A. GitHub OAuth App
 1. 前往 [GitHub Developer Settings → OAuth Apps](https://github.com/settings/developers)，點擊 **New OAuth App**。
 2. 填寫表單：
    - **Application name**：`PixelCompute Town`
    - **Homepage URL**：`https://<你的公開網域>`（例如 `https://pixel-compute-town.onrender.com` 或 `https://town.pixelcompute.dev`）
    - **Application description**：`Turn idle API keys & CLI quotas into pixel workers that ship open-source projects together.`
    - **Authorization callback URL**：`https://<你的公開網域>/api/auth/github/callback`
-3. 點擊 **Register application**，記下 **Client ID**，並點擊 **Generate a new client secret** 複製 **Client Secret**。
+3. 點擊 **Register application**，記下 `GITHUB_CLIENT_ID` 與 `GITHUB_CLIENT_SECRET`。
+
+#### B. Google OAuth 2.0（可選，提升歐美與一般開發者註冊轉化率）
+1. 前往 [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials)，建立 **OAuth 2.0 Client ID（Web application）**。
+2. **Authorized redirect URIs** 填入：`https://<你的公開網域>/api/auth/google/callback`。
+3. 複製 `GOOGLE_CLIENT_ID` 與 `GOOGLE_CLIENT_SECRET` 到環境變數。
+
+#### C. 三合一收款設定（穩定幣 ＋ Polar/Stripe ＋ 兌換碼）
+1. **💎 穩定幣收款（推薦最先填，0 手續費且全球免審核！）**：
+   - `TREASURY_EVM_ADDRESS`：你的 EVM 錢包地址（`0x...`，同時收 **Base / Polygon / Arbitrum** 的 USDC 與 USDT）。
+   - `TREASURY_SOL_ADDRESS`：你的 Solana 錢包地址（收 SPL USDC / USDT）。
+2. **💳 法幣信用卡（Polar.sh / Stripe，可選）**：
+   - `POLAR_CHECKOUT_URL` 與 `POLAR_WEBHOOK_SECRET`（Webhook 端點：`https://<你的公開網域>/api/webhooks/polar`）
+   - `STRIPE_SECRET_KEY` 與 `STRIPE_WEBHOOK_SECRET`（Webhook 端點：`https://<你的公開網域>/api/webhooks/stripe`）
+3. **🎟️ 卡密兌換碼（愛發電 / Ko-fi / Gumroad，零配置即用！）**：
+   - 登入創始鎮長帳號進入 `/app` →「創作者收益」→「🛡️ 鎮長管理面板」，一鍵批次產生 Pro / 創世大禮包兌換碼上架販售。
 
 ---
 
@@ -60,9 +76,10 @@ git push -u origin main
 2. 選擇你的 `pixel-compute-town` GitHub Repo，Render 會自動偵測 `render.yaml`。
 3. 填入以下環境變數：
    - `APP_BASE_URL`：`https://<Render 分配的網址>`（部署後確認精確 URL 再微調）
-   - `GITHUB_CLIENT_ID`：剛剛取得的 Client ID（可選）
-   - `GITHUB_CLIENT_SECRET`：剛剛取得的 Client Secret（可選）
-   - `POLAR_WEBHOOK_SECRET`：初期 Alpha 可留空
+   - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`（可選）
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`（可選）
+   - `TREASURY_EVM_ADDRESS` / `TREASURY_SOL_ADDRESS`（填上即可立即收取 USDC/USDT！）
+   - `POLAR_CHECKOUT_URL` / `POLAR_WEBHOOK_SECRET` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`（可選）
 4. 點擊 **Apply**，等待約 1–2 分鐘建置完成。
 5. 開啟 `https://<你的網址>/api/health`，看到 `{"ok":true,...}` 即代表上線成功！
 
@@ -141,6 +158,32 @@ docker run -d \
 | **0:16 – 0:23** | 切到「孵化廣場」點擊投票把 `PixelPomo` 從 8/10 投到 10/10 破土動工，再點已達 100% 項目「一鍵發布上線」→ **全屏綻放像素煙火**＋30/60/10 分紅入帳！ | **社群投票立項 → 達標上線 → 30/60/10 透明分紅** <br> *Vote to build → Ship with fireworks → Share 60% revenue* | 煙火連發音效（高潮點！） |
 | **0:23 – 0:27** | 點擊「下載算力打工證 PNG」彈出復古像素證書卡片，順手切到「創作者收益」看板閃過 4 條現金流 | **不按 Token 灌水，只按驗收成果記功（Proof of Accepted Work）** <br> *Proof of Accepted Work. Zero AI slop.* | 驗收通過提示音 |
 | **0:27 – 0:30** | 回到小鎮全景＋霓虹廣告牌特寫，疊加 Repo 網址與開箱指令 `npm run dev` | **開源零依賴 · 立即成為像素算力鎮創世居民！** <br> *Open-source · Zero deps · `pixelcompute.town`* | 收尾和弦 |
+
+---
+
+## 🤖 第 2.5 部分：多平臺「複製即裝」與 AI 對話安裝推廣文案
+
+> **v1.0 核心裂變武器**：開發者只需複製官網 `/` 的一行終端指令或 AI 對話 Prompt，30 秒內自動安裝零依賴本機小人並自動彈出 `/onboard` 像素審核頁完成綁定！
+
+### 1. 終端機單行一鍵安裝指令（適合貼在推文、README 與技術社群）
+
+- **Windows (PowerShell)**：
+  ```powershell
+  irm [YOUR_LIVE_URL]/install.ps1 | iex
+  ```
+- **macOS / Linux (Bash)**：
+  ```bash
+  curl -fsSL [YOUR_LIVE_URL]/install.sh | bash
+  ```
+
+### 2. 多平臺 AI 對話安裝話術（引導讀者直接丟給自己的 AI Agent 安裝！）
+
+| 平臺 | 可直接貼在社群／評論區讓讀者複製給 AI 的安全安裝 Prompt |
+| :--- | :--- |
+| **🤖 Antigravity** | `請幫我安全檢視 [YOUR_LIVE_URL]/install.sh（Windows 為 /install.ps1），確認零依賴且不存取任何本地 AI Token 後，幫我安裝並執行 pixel-worker onboard，開啟瀏覽器審核頁讓我親自核准綁定像素算力小人！` |
+| **✨ Gemini（CLI / 網頁版智慧降級）** | `我想把閒置算力接入 PixelCompute Town（[YOUR_LIVE_URL]）。若你能執行終端指令，請先檢查並執行對應系統的 /install.ps1 或 /install.sh 完成 onboard；若你是網頁版無法執行指令，請一步步提供對應我作業系統的一鍵安裝指令與安全確認說明。` |
+| **🧠 Claude Code / Cursor Agent** | `Inspect [YOUR_LIVE_URL]/install.sh (or /install.ps1 on Windows) first to verify it is zero-dependency and never touches local AI credentials, then install pixel-worker and run "onboard --server [YOUR_LIVE_URL]" so I can approve the device in my browser.` |
+| **🐋 DeepSeek / 通用 AI** | `請幫我把電腦接入 PixelCompute Town（[YOUR_LIVE_URL]）：1) 若具備本機終端權限，先檢視並執行安裝腳本（install.ps1 / install.sh）啟動 onboard 綁定流程；2) 若僅支援對話，請給我 Windows PowerShell 與 macOS/Linux 的單行安裝指令並解釋零信任安全原則。` |
 
 ---
 

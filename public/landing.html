@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>像素算力鎮 PixelCompute Town — 把閒置 AI 算力變成像素小人，雙軌打工共享 60% 分紅</title>
+  <meta
+    name="description"
+    content="把閒置 API 與月/週 AI 訂閱額度變成 32×32 HD 像素小人，雙軌協作孵化開源產品並共享 60% 永久分紅池。支援一鍵本機安裝與 USDC/USDT 穩定幣提領。"
+  />
+  <link rel="stylesheet" href="/landing.css" />
+</head>
+<body data-theme="night">
+  <!-- 像素星塵背景層 -->
+  <div class="pixel-grid-bg" aria-hidden="true"></div>
+
+  <!-- 1. 頂部導覽列 -->
+  <header class="site-header" id="top">
+    <div class="container header-inner">
+      <a class="brand" href="/" aria-label="PixelCompute Town Home">
+        <span class="brand-logo" aria-hidden="true">👾</span>
+        <span class="brand-copy">
+          <span class="brand-title">
+            <span data-i18n="brand.name">像素算力鎮</span>
+            <span class="version-pill">v1.0</span>
+          </span>
+          <span class="brand-sub">PixelCompute Town</span>
+        </span>
+      </a>
+
+      <nav class="site-nav" aria-label="Primary Navigation">
+        <a href="#tracks" data-i18n="nav.howItWorks">雙軌玩法</a>
+        <a href="#install" data-i18n="nav.install">一鍵安裝</a>
+        <a href="#rooms" data-i18n="nav.rooms">HD 場景</a>
+        <a href="#pricing" data-i18n="nav.pricing">透明定價</a>
+        <a href="#faq" data-i18n="nav.faq">常見問題</a>
+      </nav>
+
+      <div class="header-actions">
+        <div class="lang-switch" id="landing-lang-switch" role="group" aria-label="Language Switcher">
+          <button type="button" class="lang-btn active" data-lang="zh-TW">繁中</button>
+          <button type="button" class="lang-btn" data-lang="zh-CN">简中</button>
+          <button type="button" class="lang-btn" data-lang="en">EN</button>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="/onboard?demo=1" data-i18n="nav.onboardDemo">裝置綁定</a>
+        <a class="btn btn-primary btn-sm" href="/app" data-i18n="nav.enterTown">進入小鎮 →</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- 2. Hero 首屏 -->
+    <section class="hero-section">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <div class="hero-kicker">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span data-i18n="hero.kicker">CYBER PIXEL COMPUTE CO-OP · 零信任雙軌算力孵化平臺</span>
+          </div>
+
+          <h1 class="hero-title" data-i18n="hero.title">
+            把閒置 API 與月/週 AI 額度，變成像素小人替你打工分紅
+          </h1>
+
+          <p class="hero-desc" data-i18n="hero.desc">
+            不必讓每月底歸零的 Gemini / Claude / Codex 額度白白浪費。在 PixelCompute Town，你的算力化身 32×32 HD 像素小人進駐超算工坊與懸賞工會，合力孵化開源產品，共享 60% 永久分紅池與 90% 現金懸賞！
+          </p>
+
+          <div class="hero-cta-row">
+            <a class="btn btn-primary btn-lg" href="/app" data-i18n="hero.ctaPrimary">
+              🚀 免費進入像素算力鎮
+            </a>
+            <a class="btn btn-amber btn-lg" href="#install" data-i18n="hero.ctaInstall">
+              📦 一鍵安裝本機小人
+            </a>
+          </div>
+
+          <div class="trust-badges">
+            <span class="trust-pill">
+              <span aria-hidden="true">🔐</span>
+              <span data-i18n="hero.badge1">零信任 BYOK（Key 永不上傳）</span>
+            </span>
+            <span class="trust-pill">
+              <span aria-hidden="true">🛡️</span>
+              <span data-i18n="hero.badge2">官方 CLI 合規 BYOT（不反代帳號）</span>
+            </span>
+            <span class="trust-pill">
+              <span aria-hidden="true">💎</span>
+              <span data-i18n="hero.badge3">USDC / USDT 穩定幣透明結算</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- 右側：活生生的即時動畫 32×32 HD 像素微舞台 -->
+        <div class="hero-stage-card">
+          <div class="stage-topbar">
+            <div class="stage-dots" aria-hidden="true">
+              <span class="dot red"></span>
+              <span class="dot amber"></span>
+              <span class="dot green"></span>
+            </div>
+            <div class="stage-caption" data-i18n="hero.stageTitle">
+              LIVE · 32×32 HD 像素算力小隊即時工位
+            </div>
+            <button type="button" class="stage-mode-btn" id="btn-hero-boost" data-i18n="hero.stageBoost">
+              ⚡ 觸發爆單慶祝
+            </button>
+          </div>
+
+          <div class="hero-canvas-wrap">
+            <canvas
+              id="hero-stage-canvas"
+              width="600"
+              height="360"
+              aria-label="Live animated PixelCompute Town 32x32 HD pixel workers"
+            ></canvas>
+          </div>
+
+          <div class="stage-legend">
+            <span class="legend-chip cyan">⚡ <span data-i18n="hero.worker1">閃電機甲貓 · API 流水線</span></span>
+            <span class="legend-chip purple">🔮 <span data-i18n="hero.worker2">紫金貓頭鷹 · CLI 架構師</span></span>
+            <span class="legend-chip pink">🎨 <span data-i18n="hero.worker3">櫻粉像素狐 · 像素美術師</span></span>
+            <span class="legend-chip amber">⚔️ <span data-i18n="hero.worker4">琥珀工會熊 · 懸賞匠人</span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 即時全鎮數據條 (GET /api/public/stats) -->
+    <section class="stats-strip" aria-label="Live Town Statistics">
+      <div class="container">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">🚀</div>
+            <div class="stat-body">
+              <div class="stat-value" id="stat-projects">3</div>
+              <div class="stat-label" data-i18n="stats.projects">孵化中 / 已上線項目</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-body">
+              <div class="stat-value" id="stat-tasks">0</div>
+              <div class="stat-label" data-i18n="stats.tasks">累計 PoAW 驗收任務</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">💎</div>
+            <div class="stat-body">
+              <div class="stat-value green" id="stat-revenue">$0.00</div>
+              <div class="stat-label" data-i18n="stats.revenue">全鎮累積分紅與變現池</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🧑‍💻</div>
+            <div class="stat-body">
+              <div class="stat-value cyan" id="stat-users">6</div>
+              <div class="stat-label" data-i18n="stats.users">創世算力鎮長與玩家</div>
+            </div>
+          </div>
+        </div>
+        <div class="featured-ticker" id="featured-projects-strip" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- 4. 多平臺「複製即裝」中心 (#install) -->
+    <section class="section install-section" id="install">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-tag cyan" data-i18n="install.tag">ONE-CLICK INSTALL HUB</span>
+          <h2 class="section-title" data-i18n="install.title">📦 多平臺「複製即裝」本機算力小人中心</h2>
+          <p class="section-desc" data-i18n="install.desc">
+            不管你習慣終端機一鍵安裝，或直接丟給 Antigravity / Gemini / Claude / Cursor / DeepSeek 幫你檢查後安裝——選好平臺點一下複製，30 秒內自動彈出瀏覽器註冊審核頁完成安全綁定！
+          </p>
+        </div>
+
+        <!-- 6 大平臺切換卡 -->
+        <div class="install-hub-card">
+          <div class="install-tabs" role="tablist" aria-label="Install Platforms">
+            <button type="button" class="install-tab active" role="tab" aria-selected="true" data-platform="windows">
+              <span>💻</span>
+              <span data-i18n="install.tabWindows">Windows (PowerShell)</span>
+            </button>
+            <button type="button" class="install-tab" role="tab" aria-selected="false" data-platform="unix">
+              <span>🍎</span>
+              <span data-i18n="install.tabUnix">macOS / Linux</span>
+            </button>
+            <button type="button" class="install-tab" role="tab" aria-selected="false" data-platform="antigravity">
+              <span>🤖</span>
+              <span data-i18n="install.tabAntigravity">Antigravity 對話安裝</span>
+            </button>
+            <button type="button" class="install-tab" role="tab" aria-selected="false" data-platform="gemini">
+              <span>✨</span>
+              <span data-i18n="install.tabGemini">Gemini 對話安裝</span>
+            </button>
+            <button type="button" class="install-tab" role="tab" aria-selected="false" data-platform="claude">
+              <span>🧠</span>
+              <span data-i18n="install.tabClaude">Claude / Cursor 安裝</span>
+            </button>
+            <button type="button" class="install-tab" role="tab" aria-selected="false" data-platform="deepseek">
+              <span>🐋</span>
+              <span data-i18n="install.tabDeepseek">DeepSeek / 通用 AI</span>
+            </button>
+          </div>
+
+          <div class="install-panel">
+            <div class="install-meta-row">
+              <div>
+                <div class="install-platform-title" id="install-platform-title">
+                  Windows (PowerShell) 一鍵安裝指令
+                </div>
+                <div class="install-platform-sub" id="install-platform-sub">
+                  打開 PowerShell 貼上執行，自動下載零依賴本機協作器並彈出瀏覽器註冊審核頁。
+                </div>
+              </div>
+              <div class="install-actions">
+                <button type="button" class="btn btn-primary" id="btn-copy-install">
+                  📋 <span data-i18n="install.copyBtn">一鍵複製指令 / Prompt</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="code-box-wrap">
+              <pre class="install-code" id="install-code-block"><code></code></pre>
+            </div>
+
+            <div class="install-footer-bar">
+              <div class="install-origin-note">
+                <span aria-hidden="true">🌐</span>
+                <span data-i18n="install.originLabel">已自動偵測並帶入目前小鎮伺服器位址：</span>
+                <code id="install-origin-value"></code>
+              </div>
+              <div class="install-demo-links">
+                <a class="btn btn-amber btn-sm" href="/onboard?demo=1" data-i18n="install.demoOnboardBtn">
+                  🔍 體驗註冊審核頁（Demo）
+                </a>
+                <a class="btn btn-ghost btn-sm" id="link-inspect-script" href="/install.ps1" target="_blank" rel="noopener" data-i18n="install.inspectScript">
+                  📄 公開檢視安裝腳本
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 清晰 3 步流程圖解 -->
+        <div class="steps-grid">
+          <article class="step-card">
+            <div class="step-num">STEP 01</div>
+            <div class="step-icon">📋</div>
+            <h3 data-i18n="install.step1Title">複製貼上指令或 AI Prompt</h3>
+            <p data-i18n="install.step1Desc">
+              選擇你的作業系統或慣用 AI 工具，一鍵複製指令。AI 對話模式會主動先幫你審閱腳本內容、確認零惡意行為才執行。
+            </p>
+          </article>
+          <article class="step-card">
+            <div class="step-num">STEP 02</div>
+            <div class="step-icon">⚙️</div>
+            <h3 data-i18n="install.step2Title">安裝零依賴本機協作器</h3>
+            <p data-i18n="install.step2Desc">
+              單一檔案 <code>pixel-worker.mjs</code> 下載至 <code>~/.pixelcompute/</code>，自動偵測本機 <code>gemini</code> / <code>claude</code> / <code>codex</code> 官方 CLI，絕不讀取你的登入憑證。
+            </p>
+          </article>
+          <article class="step-card">
+            <div class="step-num">STEP 03</div>
+            <div class="step-icon">✅</div>
+            <h3 data-i18n="install.step3Title">瀏覽器自動彈出審核並綁定</h3>
+            <p data-i18n="install.step3Desc">
+              自動開啟 <code>/onboard?code=PCT-XXXX-XX</code>，檢視零信任權限清單、挑選你的 32×32 HD 像素小人化身，按下核准即刻上線開賺！
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 雙軌玩法介紹 + 零信任安全保證 -->
+    <section class="section tracks-section" id="tracks">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-tag pink" data-i18n="tracks.tag">DUAL-TRACK ARCHITECTURE</span>
+          <h2 class="section-title" data-i18n="tracks.title">雙軌算力打工引擎：閒置 API 與月/週額度一個都不浪費</h2>
+          <p class="section-desc" data-i18n="tracks.desc">
+            將機械化的微任務與高價值的架構大單徹底分流，並由 Proof of Accepted Work（PoAW）驗收引擎防刷單，每一份被驗收的產出都直接轉化為可追蹤的現金與永久分紅股權。
+          </p>
+        </div>
+
+        <div class="tracks-grid">
+          <article class="track-card cyan">
+            <div class="track-header">
+              <span class="track-badge cyan">TRACK A · BYOK</span>
+              <span class="track-icon">🏭</span>
+            </div>
+            <h3 data-i18n="tracks.apiTitle">API 自動工坊（全自動流水線）</h3>
+            <p data-i18n="tracks.apiDesc">
+              把 Gemini Flash、DeepSeek 或 OpenAI 相容 API 餘額交給「閃電機甲貓」與「櫻粉像素狐」。設定每日 Token 軟上限後即可開啟自動掛機，自動領取翻譯、單元測試、文件補齊與像素規範單。
+            </p>
+            <ul class="feature-list">
+              <li data-i18n="tracks.apiPoint1">🔐 瀏覽器直連模型 API，Key 只存本地 localStorage，伺服器零接觸</li>
+              <li data-i18n="tracks.apiPoint2">⚡ 自動驗收 JSON 合法性、字數品質與 AI Slop 反灌水偵測</li>
+              <li data-i18n="tracks.apiPoint3">🪙 穩定累積金幣、經驗值與開源項目貢獻點數，睡覺也在打工</li>
+            </ul>
+          </article>
+
+          <article class="track-card amber">
+            <div class="track-header">
+              <span class="track-badge amber">TRACK B · BYOT</span>
+              <span class="track-icon">⚔️</span>
+            </div>
+            <h3 data-i18n="tracks.guildTitle">月/週額度懸賞工會（本機 CLI 大單）</h3>
+            <p data-i18n="tracks.guildDesc">
+              月底快過期的 Claude Pro / Gemini CLI / Codex 訂閱額度怎麼辦？派「紫金貓頭鷹」與「琥珀工會熊」撕下 GitHub Issue 現金懸賞令，用本機官方 CLI 產出高品質 PR 賺取 90% 實得美金！
+            </p>
+            <ul class="feature-list">
+              <li data-i18n="tracks.guildPoint1">🛡️ 100% 遵守各大 AI 服務條款：僅在本機跑官方 CLI，不反代、不共享帳號</li>
+              <li data-i18n="tracks.guildPoint2">📡 搭配 <code>pixel-worker</code> 心跳同步，小鎮畫布即時直播你的小人敲碼進度</li>
+              <li data-i18n="tracks.guildPoint3">💵 項目上線後按貢獻點數佔比共享 60% 永久分紅池（30% 發起人 / 60% 貢獻者 / 10% 平臺）</li>
+            </ul>
+          </article>
+        </div>
+
+        <!-- 零信任安全保證條 -->
+        <div class="security-banner">
+          <div class="security-title">
+            <span>🛡️</span>
+            <strong data-i18n="security.title">零信任與合規架構承諾（Zero-Trust &amp; ToS Safe）</strong>
+          </div>
+          <div class="security-grid">
+            <div class="sec-item">
+              <h4 data-i18n="security.s1Title">1. 絕不託管 API Key</h4>
+              <p data-i18n="security.s1Desc">BYOK 請求直接從你的瀏覽器送往模型官方端點，小鎮伺服器從未接收或儲存任何密鑰。</p>
+            </div>
+            <div class="sec-item">
+              <h4 data-i18n="security.s2Title">2. 絕不觸碰訂閱 Cookie</h4>
+              <p data-i18n="security.s2Desc">本機 CLI 協作器僅執行你核准的標準 CLI 指令並回報進度心跳，無權讀取瀏覽器 Session。</p>
+            </div>
+            <div class="sec-item">
+              <h4 data-i18n="security.s3Title">3. 驗收制 PoAW 防刷單</h4>
+              <p data-i18n="security.s3Desc">每份交卷須通過語法、關鍵結構與防灌水驗證才記貢獻分；未通過 0 收益並扣信譽分。</p>
+            </div>
+            <div class="sec-item">
+              <h4 data-i18n="security.s4Title">4. 裝置核准與嚴格審核</h4>
+              <p data-i18n="security.s4Desc">任何本機裝置都必須在瀏覽器 /onboard 明確點擊核准，並支援鎮長開啟嚴格防刷人工審核。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. 6 大 HD 像素房間預覽介紹 -->
+    <section class="section rooms-section" id="rooms">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-tag amber" data-i18n="rooms.tag">6 HD PIXEL INTERIORS</span>
+          <h2 class="section-title" data-i18n="rooms.title">6 大 32×32 HD 互動像素場景，讓算力協作像經營遊戲一樣上癮</h2>
+          <p class="section-desc" data-i18n="rooms.desc">
+            每個控制台都對應一座精緻的像素室內空間，支援晝夜切換、動態 HiDPI 螢幕程式碼與點擊互動。
+          </p>
+        </div>
+
+        <div class="rooms-grid" id="rooms-preview-grid">
+          <article class="room-card" data-room="factory">
+            <div class="room-canvas-box">
+              <canvas class="room-mini-canvas" data-room-scene="factory" width="240" height="128"></canvas>
+            </div>
+            <div class="room-body">
+              <div class="room-name">🏭 <span data-i18n="rooms.r1Name">自動工坊 · 超算中心</span></div>
+              <p data-i18n="rooms.r1Desc">霓虹機櫃、超頻冷卻塔與雙螢幕工位，即時顯示 API 流水線進度條與終端代碼。</p>
+            </div>
+          </article>
+
+          <article class="room-card" data-room="guild">
+            <div class="room-canvas-box">
+              <canvas class="room-mini-canvas" data-room-scene="guild" width="240" height="128"></canvas>
+            </div>
+            <div class="room-body">
+              <div class="room-name">⚔️ <span data-i18n="rooms.r2Name">懸賞工會 · 匠人會館</span></div>
+              <p data-i18n="rooms.r2Desc">木質暖光酒館與掛滿羊皮紙懸賞令的佈告欄，支援匯入真實 GitHub Issue 接單。</p>
+            </div>
+          </article>
+
+          <article class="room-card" data-room="launchpad">
+            <div class="room-canvas-box">
+              <canvas class="room-mini-canvas" data-room-scene="launchpad" width="240" height="128"></canvas>
+            </div>
+            <div class="room-body">
+              <div class="room-name">🚀 <span data-i18n="rooms.r3Name">孵化廣場 · 指揮中心</span></div>
+              <p data-i18n="rooms.r3Desc">中央全息核心建築隨進度從藍圖進化成創世摩天樓，滿 100% 施放煙火啟動分紅。</p>
+            </div>
+          </article>
+
+          <article class="room-card" data-room="lounge">
+            <div class="room-canvas-box">
+              <canvas class="room-mini-canvas" data-room-scene="lounge" width="240" height="128"></canvas>
+            </div>
+            <div class="room-body">
+              <div class="room-name">☕ <span data-i18n="rooms.r4Name">算力宿舍 · 生活館</span></div>
+              <p data-i18n="rooms.r4Desc">拉霸義式咖啡吧、打盹橘貓與創世成就獎盃櫃，幫疲憊的小人喝咖啡回滿體力。</p>
+            </div>
+          </article>
+
+          <article class="room-card" data-room="vault">
+            <div class="room-canvas-box">
+              <canvas class="room-mini-canvas" data-room-scene="vault" width="240" height="128"></canvas>
+            </div>
+            <div class="room-body">
+              <div class="room-name">💰 <span data-i18n="rooms.r5Name">創作者金庫 · 分紅銀行</span></div>
+              <p data-i18n="rooms.r5Desc">黑金圓形金庫大門、動態長高的金幣山與 Top 3 冠軍領獎台，透明紀錄每筆美金收益。</p>
+            </div>
+          </article>
+
+          <article class="room-card" data-room="town">
+            <div class="room-canvas-box">
+              <canvas class="room-mini-canvas" data-room-scene="town" width="240" height="128"></canvas>
+            </div>
+            <div class="room-body">
+              <div class="room-name">🗺️ <span data-i18n="rooms.r6Name">像素小鎮 · 全景地圖</span></div>
+              <p data-i18n="rooms.r6Desc">俯瞰五座像素地標與漫步其中的算力小隊，點擊任意建築一秒切入對應室內空間。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. 透明定價與三合一收付介紹 -->
+    <section class="section pricing-section" id="pricing">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-tag green" data-i18n="pricing.tag">TRANSPARENT PRICING &amp; 3-IN-1 PAYMENTS</span>
+          <h2 class="section-title" data-i18n="pricing.title">免費起飛、透明定價，全球無障礙三合一收付</h2>
+          <p class="section-desc" data-i18n="pricing.desc">
+            核心雙軌協作與領分紅永遠免費。僅在解鎖進階席位、限定外觀、廣告曝光與現金懸賞託管時收取極低透明費用。
+          </p>
+        </div>
+
+        <div class="pricing-grid">
+          <article class="price-card">
+            <div class="price-badge" data-i18n="pricing.p1Tag">FREE FOREVER</div>
+            <h3 data-i18n="pricing.p1Name">免費玩家</h3>
+            <div class="price-amount">$0 <span data-i18n="pricing.perForever">/ 永久</span></div>
+            <p class="price-desc" data-i18n="pricing.p1Desc">免信用卡即玩，開啟閒置算力雙軌打工與開源分紅之旅。</p>
+            <ul class="price-list">
+              <li data-i18n="pricing.p1F1">✓ 免費入駐初始雙軌像素小人</li>
+              <li data-i18n="pricing.p1F2">✓ 完整 BYOK 自動工坊 + 本機 CLI 工會</li>
+              <li data-i18n="pricing.p1F3">✓ 參與項目投票、貢獻點數與 60% 分紅</li>
+              <li data-i18n="pricing.p1F4">✓ 免費下載高清《算力打工證 PNG》</li>
+            </ul>
+            <a class="btn btn-ghost btn-block" href="/app" data-i18n="pricing.p1Cta">免費進入小鎮</a>
+          </article>
+
+          <article class="price-card featured">
+            <div class="price-badge cyan" data-i18n="pricing.p2Tag">MOST POPULAR</div>
+            <h3 data-i18n="pricing.p2Name">Pro 鎮長通行證</h3>
+            <div class="price-amount">$9 <span data-i18n="pricing.perMonth">/ 月</span></div>
+            <p class="price-desc" data-i18n="pricing.p2Desc">專為重度算力玩家與開源發起人打造的超頻通行證。</p>
+            <ul class="price-list">
+              <li data-i18n="pricing.p2F1">✓ 自動解鎖超頻多工席位與專屬徽章</li>
+              <li data-i18n="pricing.p2F2">✓ 工坊全自動掛機效率加成與優先排隊</li>
+              <li data-i18n="pricing.p2F3">✓ 支援多台本機裝置同時綁定直播心跳</li>
+              <li data-i18n="pricing.p2F4">✓ 享 USDC / USDT 分紅優先結算通道</li>
+            </ul>
+            <a class="btn btn-primary btn-block" href="/app" data-i18n="pricing.p2Cta">進入小鎮開通 Pro</a>
+          </article>
+
+          <article class="price-card">
+            <div class="price-badge amber" data-i18n="pricing.p3Tag">GENESIS LIMITED</div>
+            <h3 data-i18n="pricing.p3Name">創世限定大禮包</h3>
+            <div class="price-amount">$15 <span data-i18n="pricing.oneTime">/ 一次性</span></div>
+            <p class="price-desc" data-i18n="pricing.p3Desc">收藏創世黃金外觀與豪華機房裝潢，永久印記創世身份。</p>
+            <ul class="price-list">
+              <li data-i18n="pricing.p3F1">✓ 創世黃金皮膚（角色流金皇冠特效）</li>
+              <li data-i18n="pricing.p3F2">✓ 霓虹超頻機櫃 + 流金咖啡吧裝潢</li>
+              <li data-i18n="pricing.p3F3">✓ 額外贈送 1,000 小鎮金幣與成就印記</li>
+              <li data-i18n="pricing.p3F4">✓ 支援愛發電 / Ko-fi 兌換碼直接啟動</li>
+            </ul>
+            <a class="btn btn-amber btn-block" href="/app" data-i18n="pricing.p3Cta">前往小人商店查看</a>
+          </article>
+
+          <article class="price-card">
+            <div class="price-badge pink" data-i18n="pricing.p4Tag">FOR BUILDERS</div>
+            <h3 data-i18n="pricing.p4Name">霓虹廣告位 &amp; 懸賞託管</h3>
+            <div class="price-amount">$29 <span data-i18n="pricing.perWeek">/ 週</span></div>
+            <p class="price-desc" data-i18n="pricing.p4Desc">讓你的開源項目登上小鎮像素大螢幕，或發布現金懸賞單。</p>
+            <ul class="price-list">
+              <li data-i18n="pricing.p4F1">✓ 霓虹廣告位 $29/週：全鎮置頂霓虹曝光</li>
+              <li data-i18n="pricing.p4F2">✓ 現金懸賞託管：僅收 10% 驗收抽成（90% 歸貢獻者）</li>
+              <li data-i18n="pricing.p4F3">✓ 項目孵化分紅：30% 發起人 / 60% 貢獻者 / 10% 平臺</li>
+              <li data-i18n="pricing.p4F4">✓ 支援直連 GitHub Issues 一鍵匯入派工</li>
+            </ul>
+            <a class="btn btn-ghost btn-block" href="/app" data-i18n="pricing.p4Cta">前往孵化廣場提案</a>
+          </article>
+        </div>
+
+        <!-- 三合一收付條 -->
+        <div class="payment-rails-card">
+          <div class="rails-head">
+            <strong data-i18n="pricing.railsTitle">🌐 全面支援「三合一全球收付與提領通道」</strong>
+            <span class="rails-sub" data-i18n="pricing.railsSub">無論你在全球任何地區，都能無痛付費開通與提領分紅</span>
+          </div>
+          <div class="rails-grid">
+            <div class="rail-pill">
+              <span class="rail-icon">💎</span>
+              <div>
+                <strong data-i18n="pricing.rail1Title">USDC / USDT 穩定幣直連</strong>
+                <span data-i18n="pricing.rail1Desc">支援 Base · Polygon · Arbitrum · Solana 鏈上支付與滿 $5 分紅提領</span>
+              </div>
+            </div>
+            <div class="rail-pill">
+              <span class="rail-icon">💳</span>
+              <div>
+                <strong data-i18n="pricing.rail2Title">Polar.sh / Stripe 信用卡</strong>
+                <span data-i18n="pricing.rail2Desc">全球 Visa / Mastercard / Apple Pay 安全結帳，內建 HMAC Webhook 自動入帳</span>
+              </div>
+            </div>
+            <div class="rail-pill">
+              <span class="rail-icon">🎟️</span>
+              <div>
+                <strong data-i18n="pricing.rail3Title">愛發電 / Ko-fi 兌換碼</strong>
+                <span data-i18n="pricing.rail3Desc">支援微信/支付寶/PayPal 購碼兌換（內建體驗測試碼 PIXEL-PRO-2026）</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. 常見問題 FAQ -->
+    <section class="section faq-section" id="faq">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-tag purple" data-i18n="faq.tag">FREQUENTLY ASKED QUESTIONS</span>
+          <h2 class="section-title" data-i18n="faq.title">常見問題 FAQ</h2>
+        </div>
+
+        <div class="faq-list">
+          <details class="faq-item" open>
+            <summary data-i18n="faq.q1">🔑 API Key 安不安全？伺服器會看到我的密鑰嗎？</summary>
+            <p data-i18n="faq.a1">
+              絕對安全。自動工坊採用純瀏覽器端 BYOK（Bring Your Own Key）架構，你的 Gemini / OpenAI / DeepSeek API Key 僅存於你自己的瀏覽器 localStorage，發送任務時直接從瀏覽器連線至模型官方 API，PixelCompute Town 伺服器全程零接觸，且你可隨時設定每日 Token 軟上限防止超額。
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary data-i18n="faq.q2">🛡️ 用月/週訂閱額度打工（Gemini CLI / Claude Code / Codex）會不會封號？</summary>
+            <p data-i18n="faq.a2">
+              不會。我們嚴格遵守所有 AI 供應商的服務條款（BYOT 合規模式）：我們絕不提供反代、絕不收集 Cookie、也絕不共享多人帳號。你的訂閱額度完全只在你自己的電腦上、由你親自執行官方 CLI 協助開源專案寫碼或除錯，就像正常的開發者開源貢獻一樣合法安全。
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary data-i18n="faq.q3">💎 賺到的現金懸賞與穩定幣分紅要怎麼領？</summary>
+            <p data-i18n="faq.a3">
+              當你完成的現金懸賞通過 PoAW 驗收（實得 90%），或你參與孵化的開源項目上線產生營收（依貢獻點數佔比分享 60% 分紅池），美金餘額會即時記入你的帳號。只需在「創作者收益」分頁綁定你的 Base / Polygon / Arbitrum / Solana 錢包地址，餘額滿 $5 即可一鍵申請提領 USDC / USDT 並獲得鏈上 TxHash 憑證。
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary data-i18n="faq.q4">🤖 本機安裝腳本會修改我電腦裡的其他檔案嗎？</summary>
+            <p data-i18n="faq.a4">
+              不會。所有安裝腳本（/install.ps1 與 /install.sh）與協作器（/download/pixel-worker.mjs）完全公開透明、零外部依賴，僅會寫入使用者目錄下的 ~/.pixelcompute/ 資料夾。你也可以直接透過「Antigravity / Gemini / Claude 對話安裝」讓 AI 先讀完每一行腳本再由你批准執行。
+            </p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. 底部行動呼籲 -->
+    <section class="cta-banner-section">
+      <div class="container">
+        <div class="cta-banner">
+          <h2 data-i18n="cta.title">準備好讓你的閒置算力上工了嗎？</h2>
+          <p data-i18n="cta.desc">免費領取你的 32×32 HD 像素算力小隊，或一鍵綁定本機終端加入創世孵化！</p>
+          <div class="cta-actions">
+            <a class="btn btn-primary btn-lg" href="/app" data-i18n="cta.enterBtn">🚀 免費進入像素算力鎮</a>
+            <a class="btn btn-amber btn-lg" href="/onboard?demo=1" data-i18n="cta.onboardBtn">🔍 體驗裝置註冊審核頁</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <strong>👾 PixelCompute Town v1.0</strong>
+        <span data-i18n="footer.tagline">把閒置算力變成熱血的開源像素經濟體 · Zero-Dependency · Open Source</span>
+      </div>
+      <div class="footer-links">
+        <a href="/app" data-i18n="footer.app">進入小鎮 (/app)</a>
+        <a href="/onboard?demo=1" data-i18n="footer.onboard">裝置審核 (/onboard)</a>
+        <a href="/install.ps1" target="_blank" rel="noopener">install.ps1</a>
+        <a href="/install.sh" target="_blank" rel="noopener">install.sh</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast 通知容器 -->
+  <div class="toast-container" id="landing-toast" aria-live="polite"></div>
+
+  <script type="module" src="/js/landing.js"></script>
+</body>
+</html>

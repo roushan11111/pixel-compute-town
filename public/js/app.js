@@ -1,14 +1,31 @@
 /**
- * PixelCompute Town — 前端主控制器
- * 完整整合：後端 REST API、SSE 即時事件（含本機 CLI 心跳同步）、
- * PixelTownEngine 像素引擎、8-bit Web Audio、算力打工證 PNG、零信任 BYOK 執行器。
+ * PixelCompute Town v1.0 — 前端主控制器
+ * 完整整合：100% 全站三語在地化、多用戶帳號註冊登入、三合一收付結帳（穩定幣 / 信用卡 / 兌換碼）、
+ * 穩定幣分紅提領、鎮長裝置審核與卡密生成、SSE 即時同步、HD 像素引擎、8-bit 音效、打工證 PNG 與 BYOK 執行器。
  */
 
 import { PixelTownEngine } from './pixelEngine.js';
 import { renderWorkerPortrait } from './sprites.js';
 import { soundFX } from './sound.js';
 import { renderWorkCertificate, downloadWorkCertificate } from './certCard.js';
-import { applyI18nToDom, getLang, setLang, t } from './i18n.js';
+import {
+  applyI18n,
+  getLocale,
+  localizeAchievement,
+  localizeFeedMessage,
+  localizeLeaderboardEntry,
+  localizeProject,
+  localizeRevenueLabel,
+  localizeRoleLabel,
+  localizeShopItem,
+  localizeSkinLabel,
+  localizeStreamLabel,
+  localizeTask,
+  localizeUser,
+  localizeWorker,
+  setLocale,
+  t,
+} from './i18n.js';
 import {
   PRESET_MODELS,
   buildTaskPrompt,
@@ -81,8 +98,19 @@ const app = {
   shopItems: [],
   workerTemplates: [],
   config: {},
+  authConfig: {},
+  paymentConfig: {},
+  adminData: {
+    isAdmin: true,
+    strictDeviceReview: false,
+    pendingDevices: [],
+    allDevices: [],
+    redeemCodes: [],
+    payouts: [],
+  },
   engine: null,
   sse: null,
+  sseState: 'connecting',
   activeTab: 'factory',
   activeScene: 'factory',
   autoFollowScene: (() => {
@@ -109,32 +137,24 @@ const app = {
       return false;
     }
   })(),
+  adminPanelCollapsed: false,
   seenUnlockedAchievements: new Set(),
-};
-
-const ROLE_LABELS = {
-  flash_worker: '⚡ 快閃工坊員',
-  pro_architect: '🧠 工會架構師',
-  pixel_artist: '🎨 像素美術工',
-  guild_artisan: '🔨 懸賞匠人',
-};
-
-const SKIN_LABELS = {
-  default: '經典原色',
-  'skin-cyber': '⚡ 賽博霓虹',
-  'skin-cat': '🐱 像素貓耳',
-  'skin-gold': '👑 創世黃金',
-};
-
-const STREAM_LABELS = {
-  bounty_fee: '⚔️ 懸賞 10% 抽成',
-  incubation_carry: '🚀 孵化分紅 10%',
-  billboard_ad: '📺 霓虹廣告位',
-  pro_skin: '✨ 外觀 / Pro',
+  // Auth modal runtime state
+  authModalMode: 'login',
+  // Payment modal runtime state
+  payModal: {
+    productId: null,
+    targetProjectId: null,
+    displayName: '',
+    priceUsd: 0,
+    activeTab: 'stablecoin',
+    activeStablecoinOrder: null,
+    activeCardOrder: null,
+  },
 };
 
 // ============================================================================
-// DOM Helpers
+// DOM & Formatting Helpers
 // ============================================================================
 const $ = (id) => document.getElementById(id);
 
@@ -156,10 +176,17 @@ function fmtTime(iso) {
   if (!iso) return '';
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const loc = getLocale() === 'en' ? 'en-US' : getLocale();
+    return d.toLocaleTimeString(loc, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch {
     return '';
   }
+}
+
+function shortHash(str, head = 8, tail = 6) {
+  if (!str) return '';
+  const s = String(str);
+  return s.length > head + tail + 3 ? `${s.slice(0, head)}...${s.slice(-tail)}` : s;
 }
 
 function showToast(message, type = 'info', durationMs = 3400) {
@@ -176,10 +203,11 @@ function showToast(message, type = 'info', durationMs = 3400) {
   }, durationMs);
 }
 
-async function copyText(text, successMsg = '已複製到剪貼簿！') {
+async function copyText(text, successMsg = null) {
+  const msg = successMsg || t('toast.copied');
   try {
     await navigator.clipboard.writeText(text);
-    showToast(successMsg, 'success', 2200);
+    showToast(msg, 'success', 2200);
   } catch {
     const ta = document.createElement('textarea');
     ta.value = text;
@@ -187,13 +215,14 @@ async function copyText(text, successMsg = '已複製到剪貼簿！') {
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    showToast(successMsg, 'success', 2200);
+    showToast(msg, 'success', 2200);
   }
 }
 
 async function apiFetch(path, options = {}) {
   const opts = {
     method: options.method || 'GET',
+    credentials: 'same-origin',
     headers: {
       Accept: 'application/json',
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
@@ -212,10 +241,11 @@ async function apiFetch(path, options = {}) {
 function celebrateAchievement(ach) {
   if (!ach || !ach.id || app.seenUnlockedAchievements.has(ach.id)) return;
   app.seenUnlockedAchievements.add(ach.id);
+  const locAch = localizeAchievement(ach, getLocale());
   const bonus = ach.rewardGold > 0 ? ` (+${ach.rewardGold}G)` : '';
   soundFX.playVerify();
   showToast(
-    t('toast.achievement', { title: `${ach.icon || '🏆'} ${ach.name}`, bonus }),
+    t('toast.achievement', { title: `${ach.icon || '🏆'} ${locAch.name}`, bonus }),
     'achievement',
     5200,
   );
@@ -291,6 +321,25 @@ function resolveLeaderboardPortrait(row, rank) {
   };
 }
 
+function applyBootstrapPayload(data, { silentAchievements = false } = {}) {
+  if (!data) return;
+  if (data.user) app.user = data.user;
+  if (data.state) app.state = data.state;
+  if (Array.isArray(data.shopItems)) app.shopItems = data.shopItems;
+  if (Array.isArray(data.workerTemplates)) app.workerTemplates = data.workerTemplates;
+  if (data.config) app.config = data.config;
+  if (data.authConfig) app.authConfig = data.authConfig;
+  if (data.paymentConfig) app.paymentConfig = data.paymentConfig;
+  if (data.adminData) app.adminData = data.adminData;
+  if (app.engine && app.state) {
+    app.engine.syncState(app.state);
+  }
+  if (!silentAchievements && app.state) {
+    checkNewAchievements(app.state);
+  }
+  renderAll();
+}
+
 function applyNewState(nextState, { silentAchievements = false } = {}) {
   if (!nextState) return;
   app.state = nextState;
@@ -302,6 +351,16 @@ function applyNewState(nextState, { silentAchievements = false } = {}) {
     checkNewAchievements(app.state);
   }
   renderAll();
+}
+
+async function refreshBootstrapNow({ silentAchievements = false } = {}) {
+  try {
+    const data = await apiFetch('/api/bootstrap');
+    applyBootstrapPayload(data, { silentAchievements });
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================
@@ -332,7 +391,6 @@ function buildCertPayload() {
   if (!s) return { user: app.user, state: {} };
   const playerId = s.player?.id || app.user?.id || 'founder-demo';
 
-  // Aggregate player dividends per project from dividendLedger
   const divByProj = new Map();
   for (const entry of s.dividendLedger || []) {
     if (!entry?.projectId) continue;
@@ -370,29 +428,37 @@ function buildCertPayload() {
 
 function openCertModal() {
   if (!app.state) return;
+  const loc = getLocale();
   const payload = buildCertPayload();
-  const canvas = renderWorkCertificate(payload);
+  const canvas = renderWorkCertificate(payload, loc);
   const img = $('cert-preview-img');
   if (img && canvas) {
     img.src = canvas.toDataURL('image/png');
   }
   const p = app.state.player || {};
+  const locUser = localizeUser(app.user || p, loc);
   const caption = $('cert-preview-caption');
   if (caption) {
-    caption.textContent = `${p.displayName || '創始鎮長'} · 信譽 ${p.reputation ?? 100} · 已驗收 ${p.completedTasks ?? 0} 單 · 累計分紅與懸賞 ${fmtUsd(p.usdBalance)}`;
+    caption.textContent = t('modal.cert.caption', {
+      name: locUser.displayName,
+      rep: p.reputation ?? 100,
+      tasks: p.completedTasks ?? 0,
+      usd: fmtUsd(p.usdBalance),
+    });
   }
   openModal('modal-cert');
 }
 
 function triggerDownloadCert() {
   if (!app.state) return;
+  const loc = getLocale();
   const payload = buildCertPayload();
   const handle = (app.state.player?.username || 'founder').replace(/[^a-z0-9_-]/gi, '');
-  downloadWorkCertificate(payload, `pixel-compute-town-cert-${handle}.png`);
+  downloadWorkCertificate(payload, `pixel-compute-town-cert-${handle}.png`, loc);
   app.certExported = true;
   renderOnboardingBar();
   soundFX.playCoin();
-  showToast('🪪 已匯出《像素算力打工證 PNG》，快去發推炫耀吧！', 'success');
+  showToast(t('toast.certExported'), 'success');
 }
 
 // ============================================================================
@@ -406,7 +472,7 @@ function syncAutoFollowUi() {
 }
 
 function syncSceneChipsUI(sceneId) {
-  document.querySelectorAll('.quick-chip').forEach((chip) => {
+  document.querySelectorAll('.quick-chip[data-scene]').forEach((chip) => {
     const chipScene = chip.dataset.scene || chip.dataset.building;
     const isActive = chipScene === sceneId;
     chip.classList.toggle('active', isActive);
@@ -419,6 +485,14 @@ function updateSceneHint(sceneId) {
   if (!hint) return;
   const key = SCENE_HINT_KEYS[sceneId] || 'stage.hintDefault';
   hint.textContent = t(key);
+}
+
+function updateSseLabel() {
+  const label = $('sse-label');
+  if (!label) return;
+  if (app.sseState === 'live') label.textContent = t('stage.sseLive');
+  else if (app.sseState === 'offline') label.textContent = t('stage.sseOffline');
+  else label.textContent = t('stage.sseConnecting');
 }
 
 function selectScene(sceneId, { syncTab = false, fromEngine = false, silent = false } = {}) {
@@ -475,7 +549,110 @@ function focusBuilding(buildingId) {
 }
 
 // ============================================================================
-// Rendering Functions
+// Auth Modal (#auth-modal)
+// ============================================================================
+function setAuthModalMode(mode) {
+  app.authModalMode = mode === 'register' ? 'register' : 'login';
+  const isReg = app.authModalMode === 'register';
+  $('auth-tab-login')?.classList.toggle('active', !isReg);
+  $('auth-tab-register')?.classList.toggle('active', isReg);
+  const nameWrap = $('auth-display-name-wrap');
+  if (nameWrap) nameWrap.style.display = isReg ? 'flex' : 'none';
+  const submitBtn = $('auth-submit-btn');
+  if (submitBtn) submitBtn.textContent = isReg ? t('auth.registerBtn') : t('auth.loginBtn');
+  const errEl = $('auth-error-msg');
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+}
+
+function renderAuthModalStatus() {
+  const statusEl = $('auth-current-status');
+  if (!statusEl) return;
+  const loc = getLocale();
+  const u = app.user || app.state?.player || {};
+  const locUser = localizeUser(u, loc);
+  const modeKey =
+    u.authMode === 'github'
+      ? 'auth.modeGithub'
+      : u.authMode === 'google'
+        ? 'auth.modeGoogle'
+        : u.authMode === 'email'
+          ? 'auth.modeEmail'
+          : 'auth.modeDemo';
+  statusEl.textContent = t('auth.currentStatus', { name: locUser.displayName, mode: t(modeKey) });
+
+  const logoutBtn = $('auth-btn-logout');
+  if (logoutBtn) {
+    logoutBtn.style.display = u.isAuthenticated || (u.authMode && u.authMode !== 'demo') ? 'inline-flex' : 'none';
+  }
+}
+
+function openAuthModal(defaultMode = 'login') {
+  setAuthModalMode(defaultMode);
+  renderAuthModalStatus();
+  openModal('auth-modal');
+}
+
+// ============================================================================
+// 3-in-1 Payment Modal (#payment-modal)
+// ============================================================================
+function setPaymentModalTab(tab) {
+  app.payModal.activeTab = tab || 'stablecoin';
+  document.querySelectorAll('#payment-modal [data-pay-tab]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.payTab === app.payModal.activeTab);
+  });
+  document.querySelectorAll('#payment-modal [data-pay-pane]').forEach((pane) => {
+    pane.classList.toggle('active', pane.dataset.payPane === app.payModal.activeTab);
+  });
+}
+
+function showPaymentStatus(msg, isError = false) {
+  const box = $('pay-status-msg');
+  if (!box) return;
+  if (!msg) {
+    box.style.display = 'none';
+    box.textContent = '';
+    return;
+  }
+  box.style.display = 'block';
+  box.style.borderColor = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+  box.textContent = msg;
+}
+
+function openPaymentModal({ productId, targetProjectId = null, displayName = '', priceUsd = 0, initialTab = 'stablecoin' }) {
+  app.payModal.productId = productId;
+  app.payModal.targetProjectId = targetProjectId;
+  app.payModal.displayName = displayName;
+  app.payModal.priceUsd = Number(priceUsd) || 0;
+  app.payModal.activeStablecoinOrder = null;
+  app.payModal.activeCardOrder = null;
+
+  const summaryEl = $('pay-product-summary');
+  if (summaryEl) {
+    summaryEl.textContent = t('pay.productSummary', {
+      name: displayName || productId,
+      price: fmtUsd(app.payModal.priceUsd),
+    });
+  }
+
+  const orderBox = $('pay-order-box');
+  if (orderBox) orderBox.style.display = 'none';
+  const cardBox = $('pay-card-sandbox-box');
+  if (cardBox) cardBox.style.display = 'none';
+  const txInput = $('pay-tx-hash');
+  if (txInput) txInput.value = '';
+  const redeemInput = $('pay-redeem-code');
+  if (redeemInput) redeemInput.value = '';
+  showPaymentStatus('');
+
+  setPaymentModalTab(initialTab);
+  openModal('payment-modal');
+}
+
+// ============================================================================
+// Rendering Functions (100% Trilingual)
 // ============================================================================
 function renderAll() {
   if (!app.state) return;
@@ -489,6 +666,7 @@ function renderAll() {
   renderIncubatorTab();
   renderWorkersAndShopTab();
   renderRevenueAndLeaderboardTab();
+  renderAuthModalStatus();
 }
 
 function renderOnboardingBar() {
@@ -534,34 +712,39 @@ function renderOnboardingBar() {
 }
 
 function renderHud() {
+  const loc = getLocale();
   const p = app.state.player || {};
   const u = app.user || p;
+  const locUser = localizeUser(u, loc);
 
   $('hud-gold').textContent = `${Number(p.gold || 0).toLocaleString()} G`;
   $('hud-usd').textContent = fmtUsd(p.usdBalance || 0);
   $('hud-rep').textContent = String(p.reputation ?? 100);
 
   const proTag = p.isPro ? ' 💎PRO' : '';
-  $('hud-user-name').textContent = `${u.displayName || p.displayName || '創始開發者'}${proTag}`;
+  $('hud-user-name').textContent = `${locUser.displayName}${proTag}`;
 
   const avatarEl = $('hud-user-avatar');
   if (u.avatarUrl) {
     avatarEl.innerHTML = `<img src="${escapeHtml(u.avatarUrl)}" alt="avatar" />`;
   } else {
-    avatarEl.textContent = u.authMode === 'github' ? '🐙' : '🧑‍💻';
+    avatarEl.textContent = u.authMode === 'github' ? '🐙' : u.authMode === 'google' ? '🌐' : u.authMode === 'email' ? '✉️' : '🧑‍💻';
   }
 
   const ghBtn = $('btn-github-login');
   const logoutBtn = $('btn-logout');
-  if (u.authMode === 'github') {
-    ghBtn.style.display = 'none';
-    logoutBtn.style.display = 'inline-flex';
-  } else if (app.config?.githubOAuthEnabled) {
-    ghBtn.style.display = 'inline-flex';
-    logoutBtn.style.display = 'none';
-  } else {
-    ghBtn.style.display = 'none';
-    logoutBtn.style.display = 'none';
+  const isSignedIn = Boolean(u.isAuthenticated || (u.authMode && u.authMode !== 'demo'));
+  if (ghBtn && logoutBtn) {
+    if (isSignedIn) {
+      ghBtn.style.display = 'none';
+      logoutBtn.style.display = 'inline-flex';
+    } else if (app.authConfig?.githubOAuthEnabled || app.config?.githubOAuthEnabled) {
+      ghBtn.style.display = 'inline-flex';
+      logoutBtn.style.display = 'none';
+    } else {
+      ghBtn.style.display = 'none';
+      logoutBtn.style.display = 'none';
+    }
   }
 }
 
@@ -570,9 +753,7 @@ function renderByokIndicator() {
   const isLive = hasLiveApiKey(cfg);
   const dot = $('hud-byok-dot');
   const label = $('hud-byok-label');
-  if (dot) {
-    dot.classList.toggle('live', isLive);
-  }
+  if (dot) dot.classList.toggle('live', isLive);
   if (label) {
     label.textContent = isLive
       ? t('hud.byokLive', { model: cfg.model.slice(0, 18) })
@@ -581,41 +762,46 @@ function renderByokIndicator() {
 }
 
 function renderStageStatus() {
+  const loc = getLocale();
   const workers = app.state.workers || [];
   const projects = app.state.projects || [];
   const workingCount = workers.filter((w) => w.status === 'working').length;
-  const openTasks = (app.state.tasks || []).filter((t) => t.status === 'open').length;
+  const openTasks = (app.state.tasks || []).filter((tk) => tk.status === 'open').length;
   const latestAct = (app.state.activityFeed || [])[0];
 
   const marquee = $('stage-marquee');
   if (marquee) {
     const sponsored = projects.find((p) => p.sponsoredBillboard && p.billboardText);
-    marquee.textContent = latestAct?.message || sponsored?.billboardText || '像素算力鎮運行中！';
+    const sponsoredText = sponsored ? localizeProject(sponsored, loc).billboardText : '';
+    const actText = latestAct?.message ? localizeFeedMessage(latestAct.message, loc) : '';
+    marquee.textContent = actText || sponsoredText || t('stage.marqueeDefault');
   }
 
   const strip = $('stage-worker-strip');
   if (strip) {
     const pills = workers
       .map((w) => {
+        const lw = localizeWorker(w, loc);
         const isWorking = w.status === 'working';
         const icon = isWorking ? '⚡' : '☕';
         return `
-          <button type="button" class="worker-strip-pill ${isWorking ? 'working' : ''}" data-select-strip-worker="${escapeHtml(w.id)}" title="${escapeHtml(w.name)} · ${escapeHtml(ROLE_LABELS[w.roleClass] || w.roleClass)}">
+          <button type="button" class="worker-strip-pill ${isWorking ? 'working' : ''}" data-select-strip-worker="${escapeHtml(w.id)}" title="${escapeHtml(lw.name)} · ${escapeHtml(lw.roleName)}">
             <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(w.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(w.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'idle'}"></canvas>
-            <span>${icon} ${escapeHtml(w.name)} Lv.${w.level} (${w.stamina}/${w.maxStamina})</span>
+            <span>${icon} ${escapeHtml(lw.name)} Lv.${w.level} (${w.stamina}/${w.maxStamina})</span>
           </button>
         `;
       })
       .join('');
     strip.innerHTML = `
       <div class="badge-row">${pills}</div>
-      <span>開工中 ${workingCount}/${workers.length} ｜ 可接任務 ${openTasks} 張</span>
+      <span>${escapeHtml(t('stage.stripSummary', { working: workingCount, total: workers.length, open: openTasks }))}</span>
     `;
     hydrateWorkerPortraits(strip);
   }
 }
 
 function renderActivityFeed() {
+  const loc = getLocale();
   const feedEl = $('activity-feed');
   if (!feedEl) return;
   const items = app.state.activityFeed || [];
@@ -623,43 +809,45 @@ function renderActivityFeed() {
   const filtered = items.filter((item) => {
     if (app.feedFilter === 'all') return true;
     if (app.feedFilter === 'deliverable') return item.type === 'complete' || item.type === 'reject';
-    if (app.feedFilter === 'revenue') return ['launch', 'dividend', 'billboard', 'shop'].includes(item.type);
-    if (app.feedFilter === 'cli') return item.type === 'cli';
+    if (app.feedFilter === 'revenue') return ['launch', 'dividend', 'billboard', 'shop', 'payment', 'redeem', 'payout'].includes(item.type);
+    if (app.feedFilter === 'cli') return item.type === 'cli' || item.type === 'device';
     return true;
   });
 
   if (filtered.length === 0) {
-    feedEl.innerHTML = '<div class="empty-state">此分類暫無小鎮動態，派一位小人上工試試吧！</div>';
+    feedEl.innerHTML = `<div class="empty-state">${escapeHtml(t('terminal.empty'))}</div>`;
     return;
   }
 
   feedEl.innerHTML = filtered
     .slice(0, 40)
     .map((item) => {
-      const task = item.taskId ? (app.state.tasks || []).find((t) => t.id === item.taskId) : null;
+      const task = item.taskId ? (app.state.tasks || []).find((tk) => tk.id === item.taskId) : null;
       const canInspect = Boolean(task && (task.submission || task.lastRejectedVerification));
       const typeClass =
         item.type === 'complete'
           ? 'type-deliverable'
-          : ['launch', 'dividend', 'billboard'].includes(item.type)
+          : ['launch', 'dividend', 'billboard', 'payment', 'payout', 'redeem'].includes(item.type)
             ? 'type-revenue'
-            : item.type === 'cli'
+            : item.type === 'cli' || item.type === 'device'
               ? 'type-cli'
               : item.type === 'reject'
                 ? 'type-reject'
                 : '';
 
+      const localizedMsg = localizeFeedMessage(item.message, loc);
+
       return `
         <div class="feed-item ${typeClass}">
           <div class="feed-row">
-            <span class="feed-msg">${escapeHtml(item.icon || '📌')} ${escapeHtml(item.message)}</span>
+            <span class="feed-msg">${escapeHtml(item.icon || '📌')} ${escapeHtml(localizedMsg)}</span>
             <span class="feed-time">${fmtTime(item.timestamp)}</span>
           </div>
           ${item.preview ? `<div class="feed-preview">${escapeHtml(item.preview)}</div>` : ''}
           ${
             canInspect
               ? `<div class="feed-actions">
-                  <button type="button" class="btn btn-sm" data-inspect-task="${escapeHtml(task.id)}">🔍 查看完整交付與驗收報告</button>
+                  <button type="button" class="btn btn-sm" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('terminal.inspectBtn'))}</button>
                 </div>`
               : ''
           }
@@ -671,11 +859,17 @@ function renderActivityFeed() {
 
 function populateProjectFilterSelect(selectEl) {
   if (!selectEl) return;
+  const loc = getLocale();
   const currentVal = selectEl.value || 'all';
   const projects = app.state.projects || [];
   selectEl.innerHTML =
-    '<option value="all">全部項目</option>' +
-    projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.shortName || p.name)}</option>`).join('');
+    `<option value="all">${escapeHtml(t('factory.allProjects'))}</option>` +
+    projects
+      .map((p) => {
+        const lp = localizeProject(p, loc);
+        return `<option value="${escapeHtml(p.id)}">${escapeHtml(lp.shortName || lp.name)}</option>`;
+      })
+      .join('');
   if ([...selectEl.options].some((o) => o.value === currentVal)) {
     selectEl.value = currentVal;
   }
@@ -683,16 +877,18 @@ function populateProjectFilterSelect(selectEl) {
 
 function populateWorkerSelect(selectEl, track) {
   if (!selectEl) return;
+  const loc = getLocale();
   const currentVal = selectEl.value;
   const list = (app.state.workers || []).filter((w) => w.track === track);
   if (list.length === 0) {
-    selectEl.innerHTML = '<option value="">尚無對應軌道小人</option>';
+    selectEl.innerHTML = `<option value="">${escapeHtml(t('factory.noTrackWorker'))}</option>`;
     return;
   }
   selectEl.innerHTML = list
     .map((w) => {
-      const busyMark = w.status === 'working' || app.busyWorkers.has(w.id) ? ' [工作中]' : '';
-      return `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)} (${w.stamina}/${w.maxStamina})${busyMark}</option>`;
+      const lw = localizeWorker(w, loc);
+      const busyMark = w.status === 'working' || app.busyWorkers.has(w.id) ? t('factory.workerWorkingSuffix') : '';
+      return `<option value="${escapeHtml(w.id)}">${escapeHtml(lw.name)} (${w.stamina}/${w.maxStamina})${escapeHtml(busyMark)}</option>`;
     })
     .join('');
   if ([...selectEl.options].some((o) => o.value === currentVal)) {
@@ -701,6 +897,7 @@ function populateWorkerSelect(selectEl, track) {
 }
 
 function renderFactoryTab() {
+  const loc = getLocale();
   const projFilter = $('factory-project-filter');
   const statusFilter = $('factory-status-filter');
   const workerSelect = $('factory-worker-select');
@@ -712,11 +909,11 @@ function renderFactoryTab() {
   const projectMap = new Map((app.state.projects || []).map((p) => [p.id, p]));
   const workerMap = new Map((app.state.workers || []).map((w) => [w.id, w]));
 
-  const tasks = (app.state.tasks || []).filter((t) => {
-    if (t.track !== 'api_auto') return false;
-    if (selectedProj !== 'all' && t.projectId !== selectedProj) return false;
-    if (selectedStatus === 'open' && t.status !== 'open' && t.status !== 'in_progress') return false;
-    if (selectedStatus === 'completed' && t.status !== 'completed') return false;
+  const tasks = (app.state.tasks || []).filter((tk) => {
+    if (tk.track !== 'api_auto') return false;
+    if (selectedProj !== 'all' && tk.projectId !== selectedProj) return false;
+    if (selectedStatus === 'open' && tk.status !== 'open' && tk.status !== 'in_progress') return false;
+    if (selectedStatus === 'completed' && tk.status !== 'completed') return false;
     return true;
   });
 
@@ -724,16 +921,20 @@ function renderFactoryTab() {
   if (!listEl) return;
 
   if (tasks.length === 0) {
-    listEl.innerHTML = '<div class="empty-state">目前沒有符合篩選條件的 API 任務。快去「孵化廣場」幫 PixelPomo 投票解鎖新任務吧！</div>';
+    listEl.innerHTML = `<div class="empty-state">${escapeHtml(t('factory.empty'))}</div>`;
     return;
   }
 
   listEl.innerHTML = tasks
     .map((task) => {
+      const lt = localizeTask(task, loc);
       const proj = projectMap.get(task.projectId);
+      const lp = proj ? localizeProject(proj, loc) : null;
       const isCompleted = task.status === 'completed';
       const isWorking = task.status === 'in_progress';
       const assignedWorker = workerMap.get(task.assignedWorkerId || task.submission?.workerId || '');
+      const lw = assignedWorker ? localizeWorker(assignedWorker, loc) : null;
+
       const statusBadge = isCompleted
         ? `<span class="badge green">${escapeHtml(t('badge.completed'))}</span>`
         : isWorking
@@ -744,7 +945,7 @@ function renderFactoryTab() {
           ? `
             <div class="task-worker-chip ${isCompleted ? 'completed' : ''}">
               <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(assignedWorker.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(assignedWorker.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'celebrate'}"></canvas>
-              <span>${isWorking ? '⚡' : '✅'} ${escapeHtml(assignedWorker.name)} ${isWorking ? '趕工中' : '交付'}</span>
+              <span>${isWorking ? '⚡' : '✅'} ${escapeHtml(lw.name)} ${escapeHtml(isWorking ? t('factory.workerBusyTag') : t('factory.workerDoneTag'))}</span>
             </div>
           `
           : '';
@@ -753,19 +954,19 @@ function renderFactoryTab() {
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
           <div class="card-head">
             <div>
-              <h3 class="card-title">${escapeHtml(task.title)}</h3>
-              <p class="card-subtitle">${escapeHtml(task.description || '')}</p>
+              <h3 class="card-title">${escapeHtml(lt.title)}</h3>
+              <p class="card-subtitle">${escapeHtml(lt.description || '')}</p>
             </div>
             ${statusBadge}
           </div>
           ${workerChipHtml}
           <div class="badge-row">
-            <span class="badge">📦 ${escapeHtml(proj?.shortName || task.projectId)}</span>
+            <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
             <span class="badge cyan">🤖 ${escapeHtml(task.modelSuggestion || 'gemini-2.5-flash')}</span>
             <span class="badge">⚡ ${(task.tokenCostEst || 0).toLocaleString()} tok / -${task.staminaCost || 12}</span>
             <span class="badge gold">🪙 +${task.goldReward}G</span>
             <span class="badge pink">✨ +${task.contributionPoints} pt</span>
-            ${task.cashBountyUsd > 0 ? `<span class="badge green">💵 $${task.cashBountyUsd} ($${(task.cashBountyUsd * 0.9).toFixed(2)} net)</span>` : ''}
+            ${task.cashBountyUsd > 0 ? `<span class="badge green">💵 $${task.cashBountyUsd} ($${(task.cashBountyUsd * 0.9).toFixed(2)} ${escapeHtml(t('factory.netSuffix'))})</span>` : ''}
           </div>
           <div class="card-footer">
             <span class="mono" style="font-size: 11px; color: var(--text-muted);">
@@ -789,6 +990,7 @@ function renderFactoryTab() {
 }
 
 function renderGuildTab() {
+  const loc = getLocale();
   const projFilter = $('guild-project-filter');
   const workerSelect = $('guild-worker-select');
   populateProjectFilterSelect(projFilter);
@@ -800,7 +1002,12 @@ function renderGuildTab() {
     const projects = app.state.projects || [];
     importProjSelect.innerHTML =
       `<option value="">${escapeHtml(t('guild.importAutoProj'))}</option>` +
-      projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.shortName || p.name)}</option>`).join('');
+      projects
+        .map((p) => {
+          const lp = localizeProject(p, loc);
+          return `<option value="${escapeHtml(p.id)}">${escapeHtml(lp.shortName || lp.name)}</option>`;
+        })
+        .join('');
     if ([...importProjSelect.options].some((o) => o.value === prev)) {
       importProjSelect.value = prev;
     }
@@ -810,9 +1017,9 @@ function renderGuildTab() {
   const projectMap = new Map((app.state.projects || []).map((p) => [p.id, p]));
   const workerMap = new Map((app.state.workers || []).map((w) => [w.id, w]));
 
-  const tasks = (app.state.tasks || []).filter((t) => {
-    if (t.track !== 'guild_bounty') return false;
-    if (selectedProj !== 'all' && t.projectId !== selectedProj) return false;
+  const tasks = (app.state.tasks || []).filter((tk) => {
+    if (tk.track !== 'guild_bounty') return false;
+    if (selectedProj !== 'all' && tk.projectId !== selectedProj) return false;
     return true;
   });
 
@@ -820,24 +1027,28 @@ function renderGuildTab() {
   if (!listEl) return;
 
   if (tasks.length === 0) {
-    listEl.innerHTML = '<div class="empty-state">暫無工會大單，前往孵化廣場投票解鎖新項目可自動生成高價值懸賞！</div>';
+    listEl.innerHTML = `<div class="empty-state">${escapeHtml(t('guild.empty'))}</div>`;
     return;
   }
 
   listEl.innerHTML = tasks
     .map((task) => {
+      const lt = localizeTask(task, loc);
       const proj = projectMap.get(task.projectId);
+      const lp = proj ? localizeProject(proj, loc) : null;
       const isCompleted = task.status === 'completed';
       const isWorking = task.status === 'in_progress';
       const assignedWorker = workerMap.get(task.assignedWorkerId || task.submission?.workerId || '');
+      const lw = assignedWorker ? localizeWorker(assignedWorker, loc) : null;
       const netUsd = Number((task.cashBountyUsd * 0.9).toFixed(2));
       const feeUsd = Number((task.cashBountyUsd * 0.1).toFixed(2));
+
       const workerChipHtml =
         assignedWorker && (isWorking || isCompleted)
           ? `
             <div class="task-worker-chip ${isCompleted ? 'completed' : ''}">
               <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(assignedWorker.roleClass || 'pro_architect')}" data-portrait-skin="${escapeHtml(assignedWorker.skin || 'default')}" data-portrait-anim="${isWorking ? 'work' : 'celebrate'}"></canvas>
-              <span>${isWorking ? '⚔️' : '✅'} ${escapeHtml(assignedWorker.name)} ${isWorking ? '接單處理中' : '結案'}</span>
+              <span>${isWorking ? '⚔️' : '✅'} ${escapeHtml(lw.name)} ${escapeHtml(isWorking ? t('guild.workerBusyTag') : t('guild.workerDoneTag'))}</span>
             </div>
           `
           : '';
@@ -846,8 +1057,8 @@ function renderGuildTab() {
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
           <div class="card-head">
             <div>
-              <h3 class="card-title">${escapeHtml(task.title)}</h3>
-              <p class="card-subtitle">${escapeHtml(task.description || '')}</p>
+              <h3 class="card-title">${escapeHtml(lt.title)}</h3>
+              <p class="card-subtitle">${escapeHtml(lt.description || '')}</p>
             </div>
             ${
               isCompleted
@@ -859,14 +1070,14 @@ function renderGuildTab() {
           </div>
           ${workerChipHtml}
           <div class="badge-row">
-            <span class="badge">📦 ${escapeHtml(proj?.shortName || task.projectId)}</span>
+            <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
             <span class="badge amber">🖥️ ${escapeHtml(task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
             <span class="badge gold">🪙 +${task.goldReward}G</span>
             <span class="badge pink">✨ +${task.contributionPoints} pt</span>
             ${
               task.cashBountyUsd > 0
-                ? `<span class="badge green">💰 $${task.cashBountyUsd} ($${netUsd} net / $${feeUsd} fee)</span>`
-                : '<span class="badge cyan">🚀 30/60/10 Pool</span>'
+                ? `<span class="badge green">${escapeHtml(t('guild.bountyNetFee', { gross: task.cashBountyUsd, net: netUsd, fee: feeUsd }))}</span>`
+                : `<span class="badge cyan">${escapeHtml(t('guild.poolBadge'))}</span>`
             }
           </div>
           <div class="card-footer">
@@ -891,6 +1102,7 @@ function renderGuildTab() {
 }
 
 function renderIncubatorTab() {
+  const loc = getLocale();
   const listEl = $('project-list');
   if (!listEl) return;
   const projects = app.state.projects || [];
@@ -900,10 +1112,15 @@ function renderIncubatorTab() {
   const votingCnt = projects.filter((p) => p.status === 'voting').length;
   const buildingCnt = projects.filter((p) => p.status === 'building').length;
   const launchedCnt = projects.filter((p) => p.status === 'launched').length;
-  $('incubator-summary').textContent = `投票中 ${votingCnt} ｜ 建設中 ${buildingCnt} ｜ 已上線 ${launchedCnt} ｜ 30/60/10 透明分紅`;
+  $('incubator-summary').textContent = t('incubator.summary', {
+    voting: votingCnt,
+    building: buildingCnt,
+    launched: launchedCnt,
+  });
 
   listEl.innerHTML = projects
     .map((p) => {
+      const lp = localizeProject(p, loc);
       const isVoting = p.status === 'voting';
       const isBuilding = p.status === 'building';
       const isLaunched = p.status === 'launched';
@@ -921,34 +1138,34 @@ function renderIncubatorTab() {
           <div class="card-head">
             <div>
               <h3 class="card-title">
-                ${escapeHtml(p.name)}
-                ${p.sponsoredBillboard ? '<span class="badge pink" style="margin-left: 6px;">📺 霓虹廣告置頂</span>' : ''}
+                ${escapeHtml(lp.name)}
+                ${p.sponsoredBillboard ? `<span class="badge pink" style="margin-left: 6px;">${escapeHtml(t('incubator.sponsoredBadge'))}</span>` : ''}
               </h3>
-              <p class="card-subtitle">${escapeHtml(p.tagline || p.description || '')}</p>
+              <p class="card-subtitle">${escapeHtml(lp.tagline || lp.description || '')}</p>
             </div>
             ${
               isVoting
-                ? `<span class="badge amber">🗳️ 投票中 (${p.votes}/${p.votesRequired})</span>`
+                ? `<span class="badge amber">${escapeHtml(t('incubator.statusVoting', { votes: p.votes, req: p.votesRequired }))}</span>`
                 : isLaunched
-                  ? '<span class="badge green">🚀 已發布上線</span>'
-                  : `<span class="badge cyan">🏗️ 建設中 ${p.progressPct}%</span>`
+                  ? `<span class="badge green">${escapeHtml(t('incubator.statusLaunched'))}</span>`
+                  : `<span class="badge cyan">${escapeHtml(t('incubator.statusBuilding', { pct: p.progressPct }))}</span>`
             }
           </div>
 
           <div class="badge-row">
-            <span class="badge">👤 發起人：${escapeHtml(p.creatorName || '社群')}</span>
-            <span class="badge pink">📊 分紅池 30/60/10</span>
-            <span class="badge cyan">✨ 你持有 ${myPts} 貢獻點（約佔貢獻池 ${mySharePct}%）</span>
-            ${p.bountyPoolUsd > 0 ? `<span class="badge gold">💰 現金懸賞池 $${p.bountyPoolUsd}</span>` : ''}
-            ${p.totalRevenueUsd > 0 ? `<span class="badge green">💵 累計產品營收 ${fmtUsd(p.totalRevenueUsd)}</span>` : ''}
+            <span class="badge">${escapeHtml(t('incubator.creatorPrefix', { name: lp.creatorName }))}</span>
+            <span class="badge pink">${escapeHtml(t('incubator.poolTag'))}</span>
+            <span class="badge cyan">${escapeHtml(t('incubator.myPoints', { pts: myPts, pct: mySharePct }))}</span>
+            ${p.bountyPoolUsd > 0 ? `<span class="badge gold">${escapeHtml(t('incubator.bountyPool', { amount: p.bountyPoolUsd }))}</span>` : ''}
+            ${p.totalRevenueUsd > 0 ? `<span class="badge green">${escapeHtml(t('incubator.totalRev', { amount: fmtUsd(p.totalRevenueUsd) }))}</span>` : ''}
           </div>
 
           ${
             isVoting
               ? `<div class="progress-wrap">
                   <div class="progress-label">
-                    <span>立項投票進度（還差 ${votesLeft} 票自動破土並生成 5 張雙軌任務！）</span>
-                    <span>${p.votes} / ${p.votesRequired} 票</span>
+                    <span>${escapeHtml(t('incubator.voteProgress', { left: votesLeft }))}</span>
+                    <span>${escapeHtml(t('incubator.voteCount', { votes: p.votes, req: p.votesRequired }))}</span>
                   </div>
                   <div class="progress-track">
                     <div class="progress-fill amber" style="width: ${votePct}%;"></div>
@@ -956,7 +1173,7 @@ function renderIncubatorTab() {
                 </div>`
               : `<div class="progress-wrap">
                   <div class="progress-label">
-                    <span>${isLaunched ? '已上線營運中 · 持續分紅' : canLaunch ? '🎉 已達 100%！可立即發布上線並結算首日分紅！' : '雙軌算力開發進度'}</span>
+                    <span>${escapeHtml(isLaunched ? t('incubator.progressLaunched') : canLaunch ? t('incubator.progressReady') : t('incubator.progressBuilding'))}</span>
                     <span>${p.progressPct || 0}%</span>
                   </div>
                   <div class="progress-track">
@@ -969,24 +1186,24 @@ function renderIncubatorTab() {
             <div class="toolbar-group">
               ${
                 !p.sponsoredBillboard
-                  ? `<button type="button" class="btn btn-sm" data-billboard-project="${escapeHtml(p.id)}">📺 租用像素霓虹廣告位 ($${billboardPrice})</button>`
-                  : `<span class="mono" style="font-size: 11px; color: var(--accent-pink);">✨ 廣場霓虹看板曝光中</span>`
+                  ? `<button type="button" class="btn btn-sm" data-billboard-project="${escapeHtml(p.id)}">${escapeHtml(t('incubator.billboardBtn', { price: billboardPrice }))}</button>`
+                  : `<span class="mono" style="font-size: 11px; color: var(--accent-pink);">${escapeHtml(t('incubator.billboardActive'))}</span>`
               }
             </div>
             <div class="toolbar-group">
               ${
                 isVoting
-                  ? `<button type="button" class="btn btn-sm btn-amber" data-vote-project="${escapeHtml(p.id)}">🗳️ 投贊成票 (+1)</button>`
+                  ? `<button type="button" class="btn btn-sm btn-amber" data-vote-project="${escapeHtml(p.id)}">${escapeHtml(t('btn.vote'))}</button>`
                   : ''
               }
               ${
                 canLaunch
-                  ? `<button type="button" class="btn btn-sm btn-green" data-launch-project="${escapeHtml(p.id)}">🚀 一鍵發布上線！（觸發 $200 首日分紅）</button>`
+                  ? `<button type="button" class="btn btn-sm btn-green" data-launch-project="${escapeHtml(p.id)}">${escapeHtml(t('btn.launch'))}</button>`
                   : ''
               }
               ${
                 isLaunched
-                  ? `<button type="button" class="btn btn-sm btn-green" data-sim-revenue="${escapeHtml(p.id)}">💸 模擬產生 $100 營收並分紅</button>`
+                  ? `<button type="button" class="btn btn-sm btn-green" data-sim-revenue="${escapeHtml(p.id)}">${escapeHtml(t('btn.simRevenue'))}</button>`
                   : ''
               }
             </div>
@@ -998,6 +1215,7 @@ function renderIncubatorTab() {
 }
 
 function renderWorkersAndShopTab() {
+  const loc = getLocale();
   const workerList = $('worker-list');
   const workers = app.state.workers || [];
   const ownedSkins = app.state.player?.ownedSkins || ['default'];
@@ -1005,12 +1223,13 @@ function renderWorkersAndShopTab() {
   if (workerList) {
     workerList.innerHTML = workers
       .map((w) => {
+        const lw = localizeWorker(w, loc);
         const staminaPct = Math.round(((w.stamina || 0) / (w.maxStamina || 100)) * 100);
-        const capUnit = w.track === 'api' ? 'tokens' : '次/日';
+        const capUnit = w.track === 'api' ? t('workers.unitTokens') : t('workers.unitQuota');
         const skinOpts = ownedSkins
           .map(
             (sid) =>
-              `<option value="${escapeHtml(sid)}" ${w.skin === sid ? 'selected' : ''}>${escapeHtml(SKIN_LABELS[sid] || sid)}</option>`,
+              `<option value="${escapeHtml(sid)}" ${w.skin === sid ? 'selected' : ''}>${escapeHtml(localizeSkinLabel(sid, loc))}</option>`,
           )
           .join('');
         const skinFrameClass = w.skin && w.skin !== 'default' ? escapeHtml(w.skin) : '';
@@ -1023,16 +1242,16 @@ function renderWorkersAndShopTab() {
                   <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(w.roleClass || 'flash_worker')}" data-portrait-skin="${escapeHtml(w.skin || 'default')}" data-portrait-anim="${w.status === 'working' ? 'work' : 'idle'}"></canvas>
                 </div>
                 <div class="worker-card-info">
-                  <h3 class="card-title">${escapeHtml(w.name)} <span class="badge cyan">Lv.${w.level}</span></h3>
-                  <p class="card-subtitle">${escapeHtml(ROLE_LABELS[w.roleClass] || w.roleClass)} ｜ ${escapeHtml(w.providerLabel || '')}</p>
+                  <h3 class="card-title">${escapeHtml(lw.name)} <span class="badge cyan">Lv.${w.level}</span></h3>
+                  <p class="card-subtitle">${escapeHtml(lw.roleName)} ｜ ${escapeHtml(lw.providerLabel)}</p>
                 </div>
               </div>
-              <span class="badge ${w.status === 'working' ? 'cyan' : 'green'}">${w.status === 'working' ? '⚡ 趕工中' : '☕ 待命中'}</span>
+              <span class="badge ${w.status === 'working' ? 'cyan' : 'green'}">${escapeHtml(w.status === 'working' ? t('workers.statusWorking') : t('workers.statusIdle'))}</span>
             </div>
 
             <div class="progress-wrap">
               <div class="progress-label">
-                <span>體力值 ${w.stamina} / ${w.maxStamina} ｜ 今日額度 ${Number(w.usedTokensToday || 0).toLocaleString()} / ${Number(w.dailyTokenCap || 0).toLocaleString()} ${capUnit}</span>
+                <span>${escapeHtml(t('workers.staminaLine', { stamina: w.stamina, maxStamina: w.maxStamina, used: Number(w.usedTokensToday || 0).toLocaleString(), cap: Number(w.dailyTokenCap || 0).toLocaleString(), unit: capUnit }))}</span>
                 <span>XP ${w.xp}/${w.xpToNext}</span>
               </div>
               <div class="progress-track">
@@ -1041,20 +1260,20 @@ function renderWorkersAndShopTab() {
             </div>
 
             <div class="card-meta-grid">
-              <span>軌道：${w.track === 'api' ? '自動工坊 (API)' : '懸賞工會 (BYOT)'}</span>
-              <span>完工：${w.completedCount || 0} 單</span>
-              <span>累積：${w.earnedGold || 0}G / ${w.earnedPoints || 0} 貢獻</span>
+              <span>${escapeHtml(t('workers.trackLine', { track: w.track === 'api' ? t('workers.trackApi') : t('workers.trackGuild') }))}</span>
+              <span>${escapeHtml(t('workers.completedLine', { count: w.completedCount || 0 }))}</span>
+              <span>${escapeHtml(t('workers.earnedLine', { gold: w.earnedGold || 0, pts: w.earnedPoints || 0 }))}</span>
             </div>
 
             <div class="card-footer">
               <div class="worker-cap-row">
-                <span class="mono" style="font-size: 11px;">每日上限：</span>
+                <span class="mono" style="font-size: 11px;">${escapeHtml(t('workers.dailyCapLabel'))}</span>
                 <input type="number" class="input worker-cap-input" data-cap-input="${escapeHtml(w.id)}" value="${w.dailyTokenCap}" min="10" max="10000000" />
-                <button type="button" class="btn btn-sm" data-save-cap="${escapeHtml(w.id)}">儲存上限</button>
+                <button type="button" class="btn btn-sm" data-save-cap="${escapeHtml(w.id)}">${escapeHtml(t('btn.saveCap'))}</button>
               </div>
               <div class="toolbar-group">
-                <select class="select select-inline" data-skin-select="${escapeHtml(w.id)}" aria-label="更換皮膚">${skinOpts}</select>
-                <button type="button" class="btn btn-sm btn-amber" data-rest-worker="${escapeHtml(w.id)}">☕ 喝咖啡回體力</button>
+                <select class="select select-inline" data-skin-select="${escapeHtml(w.id)}" aria-label="Equip Skin">${skinOpts}</select>
+                <button type="button" class="btn btn-sm btn-amber" data-rest-worker="${escapeHtml(w.id)}">${escapeHtml(t('btn.coffee'))}</button>
               </div>
             </div>
           </article>
@@ -1074,23 +1293,24 @@ function renderWorkersAndShopTab() {
   }
   if (achList) {
     if (achievements.length === 0) {
-      achList.innerHTML = '<div class="empty-state">尚無創世成就資料。</div>';
+      achList.innerHTML = `<div class="empty-state">${escapeHtml(t('workers.achievementsEmpty'))}</div>`;
     } else {
       achList.innerHTML = achievements
-        .map(
-          (a) => `
+        .map((a) => {
+          const la = localizeAchievement(a, loc);
+          return `
             <article class="achievement-card ${a.unlocked ? 'unlocked' : ''}">
               <div class="achievement-icon" aria-hidden="true">${escapeHtml(a.icon || '🏆')}</div>
               <div class="achievement-info">
                 <div class="achievement-name">
-                  <span>${escapeHtml(a.name)}</span>
-                  <span class="badge ${a.unlocked ? 'gold' : ''}">${a.unlocked ? '✓ 已解鎖' : `+${a.rewardGold || 0}G`}</span>
+                  <span>${escapeHtml(la.name)}</span>
+                  <span class="badge ${a.unlocked ? 'gold' : ''}">${escapeHtml(a.unlocked ? t('workers.achUnlocked') : `+${a.rewardGold || 0}G`)}</span>
                 </div>
-                <div class="achievement-desc">${escapeHtml(a.description || '')}</div>
+                <div class="achievement-desc">${escapeHtml(la.description || '')}</div>
               </div>
             </article>
-          `,
-        )
+          `;
+        })
         .join('');
     }
   }
@@ -1101,7 +1321,8 @@ function renderWorkersAndShopTab() {
   if (shopList) {
     shopList.innerHTML = (app.shopItems || [])
       .map((item) => {
-        const owned = ownedItems.includes(item.id);
+        const li = localizeShopItem(item, loc);
+        const owned = ownedItems.includes(item.id) || (item.type === 'pro' && app.state.player?.isPro);
         const priceLabel = item.priceUsd > 0 ? `$${item.priceUsd} USD` : `${item.priceGold} G`;
         const previewSkinId = item.skinId || '';
         const previewRole = SKIN_PREVIEW_ROLES[previewSkinId] || workers[0]?.roleClass || 'flash_worker';
@@ -1110,14 +1331,14 @@ function renderWorkersAndShopTab() {
         const bundleStripHtml =
           bundleSkins.length > 1
             ? `
-              <div class="shop-bundle-strip" title="內含全部限定皮膚預覽">
+              <div class="shop-bundle-strip" title="${escapeHtml(t('workers.shopBundleTitle'))}">
                 ${bundleSkins
                   .map(
                     (sid) =>
                       `<canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(SKIN_PREVIEW_ROLES[sid] || 'flash_worker')}" data-portrait-skin="${escapeHtml(sid)}"></canvas>`,
                   )
                   .join('')}
-                <span class="mono" style="font-size: 11px; color: var(--accent-gold);">3 款 HD 皮膚全收錄</span>
+                <span class="mono" style="font-size: 11px; color: var(--accent-gold);">${escapeHtml(t('workers.shopBundleTag'))}</span>
               </div>
             `
             : '';
@@ -1128,25 +1349,25 @@ function renderWorkersAndShopTab() {
               <div class="shop-card-lead">
                 ${
                   hasSingleSkinPreview
-                    ? `<div class="shop-skin-preview ${escapeHtml(previewSkinId)}" title="HD 皮膚試穿預覽">
+                    ? `<div class="shop-skin-preview ${escapeHtml(previewSkinId)}" title="${escapeHtml(t('workers.shopPreviewTitle'))}">
                         <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(previewRole)}" data-portrait-skin="${escapeHtml(previewSkinId)}"></canvas>
                       </div>`
                     : ''
                 }
                 <div style="min-width: 0; flex: 1;">
-                  <h3 class="card-title">${escapeHtml(item.icon || '🛍️')} ${escapeHtml(item.name)}</h3>
-                  <p class="card-subtitle">${escapeHtml(item.description || '')}</p>
+                  <h3 class="card-title">${escapeHtml(item.icon || '🛍️')} ${escapeHtml(li.name)}</h3>
+                  <p class="card-subtitle">${escapeHtml(li.desc || '')}</p>
                 </div>
               </div>
-              <span class="badge ${item.priceUsd > 0 ? 'pink' : 'gold'}">${escapeHtml(item.badge || '')}</span>
+              <span class="badge ${item.priceUsd > 0 ? 'pink' : 'gold'}">${escapeHtml(li.tag || '')}</span>
             </div>
             ${bundleStripHtml}
             <div class="card-footer">
               <span class="mono" style="font-weight: 800; color: ${item.priceUsd > 0 ? 'var(--accent-green)' : 'var(--accent-gold)'};">${priceLabel}</span>
               ${
                 owned
-                  ? '<span class="badge green">✓ 已擁有</span>'
-                  : `<button type="button" class="btn btn-sm ${item.priceUsd > 0 ? 'btn-pink' : 'btn-primary'}" data-buy-item="${escapeHtml(item.id)}">購買</button>`
+                  ? `<span class="badge green">${escapeHtml(t('badge.owned'))}</span>`
+                  : `<button type="button" class="btn btn-sm ${item.priceUsd > 0 ? 'btn-pink' : 'btn-primary'}" data-buy-item="${escapeHtml(item.id)}">${escapeHtml(item.priceUsd > 0 ? t('btn.checkout') : t('btn.buy'))}</button>`
               }
             </div>
           </article>
@@ -1158,6 +1379,7 @@ function renderWorkersAndShopTab() {
 }
 
 function renderRevenueAndLeaderboardTab() {
+  const loc = getLocale();
   const rev = app.state.founderRevenue || {};
   $('rev-total-usd').textContent = fmtUsd(rev.totalUsd || 0);
   $('rev-bounty-fees').textContent = fmtUsd(rev.bountyFeesUsd || 0);
@@ -1169,7 +1391,7 @@ function renderRevenueAndLeaderboardTab() {
   const history = rev.history || [];
   if (histEl) {
     if (history.length === 0) {
-      histEl.innerHTML = '<div class="empty-state">尚無營收流水紀錄。</div>';
+      histEl.innerHTML = `<div class="empty-state">${escapeHtml(t('revenue.historyEmpty'))}</div>`;
     } else {
       histEl.innerHTML = history
         .slice(0, 15)
@@ -1177,8 +1399,8 @@ function renderRevenueAndLeaderboardTab() {
           (row) => `
           <div class="ledger-row">
             <div>
-              <span class="badge cyan">${escapeHtml(STREAM_LABELS[row.stream] || row.stream)}</span>
-              <span style="margin-left: 6px;">${escapeHtml(row.label)}</span>
+              <span class="badge cyan">${escapeHtml(localizeStreamLabel(row.stream, loc))}</span>
+              <span style="margin-left: 6px;">${escapeHtml(localizeRevenueLabel(row.label, loc))}</span>
             </div>
             <div class="mono" style="display: flex; align-items: center; gap: 10px;">
               <strong style="color: var(--accent-green);">+${fmtUsd(row.amountUsd)}</strong>
@@ -1198,13 +1420,14 @@ function renderRevenueAndLeaderboardTab() {
   if (lbEl) {
     lbEl.innerHTML = lb
       .map((row, idx) => {
+        const lRow = localizeLeaderboardEntry(row, loc);
         const rank = idx + 1;
         const rankClass = rank <= 3 ? `top-${rank}` : '';
         const portraitMeta = rank <= 3 ? resolveLeaderboardPortrait(row, rank) : null;
         const crownTier = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
         const avatarHtml = portraitMeta
           ? `
-            <div class="lb-avatar-badge ${rankClass}" title="Top ${rank} HD 像素徽章">
+            <div class="lb-avatar-badge ${rankClass}" title="Top ${rank}">
               <canvas class="hd-portrait" width="72" height="72" data-portrait-role="${escapeHtml(portraitMeta.roleClass)}" data-portrait-skin="${escapeHtml(portraitMeta.skin)}" data-portrait-anim="celebrate" data-portrait-crown="${crownTier}"></canvas>
               <span class="lb-crown-tag" aria-hidden="true">${TOP_RANK_CROWNS[rank - 1] || '🏅'}</span>
             </div>
@@ -1216,15 +1439,15 @@ function renderRevenueAndLeaderboardTab() {
               <span class="rank-badge ${rankClass}">#${rank}</span>
               ${avatarHtml}
               <div style="min-width: 0;">
-                <strong>${escapeHtml(row.displayName)}</strong>
+                <strong>${escapeHtml(lRow.displayName)}</strong>
                 <span class="mono" style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">${escapeHtml(row.handle || '')}</span>
-                ${row.badge ? `<span class="badge amber" style="margin-left: 5px;">${escapeHtml(row.badge)}</span>` : ''}
+                ${lRow.badge ? `<span class="badge amber" style="margin-left: 5px;">${escapeHtml(lRow.badge)}</span>` : ''}
               </div>
             </div>
             <div class="mono" style="display: flex; gap: 10px; align-items: center; font-size: 11px; flex-shrink: 0;">
-              <span style="color: var(--accent-pink);">${row.contributionPoints || 0} 貢獻</span>
+              <span style="color: var(--accent-pink);">${escapeHtml(t('revenue.lbPoints', { pts: row.contributionPoints || 0 }))}</span>
               <span style="color: var(--accent-green);">${fmtUsd(row.earnedUsd || 0)}</span>
-              <span style="color: var(--accent-cyan);">信譽 ${row.reputation ?? 100}</span>
+              <span style="color: var(--accent-cyan);">${escapeHtml(t('revenue.lbRep', { rep: row.reputation ?? 100 }))}</span>
             </div>
           </div>
         `;
@@ -1232,12 +1455,167 @@ function renderRevenueAndLeaderboardTab() {
       .join('');
     hydrateWorkerPortraits(lbEl);
   }
+
+  renderPayoutSection();
+  renderMayorAdminSection();
+}
+
+function renderPayoutSection() {
+  const player = app.state?.player || {};
+  const balBadge = $('payout-balance-badge');
+  if (balBadge) {
+    balBadge.textContent = t('payout.balanceBadge', { amount: fmtUsd(player.usdBalance || 0) });
+  }
+
+  const walletStatus = $('wallet-bound-status');
+  const boundAddr = player.walletAddress || app.user?.walletAddress || '';
+  const boundChain = player.walletChain || app.user?.walletChain || '';
+  if (walletStatus) {
+    if (boundAddr && boundChain) {
+      walletStatus.classList.add('bound');
+      walletStatus.textContent = t('payout.boundStatus', {
+        chain: boundChain.toUpperCase(),
+        address: boundAddr,
+      });
+    } else {
+      walletStatus.classList.remove('bound');
+      walletStatus.textContent = t('payout.unboundStatus');
+    }
+  }
+
+  const addrInput = $('wallet-address');
+  const chainSelect = $('wallet-chain');
+  if (addrInput && !addrInput.value && boundAddr) addrInput.value = boundAddr;
+  if (chainSelect && boundChain) chainSelect.value = boundChain;
+
+  const listEl = $('payout-history-list');
+  if (!listEl) return;
+  const payouts = app.adminData?.isAdmin && Array.isArray(app.adminData.payouts) && app.adminData.payouts.length > 0
+    ? app.adminData.payouts
+    : app.state?.payouts || [];
+
+  if (payouts.length === 0) {
+    listEl.innerHTML = `<div class="empty-state">${escapeHtml(t('payout.historyEmpty'))}</div>`;
+    return;
+  }
+
+  const isFounder = Boolean(app.adminData?.isAdmin || app.user?.role === 'founder');
+  listEl.innerHTML = payouts
+    .slice(0, 12)
+    .map((p) => {
+      const isPaid = p.status === 'paid';
+      return `
+        <div class="ledger-row" style="flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span class="badge ${isPaid ? 'green' : 'amber'}">${escapeHtml(isPaid ? t('payout.statusPaid') : t('payout.statusPending'))}</span>
+            <strong class="mono">${fmtUsd(p.amountUsd)} ${escapeHtml(p.token || 'USDC')}</strong>
+            <span class="badge cyan">${escapeHtml((p.chain || '').toUpperCase())}</span>
+            <span class="mono" style="font-size: 10px; color: var(--text-muted);">${escapeHtml(shortHash(p.address, 6, 4))}</span>
+          </div>
+          <div class="toolbar-group">
+            ${p.txHash ? `<span class="mono" style="font-size: 10px; color: var(--accent-cyan);" title="${escapeHtml(p.txHash)}">Tx: ${escapeHtml(shortHash(p.txHash, 8, 6))}</span>` : ''}
+            ${!isPaid && isFounder ? `<button type="button" class="btn btn-sm btn-green" data-mark-payout-paid="${escapeHtml(p.id)}">${escapeHtml(t('payout.markPaidBtn'))}</button>` : ''}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderMayorAdminSection() {
+  const section = $('mayor-admin-section');
+  const body = $('mayor-admin-body');
+  if (!section || !body) return;
+
+  const isAdmin = app.adminData?.isAdmin !== false;
+  section.style.display = isAdmin ? 'flex' : 'none';
+  body.classList.toggle('collapsed', app.adminPanelCollapsed);
+
+  const strictOn = Boolean(app.adminData?.strictDeviceReview ?? app.authConfig?.strictDeviceReview);
+  const toggleEl = $('toggle-strict-device-review');
+  const labelEl = $('strict-review-label');
+  const badgeEl = $('strict-review-badge');
+  if (toggleEl) toggleEl.checked = strictOn;
+  if (labelEl) labelEl.classList.toggle('active', strictOn);
+  if (badgeEl) badgeEl.textContent = strictOn ? t('admin.strictOn') : t('admin.strictOff');
+
+  // Devices list
+  const pending = app.adminData?.pendingDevices || [];
+  const allDevices = app.adminData?.allDevices || pending;
+  const countEl = $('admin-devices-count');
+  if (countEl) countEl.textContent = String(pending.length);
+
+  const devList = $('admin-devices-list');
+  if (devList) {
+    if (allDevices.length === 0) {
+      devList.innerHTML = `<div class="empty-state">${escapeHtml(t('admin.devicesEmpty'))}</div>`;
+    } else {
+      devList.innerHTML = allDevices
+        .slice(0, 12)
+        .map((d) => {
+          const isPending = d.status === 'pending_review';
+          const statusText =
+            d.status === 'approved'
+              ? t('admin.deviceApproved')
+              : d.status === 'rejected'
+                ? t('admin.deviceRejected')
+                : t('admin.devicePending');
+          const statusCls = d.status === 'approved' ? 'green' : d.status === 'rejected' ? 'red' : 'amber';
+          const toolsStr = (d.cliTools || []).join(', ');
+          return `
+            <div class="ledger-row" style="flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span class="badge ${statusCls}">${escapeHtml(statusText)}</span>
+                <strong class="mono">${escapeHtml(d.code)}</strong>
+                <span>${escapeHtml(d.deviceName || 'Device')} (${escapeHtml(d.os || 'OS')})</span>
+                ${toolsStr ? `<span class="badge cyan">${escapeHtml(toolsStr)}</span>` : ''}
+              </div>
+              <div class="toolbar-group">
+                ${
+                  isPending
+                    ? `<button type="button" class="btn btn-sm btn-green" data-review-device="${escapeHtml(d.code)}" data-review-action="approve">${escapeHtml(t('admin.approveBtn'))}</button>
+                       <button type="button" class="btn btn-sm btn-danger" data-review-device="${escapeHtml(d.code)}" data-review-action="reject">${escapeHtml(t('admin.rejectBtn'))}</button>`
+                    : `<span class="mono" style="font-size: 10px; color: var(--text-muted);">${escapeHtml(d.workerName || '')}</span>`
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+  }
+
+  // Redeem codes list
+  const codesEl = $('admin-codes-list');
+  const codes = app.adminData?.redeemCodes || [];
+  if (codesEl) {
+    if (codes.length === 0) {
+      codesEl.innerHTML = `<div class="empty-state">${escapeHtml(t('admin.codesEmpty'))}</div>`;
+    } else {
+      codesEl.innerHTML = codes
+        .slice(0, 12)
+        .map(
+          (c) => `
+            <div class="ledger-row" style="flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span class="badge ${c.used ? '' : 'green'}">${escapeHtml(c.used ? t('admin.codeUsed') : t('admin.codeUnused'))}</span>
+                <strong class="mono">${escapeHtml(c.code)}</strong>
+                <span class="badge pink">${escapeHtml(c.rewardType)}</span>
+                ${c.note ? `<span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(c.note)}</span>` : ''}
+              </div>
+              <button type="button" class="btn btn-sm" data-copy-redeem-code="${escapeHtml(c.code)}">${escapeHtml(t('admin.copyCodeBtn'))}</button>
+            </div>
+          `,
+        )
+        .join('');
+    }
+  }
 }
 
 // ============================================================================
 // Core Interactive Flows
 // ============================================================================
-async function releaseClaimedTask(taskId, workerId, reason = 'BYOK 執行中止，自動釋放任務') {
+async function releaseClaimedTask(taskId, workerId, reason = 'BYOK aborted') {
   try {
     const relRes = await apiFetch(`/api/tasks/${encodeURIComponent(taskId)}/release`, {
       method: 'POST',
@@ -1247,27 +1625,27 @@ async function releaseClaimedTask(taskId, workerId, reason = 'BYOK 執行中止�
       applyNewState(relRes.state);
     }
   } catch {
-    // Best-effort release; state_sync will reconcile if needed
+    // Best-effort release
   }
 }
 
 async function dispatchApiTask(taskId, explicitWorkerId = null) {
-  const task = (app.state?.tasks || []).find((t) => t.id === taskId);
+  const loc = getLocale();
+  const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
   if (!task) return;
   const workerId = explicitWorkerId || $('factory-worker-select')?.value;
   if (!workerId) {
-    showToast('請先選擇或招募一位 API 軌道小人！', 'warn');
+    showToast(t('toast.needApiWorker'), 'warn');
     return;
   }
   if (app.busyWorkers.has(workerId)) {
-    showToast('該小人正在瀏覽器端執行模型呼叫中，請稍候...', 'warn');
+    showToast(t('toast.workerBusy'), 'warn');
     return;
   }
 
   app.busyWorkers.add(workerId);
   let claimed = false;
   try {
-    // 1. Claim on server
     app.lastLocalMutationAt = Date.now();
     const claimRes = await apiFetch(`/api/tasks/${encodeURIComponent(taskId)}/claim`, {
       method: 'POST',
@@ -1279,29 +1657,31 @@ async function dispatchApiTask(taskId, explicitWorkerId = null) {
     app.engine?.triggerWorkerDispatch(workerId, claimRes.task, claimRes.project);
 
     const cfg = getByokConfig();
+    const lw = localizeWorker(claimRes.worker, loc);
     showToast(
-      `🚀 【${claimRes.worker.name}】已進駐自動工坊（${hasLiveApiKey(cfg) ? `BYOK ${cfg.model}` : '免金鑰擬真引擎'}）...`,
+      t('toast.dispatched', {
+        worker: lw.name,
+        mode: hasLiveApiKey(cfg) ? `BYOK ${cfg.model}` : t('toast.byokSimEngine'),
+      }),
       'info',
     );
 
-    // 2. Execute zero-trust BYOK runner in browser
     const runRes = await runApiTask(claimRes.task, claimRes.worker, cfg, {
       project: claimRes.project,
       onProgress: (msg) => {
         const hint = $('stage-overlay-hint');
-        if (hint) hint.textContent = `⚡ ${claimRes.worker.name}：${msg}`;
+        if (hint) hint.textContent = `⚡ ${lw.name}: ${msg}`;
       },
     });
 
     if (!runRes.ok) {
-      await releaseClaimedTask(taskId, workerId, runRes.error || 'BYOK 執行失敗');
+      await releaseClaimedTask(taskId, workerId, runRes.error || 'BYOK failed');
       claimed = false;
-      showToast(`${runRes.error || 'BYOK 執行失敗'}（已自動釋放任務與小人，修正後可重試）`, 'error', 5200);
+      showToast(t('toast.byokFailedReleased', { err: runRes.error || 'BYOK failed' }), 'error', 5200);
       soundFX.playReject();
       return;
     }
 
-    // 3. Submit deliverable to Proof of Accepted Work verifier
     app.lastLocalMutationAt = Date.now();
     const submitRes = await apiFetch(`/api/tasks/${encodeURIComponent(taskId)}/submit`, {
       method: 'POST',
@@ -1321,23 +1701,28 @@ async function dispatchApiTask(taskId, explicitWorkerId = null) {
       setTimeout(() => soundFX.playCoin(), 220);
       app.engine?.triggerTaskComplete(workerId, submitRes.rewards);
       const r = submitRes.rewards;
-      const bountyNote = r.bountyNetUsd > 0 ? `、懸賞實得 $${r.bountyNetUsd}` : '';
+      const bountyNote = r.bountyNetUsd > 0 ? t('toast.bountyNetNote', { net: r.bountyNetUsd }) : '';
       showToast(
-        `✅ 驗收通過（${submitRes.verification.score}分）！+${r.gold}G、+${r.contributionPoints} 貢獻點${bountyNote}`,
+        t('toast.taskPassed', {
+          score: submitRes.verification.score,
+          gold: r.gold,
+          pts: r.contributionPoints,
+          bounty: bountyNote,
+        }),
         'success',
         4200,
       );
     } else {
       soundFX.playReject();
-      showToast(`🛡️ 防作弊驗收未通過：${submitRes.verification.reason}`, 'error', 5000);
+      showToast(t('toast.antiCheatFailed', { reason: submitRes.verification.reason }), 'error', 5000);
     }
   } catch (err) {
     if (claimed) {
-      await releaseClaimedTask(taskId, workerId, err.message || '執行過程發生例外');
+      await releaseClaimedTask(taskId, workerId, err.message || 'Exception');
       claimed = false;
     }
     soundFX.playReject();
-    showToast(`派工失敗：${err.message}`, 'error', 4200);
+    showToast(t('toast.dispatchFailed', { err: err.message }), 'error', 4200);
   } finally {
     app.busyWorkers.delete(workerId);
     renderFactoryTab();
@@ -1356,11 +1741,11 @@ function setAutoPilot(enabled) {
   }
 
   if (app.autoPilotOn) {
-    showToast('🤖 自動掛機（Auto-Pilot）已啟動！將自動幫閒置 API 小人接單並跑完驗收。', 'success');
+    showToast(t('toast.autopilotOn'), 'success');
     runAutoPilotTick();
     app.autoPilotTimer = setInterval(runAutoPilotTick, 6000);
   } else {
-    showToast('⏹️ 已暫停自動掛機模式。', 'info');
+    showToast(t('toast.autopilotOff'), 'info');
   }
 }
 
@@ -1372,11 +1757,11 @@ async function runAutoPilotTick() {
   if (!idleApiWorker) return;
 
   const openApiTask = (app.state.tasks || []).find(
-    (t) =>
-      t.track === 'api_auto' &&
-      t.status === 'open' &&
-      idleApiWorker.stamina >= (t.staminaCost || 12) &&
-      (idleApiWorker.usedTokensToday || 0) + (t.tokenCostEst || 0) <= (idleApiWorker.dailyTokenCap || 9999999),
+    (tk) =>
+      tk.track === 'api_auto' &&
+      tk.status === 'open' &&
+      idleApiWorker.stamina >= (tk.staminaCost || 12) &&
+      (idleApiWorker.usedTokensToday || 0) + (tk.tokenCostEst || 0) <= (idleApiWorker.dailyTokenCap || 9999999),
   );
   if (!openApiTask) return;
 
@@ -1387,15 +1772,15 @@ async function runAutoPilotTick() {
 // Guild Workbench (BYOT) Flow
 // ============================================================================
 async function openGuildWorkbench(taskId) {
-  const task = (app.state?.tasks || []).find((t) => t.id === taskId);
+  const loc = getLocale();
+  const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
   if (!task) return;
   const workerId = task.assignedWorkerId || $('guild-worker-select')?.value;
   const project = (app.state?.projects || []).find((p) => p.id === task.projectId);
 
-  // If task is still open, claim it first so the pixel worker walks to the Guild desk!
   if (task.status === 'open') {
     if (!workerId) {
-      showToast('請先選擇或招募一位月/週額度軌道小人！', 'warn');
+      showToast(t('toast.needGuildWorker'), 'warn');
       return;
     }
     try {
@@ -1407,30 +1792,34 @@ async function openGuildWorkbench(taskId) {
       applyNewState(claimRes.state);
       soundFX.playDispatch();
       app.engine?.triggerWorkerDispatch(workerId, claimRes.task, claimRes.project);
-      showToast(`⚔️ 【${claimRes.worker.name}】已撕下懸賞令並就座工會工作台！`, 'success');
+      const lw = localizeWorker(claimRes.worker, loc);
+      showToast(t('toast.guildClaimed', { worker: lw.name }), 'success');
     } catch (err) {
       soundFX.playReject();
-      showToast(`無法接單：${err.message}`, 'error');
+      showToast(t('toast.claimFailed', { err: err.message }), 'error');
       return;
     }
   }
 
-  const freshTask = (app.state?.tasks || []).find((t) => t.id === taskId) || task;
+  const freshTask = (app.state?.tasks || []).find((tk) => tk.id === taskId) || task;
+  const lt = localizeTask(freshTask, loc);
+  const lp = project ? localizeProject(project, loc) : null;
   const assignedWorker = (app.state?.workers || []).find((w) => w.id === (freshTask.assignedWorkerId || workerId));
+  const lw = assignedWorker ? localizeWorker(assignedWorker, loc) : null;
   app.activeGuildTaskId = freshTask.id;
 
-  $('guild-modal-title').textContent = `⚔️ 工會工作台：${freshTask.title}`;
+  $('guild-modal-title').textContent = t('modal.guild.titleWithTask', { title: lt.title });
   $('guild-modal-meta').innerHTML = `
-    <span class="badge">📦 ${escapeHtml(project?.shortName || freshTask.projectId)}</span>
-    <span class="badge cyan">👾 小人：${escapeHtml(assignedWorker?.name || '工會小人')}</span>
+    <span class="badge">📦 ${escapeHtml(lp?.shortName || freshTask.projectId)}</span>
+    <span class="badge cyan">${escapeHtml(t('modal.guild.workerBadge', { name: lw?.name || 'Worker' }))}</span>
     <span class="badge gold">🪙 +${freshTask.goldReward}G</span>
-    <span class="badge pink">✨ +${freshTask.contributionPoints} 貢獻</span>
-    ${freshTask.cashBountyUsd > 0 ? `<span class="badge green">💰 懸賞 $${freshTask.cashBountyUsd}（實得 $${(freshTask.cashBountyUsd * 0.9).toFixed(2)}）</span>` : ''}
+    <span class="badge pink">${escapeHtml(t('modal.guild.pointsBadge', { pts: freshTask.contributionPoints }))}</span>
+    ${freshTask.cashBountyUsd > 0 ? `<span class="badge green">${escapeHtml(t('modal.guild.bountyBadge', { gross: freshTask.cashBountyUsd, net: (freshTask.cashBountyUsd * 0.9).toFixed(2) }))}</span>` : ''}
   `;
 
-  const criteriaArr = Array.isArray(freshTask.acceptanceCriteria) ? freshTask.acceptanceCriteria : [];
+  const criteriaArr = Array.isArray(lt.acceptanceCriteria) ? lt.acceptanceCriteria : [];
   $('guild-modal-criteria').innerHTML = `
-    <span><strong>驗收條件：</strong>${escapeHtml(criteriaArr.join(' ｜ ') || '提供完整可驗證實作程式碼或合法 GitHub PR 連結')}</span>
+    <span><strong>${escapeHtml(t('modal.guild.criteriaPrefix'))}</strong>${escapeHtml(criteriaArr.join(' ｜ ') || t('modal.guild.criteriaFallback'))}</span>
   `;
 
   $('guild-context-pack').value = buildTaskPrompt(freshTask, project);
@@ -1448,7 +1837,7 @@ async function openGuildWorkbench(taskId) {
 
 async function simulateLocalCliDelivery() {
   const taskId = app.activeGuildTaskId;
-  const task = (app.state?.tasks || []).find((t) => t.id === taskId);
+  const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
   if (!task) return;
   const workerId = task.assignedWorkerId || $('guild-worker-select')?.value;
   const worker = (app.state?.workers || []).find((w) => w.id === workerId);
@@ -1458,11 +1847,19 @@ async function simulateLocalCliDelivery() {
   if (btn) btn.disabled = true;
 
   try {
-    const steps = [
-      { pct: 25, msg: '啟動本機 Gemini CLI 並載入 Context Pack...' },
-      { pct: 62, msg: '正在生成核心實作 Diff 與邊界單元測試...' },
-      { pct: 95, msg: '本機測試全數綠燈，準備打包交付報告...' },
-    ];
+    const loc = getLocale();
+    const steps =
+      loc === 'en'
+        ? [
+            { pct: 25, msg: 'Booting local Gemini CLI & loading Context Pack...' },
+            { pct: 62, msg: 'Generating core implementation diff & edge-case tests...' },
+            { pct: 95, msg: 'All local tests green — packaging deliverable report...' },
+          ]
+        : [
+            { pct: 25, msg: '啟動本機 Gemini CLI 並載入 Context Pack...' },
+            { pct: 62, msg: '正在生成核心實作 Diff 與邊界單元測試...' },
+            { pct: 95, msg: '本機測試全數綠燈，準備打包交付報告...' },
+          ];
 
     for (const s of steps) {
       await apiFetch('/api/cli/heartbeat', {
@@ -1486,9 +1883,9 @@ async function simulateLocalCliDelivery() {
       $('guild-submit-pr-url').value = prMatch[0];
     }
     soundFX.playDispatch();
-    showToast('⚡ 本機 CLI 模擬執行完成並已直播心跳至像素小鎮！請確認內容後點擊「提交成果並驗收結算」。', 'success', 4500);
+    showToast(t('toast.simCliDone'), 'success', 4500);
   } catch (err) {
-    showToast(`模擬 CLI 心跳失敗：${err.message}`, 'error');
+    showToast(t('toast.simCliFailed', { err: err.message }), 'error');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1497,13 +1894,13 @@ async function simulateLocalCliDelivery() {
 async function submitGuildTask() {
   const taskId = app.activeGuildTaskId;
   if (!taskId) return;
-  const task = (app.state?.tasks || []).find((t) => t.id === taskId);
+  const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
   const workerId = task?.assignedWorkerId || $('guild-worker-select')?.value;
   const content = $('guild-submit-content').value.trim();
   const prUrl = $('guild-submit-pr-url').value.trim();
 
   if (!content && !prUrl) {
-    showToast('請先貼上交付內容或 GitHub PR 連結（或點擊「模擬本機 CLI 交付」體驗）！', 'warn');
+    showToast(t('toast.needGuildContent'), 'warn');
     return;
   }
 
@@ -1529,20 +1926,26 @@ async function submitGuildTask() {
       app.engine?.triggerTaskComplete(workerId, res.rewards);
       closeModal('modal-guild');
       const r = res.rewards;
-      const bountyNote = r.bountyNetUsd > 0 ? `、懸賞實得 $${r.bountyNetUsd}（10% 服務費 $${r.platformFeeUsd}）` : '';
+      const bountyNote =
+        r.bountyNetUsd > 0 ? t('toast.bountyNetFeeNote', { net: r.bountyNetUsd, fee: r.platformFeeUsd }) : '';
       showToast(
-        `✅ 工會大單驗收通過（${res.verification.score}分）！+${r.gold}G、+${r.contributionPoints} 貢獻點${bountyNote}`,
+        t('toast.guildPassed', {
+          score: res.verification.score,
+          gold: r.gold,
+          pts: r.contributionPoints,
+          bounty: bountyNote,
+        }),
         'success',
         4800,
       );
     } else {
       soundFX.playReject();
-      showToast(`🛡️ 防作弊攔截：${res.verification.reason}`, 'error', 5500);
+      showToast(t('toast.guildIntercepted', { reason: res.verification.reason }), 'error', 5500);
       openTaskReportModal(taskId);
     }
   } catch (err) {
     soundFX.playReject();
-    showToast(`提交驗收失敗：${err.message}`, 'error');
+    showToast(t('toast.submitFailed', { err: err.message }), 'error');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1552,18 +1955,20 @@ async function submitGuildTask() {
 // Deliverable & Verifier Report Viewer
 // ============================================================================
 function openTaskReportModal(taskId) {
-  const task = (app.state?.tasks || []).find((t) => t.id === taskId);
+  const loc = getLocale();
+  const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
   if (!task) return;
+  const lt = localizeTask(task, loc);
 
   const verification = task.verification || task.lastRejectedVerification;
   const submission = task.submission;
 
-  $('report-modal-title').textContent = `📋 交付與驗收報告：${task.title}`;
+  $('report-modal-title').textContent = t('modal.report.titleWithTask', { title: lt.title });
   $('report-summary-bar').innerHTML = `
-    <span class="badge ${verification?.passed ? 'green' : 'red'}">${verification?.passed ? '✅ 驗收通過' : '❌ 驗收攔截'}</span>
-    <span class="badge amber">品質評分：${verification?.score ?? 0} / 100</span>
-    ${submission?.executionMode ? `<span class="badge cyan">執行模式：${escapeHtml(submission.executionMode)}</span>` : ''}
-    ${submission?.prUrl ? `<span class="badge pink">PR：${escapeHtml(submission.prUrl)}</span>` : ''}
+    <span class="badge ${verification?.passed ? 'green' : 'red'}">${escapeHtml(verification?.passed ? t('modal.report.passed') : t('modal.report.rejected'))}</span>
+    <span class="badge amber">${escapeHtml(t('modal.report.score', { score: verification?.score ?? 0 }))}</span>
+    ${submission?.executionMode ? `<span class="badge cyan">${escapeHtml(t('modal.report.mode', { mode: submission.executionMode }))}</span>` : ''}
+    ${submission?.prUrl ? `<span class="badge pink">PR: ${escapeHtml(submission.prUrl)}</span>` : ''}
   `;
 
   const checks = verification?.checks || [];
@@ -1578,9 +1983,9 @@ function openTaskReportModal(taskId) {
         `,
         )
         .join('')
-    : '<div class="empty-state">無細項驗收紀錄</div>';
+    : `<div class="empty-state">${escapeHtml(t('modal.report.noChecks'))}</div>`;
 
-  app.activeReportText = submission?.content || verification?.reason || '（無交付內容）';
+  app.activeReportText = submission?.content || verification?.reason || t('modal.report.emptyContent');
   $('report-deliverable-code').textContent = app.activeReportText;
   openModal('modal-report');
 }
@@ -1603,7 +2008,7 @@ function updateByokProviderUI(provider, currentModel = '') {
   const presets = PRESET_MODELS[provider] || PRESET_MODELS.gemini;
   const presetSelect = $('byok-model-presets');
   presetSelect.innerHTML =
-    '<option value="">-- 選擇推薦模型 --</option>' +
+    `<option value="">${escapeHtml(t('modal.settings.presetsPlaceholder'))}</option>` +
     presets.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.label)}</option>`).join('');
   if (presets.some((m) => m.id === currentModel)) {
     presetSelect.value = currentModel;
@@ -1636,33 +2041,37 @@ function connectSse() {
   const sse = new EventSource('/api/events');
   app.sse = sse;
 
-  const setSseStatus = (state, text) => {
+  const setSseStatus = (state) => {
+    app.sseState = state;
     const dot = $('sse-dot');
-    const label = $('sse-label');
     if (dot) {
       dot.classList.remove('live', 'offline');
       if (state === 'live') dot.classList.add('live');
       if (state === 'offline') dot.classList.add('offline');
     }
-    if (label) label.textContent = text;
+    updateSseLabel();
   };
 
   sse.addEventListener('connected', () => {
-    setSseStatus('live', 'SSE 即時連線');
+    setSseStatus('live');
   });
 
   sse.addEventListener('cli_heartbeat', (evt) => {
     try {
       const data = JSON.parse(evt.data);
-      app.engine?.triggerCliActivity(data.workerId, data.message || '本機 CLI 同步中...');
+      app.engine?.triggerCliActivity(data.workerId, data.message || 'CLI syncing...');
       const hint = $('stage-overlay-hint');
       if (hint) {
         const pct = data.progressPct != null ? ` (${data.progressPct}%)` : '';
-        hint.textContent = `💻 [CLI] ${data.workerName || '小人'}：${data.message}${pct}`;
+        hint.textContent = t('stage.cliHint', {
+          name: data.workerName || 'Worker',
+          msg: data.message,
+          pct,
+        });
       }
       scheduleBootstrapRefresh();
     } catch {
-      // ignore malformed payload
+      // ignore
     }
   });
 
@@ -1717,24 +2126,29 @@ function connectSse() {
     }
   });
 
-  sse.addEventListener('tasks_imported', () => {
-    if (Date.now() - app.lastLocalMutationAt < 500) return;
-    scheduleBootstrapRefresh();
-  });
+  for (const evtName of [
+    'tasks_imported',
+    'payment_confirmed',
+    'code_redeemed',
+    'payout_requested',
+    'payout_paid',
+    'device_reviewed',
+    'settings_updated',
+    'state_sync',
+  ]) {
+    sse.addEventListener(evtName, () => {
+      if (Date.now() - app.lastLocalMutationAt < 500) return;
+      scheduleBootstrapRefresh();
+    });
+  }
 
   sse.addEventListener('world_reset', () => {
     resetTransientUiAfterWorldReset();
     scheduleBootstrapRefresh();
   });
 
-  sse.addEventListener('state_sync', () => {
-    // Avoid redundant fetch right after our own HTTP mutation already applied the fresh state
-    if (Date.now() - app.lastLocalMutationAt < 500) return;
-    scheduleBootstrapRefresh();
-  });
-
   sse.onerror = () => {
-    setSseStatus('offline', 'SSE 重連中...');
+    setSseStatus('offline');
   };
 }
 
@@ -1742,18 +2156,7 @@ function scheduleBootstrapRefresh() {
   if (app.syncDebounceTimer) return;
   app.syncDebounceTimer = setTimeout(async () => {
     app.syncDebounceTimer = null;
-    try {
-      const data = await apiFetch('/api/bootstrap');
-      app.user = data.user;
-      app.state = data.state;
-      app.shopItems = data.shopItems || app.shopItems;
-      app.workerTemplates = data.workerTemplates || app.workerTemplates;
-      app.config = data.config || app.config;
-      app.engine?.syncState(app.state);
-      renderAll();
-    } catch {
-      // keep existing state on transient error
-    }
+    await refreshBootstrapNow();
   }, 240);
 }
 
@@ -1770,15 +2173,12 @@ function bindEvents() {
   });
 
   // Quick HD scene nav chips (6 scenes)
-  document.querySelectorAll('.quick-chip').forEach((chip) => {
+  document.querySelectorAll('.quick-chip[data-scene]').forEach((chip) => {
     chip.addEventListener('click', () => {
       const sceneId = chip.dataset.scene || chip.dataset.building;
       if (!sceneId) return;
-      if (sceneId === 'town') {
-        selectScene('town', { syncTab: false });
-      } else {
-        selectScene(sceneId, { syncTab: true });
-      }
+      if (sceneId === 'town') selectScene('town', { syncTab: false });
+      else selectScene(sceneId, { syncTab: true });
     });
   });
 
@@ -1825,6 +2225,8 @@ function bindEvents() {
   });
 
   // HUD controls
+  $('hud-user-badge').addEventListener('click', () => openAuthModal('login'));
+
   $('btn-day-night').addEventListener('click', () => {
     app.dayNight = app.dayNight === 'night' ? 'day' : 'night';
     document.body.dataset.theme = app.dayNight;
@@ -1836,7 +2238,7 @@ function bindEvents() {
   $('btn-sound-toggle').addEventListener('click', () => {
     const enabled = soundFX.toggle();
     $('btn-sound-toggle').textContent = enabled ? '🔊' : '🔇';
-    showToast(enabled ? '🔊 已開啟 8-bit 復古音效' : '🔇 已靜音', 'info', 1800);
+    showToast(enabled ? t('toast.soundOn') : t('toast.soundOff'), 'info', 1800);
   });
 
   $('btn-open-cert').addEventListener('click', openCertModal);
@@ -1846,8 +2248,12 @@ function bindEvents() {
 
   $('btn-copy-share-text').addEventListener('click', () => {
     const p = app.state?.player || {};
-    const text = `剛把我的閒置 Gemini 額度派去《像素算力鎮 PixelCompute Town》打工啦！👾\n目前信譽 ${p.reputation ?? 100}、已通過 ${p.completedTasks ?? 0} 張 Proof of Accepted Work 驗收、累計獲得 ${fmtUsd(p.usdBalance)}！\n#PixelComputeTown #IndieDev #GeminiAPI`;
-    copyText(text, '📋 已複製炫耀貼文，快配上打工證 PNG 發推吧！');
+    const text = t('modal.cert.shareText', {
+      rep: p.reputation ?? 100,
+      tasks: p.completedTasks ?? 0,
+      usd: fmtUsd(p.usdBalance),
+    });
+    copyText(text, t('toast.shareCopied'));
   });
 
   $('btn-open-settings').addEventListener('click', () => {
@@ -1863,14 +2269,349 @@ function bindEvents() {
     openModal('modal-settings');
   });
 
-  $('btn-logout').addEventListener('click', async () => {
+  const handleLogoutClick = async () => {
     try {
       const res = await apiFetch('/api/auth/logout', { method: 'POST' });
       app.user = res.user;
-      showToast(res.message || '已登出並切回創始開發者 Demo 模式', 'info');
-      scheduleBootstrapRefresh();
+      if (res.state) applyNewState(res.state, { silentAchievements: true });
+      await refreshBootstrapNow({ silentAchievements: true });
+      closeModal('auth-modal');
+      showToast(t('toast.authLogoutOk'), 'info');
     } catch (err) {
-      showToast(`登出失敗：${err.message}`, 'error');
+      showToast(err.message, 'error');
+    }
+  };
+  $('btn-logout').addEventListener('click', handleLogoutClick);
+  $('auth-btn-logout').addEventListener('click', handleLogoutClick);
+
+  // Auth Modal (#auth-modal) events
+  document.querySelectorAll('#auth-modal [data-auth-mode]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      soundFX.playClick();
+      setAuthModalMode(btn.dataset.authMode);
+    });
+  });
+
+  $('auth-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('auth-email').value.trim();
+    const password = $('auth-password').value;
+    const displayName = $('auth-display-name').value.trim();
+    const errEl = $('auth-error-msg');
+    const submitBtn = $('auth-submit-btn');
+
+    if (errEl) errEl.style.display = 'none';
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const isReg = app.authModalMode === 'register';
+      const endpoint = isReg ? '/api/auth/register' : '/api/auth/login';
+      const payload = isReg ? { email, password, displayName: displayName || undefined } : { email, password };
+      const res = await apiFetch(endpoint, { method: 'POST', body: payload });
+      app.user = res.user;
+      if (res.state) {
+        applyNewState(res.state, { silentAchievements: true });
+        seedSeenAchievements(res.state);
+      }
+      await refreshBootstrapNow({ silentAchievements: true });
+      $('auth-form').reset();
+      closeModal('auth-modal');
+      soundFX.playVerify();
+      const locUser = localizeUser(res.user, getLocale());
+      showToast(
+        isReg ? t('toast.authRegisterOk', { name: locUser.displayName }) : t('toast.authLoginOk', { name: locUser.displayName }),
+        'success',
+      );
+    } catch (err) {
+      soundFX.playReject();
+      if (errEl) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+      }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
+  $('auth-btn-demo').addEventListener('click', async () => {
+    try {
+      const res = await apiFetch('/api/auth/demo', { method: 'POST', body: {} });
+      app.user = res.user;
+      if (res.state) {
+        applyNewState(res.state, { silentAchievements: true });
+        seedSeenAchievements(res.state);
+      }
+      await refreshBootstrapNow({ silentAchievements: true });
+      closeModal('auth-modal');
+      soundFX.playClick();
+      showToast(t('toast.authDemoOk'), 'info');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // Payment Modal (#payment-modal) events
+  document.querySelectorAll('#payment-modal [data-pay-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      soundFX.playClick();
+      setPaymentModalTab(btn.dataset.payTab);
+    });
+  });
+
+  $('btn-pay-create-order').addEventListener('click', async () => {
+    const chain = $('pay-chain').value;
+    const token = $('pay-token').value;
+    const btn = $('btn-pay-create-order');
+    btn.disabled = true;
+    showPaymentStatus('');
+    try {
+      const res = await apiFetch('/api/payments/stablecoin/create', {
+        method: 'POST',
+        body: {
+          productId: app.payModal.productId,
+          targetProjectId: app.payModal.targetProjectId || undefined,
+          chain,
+          token,
+        },
+      });
+      app.payModal.activeStablecoinOrder = res.order;
+      $('pay-receiver-addr').textContent = res.order.receiverAddress;
+      $('pay-exact-amount').textContent = `${fmtUsd(res.order.amountUsd)} ${res.order.token} (${res.order.chain.toUpperCase()})`;
+      $('pay-memo-code').textContent = res.order.memoCode;
+      $('pay-order-box').style.display = 'flex';
+      soundFX.playClick();
+      showToast(t('toast.payOrderCreated'), 'info', 3800);
+    } catch (err) {
+      soundFX.playReject();
+      showPaymentStatus(`❌ ${err.message}`, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('btn-copy-pay-addr').addEventListener('click', () => {
+    const addr = $('pay-receiver-addr').textContent.trim();
+    if (addr) copyText(addr);
+  });
+
+  const confirmStablecoin = async (simulate) => {
+    const order = app.payModal.activeStablecoinOrder;
+    if (!order) return;
+    const txHash = $('pay-tx-hash').value.trim();
+    const verifyBtn = $('btn-pay-verify-tx');
+    const simBtn = $('btn-pay-sim-tx');
+    verifyBtn.disabled = true;
+    simBtn.disabled = true;
+    try {
+      const res = await apiFetch('/api/payments/stablecoin/confirm', {
+        method: 'POST',
+        body: {
+          orderId: order.id,
+          txHash: simulate ? undefined : txHash,
+          simulate,
+        },
+      });
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      soundFX.playCoin();
+      showToast(t('toast.payConfirmed'), 'success', 4500);
+      closeModal('payment-modal');
+    } catch (err) {
+      soundFX.playReject();
+      showPaymentStatus(`❌ ${err.message}`, true);
+    } finally {
+      verifyBtn.disabled = false;
+      simBtn.disabled = false;
+    }
+  };
+
+  $('btn-pay-verify-tx').addEventListener('click', () => confirmStablecoin(false));
+  $('btn-pay-sim-tx').addEventListener('click', () => confirmStablecoin(true));
+
+  const startCardCheckout = async (provider) => {
+    showPaymentStatus('');
+    try {
+      const res = await apiFetch('/api/payments/checkout', {
+        method: 'POST',
+        body: {
+          productId: app.payModal.productId,
+          provider,
+          targetProjectId: app.payModal.targetProjectId || undefined,
+        },
+      });
+      if (res.checkoutUrl && !res.sandboxMode) {
+        window.open(res.checkoutUrl, '_blank', 'noopener,noreferrer');
+        showPaymentStatus(`🌐 ${provider.toUpperCase()} Checkout opened: ${res.checkoutUrl}`);
+        return;
+      }
+      app.payModal.activeCardOrder = res.order;
+      $('pay-card-sandbox-msg').textContent = t('pay.sandboxCardReady', {
+        orderId: res.order.id,
+        provider: provider.toUpperCase(),
+        amount: fmtUsd(res.order.amountUsd),
+      });
+      $('pay-card-sandbox-box').style.display = 'flex';
+      soundFX.playClick();
+    } catch (err) {
+      soundFX.playReject();
+      showPaymentStatus(`❌ ${err.message}`, true);
+    }
+  };
+
+  $('btn-pay-polar').addEventListener('click', () => startCardCheckout('polar'));
+  $('btn-pay-stripe').addEventListener('click', () => startCardCheckout('stripe'));
+
+  $('btn-pay-sandbox-complete').addEventListener('click', async () => {
+    const order = app.payModal.activeCardOrder;
+    if (!order) return;
+    const btn = $('btn-pay-sandbox-complete');
+    btn.disabled = true;
+    try {
+      const res = await apiFetch('/api/payments/sandbox/complete', {
+        method: 'POST',
+        body: { orderId: order.id },
+      });
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      soundFX.playCoin();
+      showToast(t('toast.payConfirmed'), 'success', 4500);
+      closeModal('payment-modal');
+    } catch (err) {
+      soundFX.playReject();
+      showPaymentStatus(`❌ ${err.message}`, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.querySelectorAll('[data-fill-redeem]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      $('pay-redeem-code').value = chip.dataset.fillRedeem;
+      soundFX.playClick();
+    });
+  });
+
+  $('pay-redeem-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('pay-redeem-code').value.trim();
+    if (!code) return;
+    const btn = $('btn-pay-redeem');
+    btn.disabled = true;
+    showPaymentStatus('');
+    try {
+      const res = await apiFetch('/api/payments/redeem', {
+        method: 'POST',
+        body: {
+          code,
+          targetProjectId: app.payModal.targetProjectId || undefined,
+        },
+      });
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      soundFX.playCoin();
+      showToast(t('toast.payRedeemOk', { detail: res.rewardSummary || res.code }), 'success', 4500);
+      closeModal('payment-modal');
+    } catch (err) {
+      soundFX.playReject();
+      showPaymentStatus(`❌ ${err.message}`, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Stablecoin Wallet Bind & Payout forms
+  $('wallet-bind-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const chain = $('wallet-chain').value;
+    const address = $('wallet-address').value.trim();
+    try {
+      const res = await apiFetch('/api/wallet/bind', {
+        method: 'POST',
+        body: { chain, address },
+      });
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      soundFX.playVerify();
+      showToast(t('toast.walletBound', { chain: chain.toUpperCase() }), 'success');
+    } catch (err) {
+      soundFX.playReject();
+      showToast(err.message, 'error');
+    }
+  });
+
+  const submitPayoutRequest = async (simulateInstant) => {
+    const amountUsd = Number($('payout-amount').value);
+    const token = $('payout-token').value;
+    const chain = $('wallet-chain').value;
+    try {
+      const res = await apiFetch('/api/payouts/request', {
+        method: 'POST',
+        body: { amountUsd, chain, token, simulateInstant },
+      });
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      soundFX.playCoin();
+      showToast(t('toast.payoutCreated', { amount: amountUsd.toFixed(2) }), 'success', 4200);
+    } catch (err) {
+      soundFX.playReject();
+      showToast(err.message, 'error');
+    }
+  };
+
+  $('payout-request-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitPayoutRequest(false);
+  });
+
+  $('btn-request-payout-instant').addEventListener('click', () => submitPayoutRequest(true));
+
+  // Mayor Admin Controls
+  $('btn-toggle-admin').addEventListener('click', () => {
+    app.adminPanelCollapsed = !app.adminPanelCollapsed;
+    renderMayorAdminSection();
+    soundFX.playClick();
+  });
+
+  $('toggle-strict-device-review').addEventListener('change', async (e) => {
+    const strictDeviceReview = Boolean(e.target.checked);
+    try {
+      const res = await apiFetch('/api/admin/settings', {
+        method: 'PATCH',
+        body: { strictDeviceReview },
+      });
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      soundFX.playClick();
+      showToast(
+        t('toast.adminStrictChanged', { state: strictDeviceReview ? t('admin.strictOn') : t('admin.strictOff') }),
+        'info',
+      );
+    } catch (err) {
+      e.target.checked = !strictDeviceReview;
+      soundFX.playReject();
+      showToast(err.message, 'error');
+    }
+  });
+
+  $('admin-code-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const rewardType = $('admin-code-type').value;
+    const count = Number($('admin-code-count').value) || 1;
+    const note = $('admin-code-note').value.trim();
+    try {
+      const res = await apiFetch('/api/admin/codes/generate', {
+        method: 'POST',
+        body: { rewardType, count, note },
+      });
+      if (res.redeemCodes) app.adminData.redeemCodes = res.redeemCodes;
+      if (res.state) applyNewState(res.state);
+      await refreshBootstrapNow();
+      $('admin-code-note').value = '';
+      soundFX.playCoin();
+      showToast(t('toast.adminCodesGenerated', { count: res.codes?.length || count }), 'success');
+    } catch (err) {
+      soundFX.playReject();
+      showToast(err.message, 'error');
     }
   });
 
@@ -1894,7 +2635,7 @@ function bindEvents() {
   $('btn-test-byok').addEventListener('click', async () => {
     const resultBox = $('byok-test-result');
     resultBox.style.display = 'block';
-    resultBox.textContent = '⏳ 正在由瀏覽器直連模型端點進行測試...';
+    resultBox.textContent = t('toast.byokTesting');
     const res = await testConnection(readByokFormValues());
     resultBox.textContent = `${res.ok ? '✅' : '❌'} ${res.message}`;
     if (res.ok) soundFX.playVerify();
@@ -1905,7 +2646,7 @@ function bindEvents() {
     saveByokConfig(readByokFormValues());
     renderByokIndicator();
     soundFX.playCoin();
-    showToast('💾 BYOK 設定已安全儲存於你的本機瀏覽器（絕不上傳伺服器）！', 'success');
+    showToast(t('toast.byokSaved'), 'success');
     closeModal('modal-settings');
   });
 
@@ -1913,11 +2654,11 @@ function bindEvents() {
     clearByokKey();
     syncByokModalFields();
     renderByokIndicator();
-    showToast('🗑️ 已清除瀏覽器內儲存的 API Key，切換回免金鑰擬真體驗模式。', 'info');
+    showToast(t('toast.byokCleared'), 'info');
   });
 
   $('btn-copy-quick-cli').addEventListener('click', () => {
-    copyText($('cli-quick-cmd').textContent, '📋 已複製本機 CLI 指令！');
+    copyText($('cli-quick-cmd').textContent, t('toast.cliCopied'));
   });
 
   // Factory filters & Auto-Pilot
@@ -1928,10 +2669,10 @@ function bindEvents() {
   // Guild filters & Workbench actions
   $('guild-project-filter').addEventListener('change', renderGuildTab);
   $('btn-copy-context-pack').addEventListener('click', () => {
-    copyText($('guild-context-pack').value, '📋 已複製標準化 Context Pack，直接貼給 Gemini CLI / Claude Code 即可！');
+    copyText($('guild-context-pack').value, t('toast.contextPackCopied'));
   });
   $('btn-copy-cli-cmd').addEventListener('click', () => {
-    copyText($('guild-cli-cmd').textContent, '📋 已複製 pixel-worker 本機同步指令！');
+    copyText($('guild-cli-cmd').textContent, t('toast.pixelWorkerCopied'));
   });
   $('btn-guild-sim-cli').addEventListener('click', simulateLocalCliDelivery);
   $('btn-guild-submit').addEventListener('click', submitGuildTask);
@@ -1940,21 +2681,26 @@ function bindEvents() {
     const prUrl = $('guild-submit-pr-url').value.trim();
     const out = $('guild-pr-verify-result');
     if (!prUrl) {
-      out.textContent = '請先輸入 GitHub PR 網址。';
+      out.textContent = t('toast.prNeedUrl');
       return;
     }
-    out.textContent = '🔍 正在驗證 GitHub PR 格式與狀態...';
+    out.textContent = t('toast.prChecking');
     try {
       const res = await apiFetch('/api/github/verify-pr', {
         method: 'POST',
         body: { prUrl },
       });
       const remoteNote = res.remoteStatus?.title
-        ? `｜標題：${res.remoteStatus.title} (${res.remoteStatus.merged ? '已合併' : res.remoteStatus.state})`
+        ? ` | ${res.remoteStatus.title} (${res.remoteStatus.merged ? 'merged' : res.remoteStatus.state})`
         : res.remoteStatus?.note
-          ? `｜${res.remoteStatus.note}`
+          ? ` | ${res.remoteStatus.note}`
           : '';
-      out.textContent = `✅ 格式合法：${res.pr.owner}/${res.pr.repo} #${res.pr.pullNumber}${remoteNote}`;
+      out.textContent = t('toast.prValid', {
+        owner: res.pr.owner,
+        repo: res.pr.repo,
+        num: res.pr.pullNumber,
+        note: remoteNote,
+      });
       soundFX.playVerify();
     } catch (err) {
       out.textContent = `❌ ${err.message}`;
@@ -1964,7 +2710,7 @@ function bindEvents() {
 
   // Report copy
   $('btn-copy-report').addEventListener('click', () => {
-    copyText(app.activeReportText, '📋 已複製交付成果原文！');
+    copyText(app.activeReportText, t('toast.reportCopied'));
   });
 
   // Propose Project Modal & Form
@@ -1992,18 +2738,19 @@ function bindEvents() {
       soundFX.playVerify();
       $('propose-form').reset();
       closeModal('modal-propose');
-      showToast(`💡 新項目《${res.project.name}》已上牆開放社群投票！`, 'success');
+      showToast(t('toast.proposed', { name: res.project.name }), 'success');
     } catch (err) {
       soundFX.playReject();
-      showToast(`提案失敗：${err.message}`, 'error');
+      showToast(t('toast.proposeFailed', { err: err.message }), 'error');
     }
   });
 
-  // Recruit Worker Form (auto-fill defaults when role changes)
+  // Recruit Worker Form
   $('recruit-role').addEventListener('change', (e) => {
-    const tpl = (app.workerTemplates || []).find((t) => t.roleClass === e.target.value);
+    const tpl = (app.workerTemplates || []).find((item) => item.roleClass === e.target.value);
     if (tpl) {
-      $('recruit-provider').value = tpl.defaultProvider;
+      const lw = localizeWorker({ roleClass: tpl.roleClass, providerLabel: tpl.defaultProvider }, getLocale());
+      $('recruit-provider').value = lw.providerLabel || tpl.defaultProvider;
       $('recruit-cap').value = tpl.defaultCap;
     }
   });
@@ -2023,23 +2770,27 @@ function bindEvents() {
       applyNewState(res.state);
       soundFX.playVerify();
       $('recruit-name').value = '';
-      showToast(`👾 成功招募新小人【${res.worker.name}】進駐小鎮！`, 'success');
+      showToast(t('toast.recruited', { name: res.worker.name }), 'success');
     } catch (err) {
       soundFX.playReject();
-      showToast(`招募失敗：${err.message}`, 'error');
+      showToast(t('toast.recruitFailed', { err: err.message }), 'error');
     }
   });
 
-  // Trilingual live language switcher
+  // Trilingual live language switcher (100% synced across DOM + Canvas + Cert)
   document.querySelectorAll('#lang-switch [data-lang]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const lang = btn.dataset.lang;
-      setLang(lang);
+      setLocale(lang);
       document.querySelectorAll('#lang-switch [data-lang]').forEach((b) => {
         b.classList.toggle('active', b.dataset.lang === lang);
       });
-      applyI18nToDom();
+      applyI18n();
+      if (app.engine && typeof app.engine.setLocale === 'function') {
+        app.engine.setLocale(lang);
+      }
       updateSceneHint(app.activeScene);
+      updateSseLabel();
       renderAll();
       soundFX.playClick();
       showToast(t('toast.langSwitched'), 'info', 2200);
@@ -2088,7 +2839,7 @@ function bindEvents() {
     if (submitBtn) submitBtn.disabled = true;
     if (resultEl) {
       resultEl.style.display = 'block';
-      resultEl.textContent = '⏳ 正在向 GitHub Issues API 匯入公開倉庫任務...';
+      resultEl.textContent = t('toast.ghImporting');
     }
 
     try {
@@ -2104,18 +2855,24 @@ function bindEvents() {
       });
       applyNewState(res.state);
       soundFX.playVerify();
-      const modeTag = res.fallbackUsed ? `（離線預覽：${res.fallbackReason || '限流降級'}）` : '（真實 GitHub Issue）';
-      const summary = `✅ 已從 ${res.repo?.fullName || repoUrl} 匯入 ${res.importedCount} 張任務卡至《${res.project?.shortName || res.project?.name}》${modeTag}`;
+      const modeTag = res.fallbackUsed
+        ? t('toast.ghModeFallback', { reason: res.fallbackReason || 'rate-limit' })
+        : t('toast.ghModeReal');
+      const lp = res.project ? localizeProject(res.project, getLocale()) : null;
+      const summary = t('toast.ghImported', {
+        repo: res.repo?.fullName || repoUrl,
+        count: res.importedCount,
+        project: lp?.shortName || lp?.name || repoUrl,
+        mode: modeTag,
+      });
       if (resultEl) resultEl.textContent = summary;
       showToast(summary, 'success', 4800);
       $('gh-import-repo').value = '';
-      if (track === 'api_auto') {
-        switchTab('factory');
-      }
+      if (track === 'api_auto') switchTab('factory');
     } catch (err) {
       soundFX.playReject();
-      if (resultEl) resultEl.textContent = `❌ 匯入失敗：${err.message}`;
-      showToast(`GitHub 匯入失敗：${err.message}`, 'error', 4200);
+      if (resultEl) resultEl.textContent = `❌ ${err.message}`;
+      showToast(t('toast.ghImportFailed', { err: err.message }), 'error', 4200);
     } finally {
       if (submitBtn) submitBtn.disabled = false;
     }
@@ -2123,9 +2880,7 @@ function bindEvents() {
 
   // Reset world button
   $('btn-reset-world').addEventListener('click', async () => {
-    if (!window.confirm('確定要重置像素算力鎮示範世界？所有測試任務、進度與帳本將回到初始創世狀態。')) {
-      return;
-    }
+    if (!window.confirm(t('toast.resetConfirm'))) return;
     try {
       setAutoPilot(false);
       $('toggle-autopilot').checked = false;
@@ -2134,32 +2889,37 @@ function bindEvents() {
       resetTransientUiAfterWorldReset();
       applyNewState(res.state, { silentAchievements: true });
       seedSeenAchievements(res.state);
+      await refreshBootstrapNow({ silentAchievements: true });
       soundFX.playClick();
       showToast(t('toast.resetDone'), 'info');
     } catch (err) {
-      showToast(`重置失敗：${err.message}`, 'error');
+      showToast(t('toast.resetFailed', { err: err.message }), 'error');
     }
   });
 
   // Delegated click handlers for dynamically rendered lists
   document.addEventListener('click', async (e) => {
+    const loc = getLocale();
+
     const stripWorkerBtn = e.target.closest('[data-select-strip-worker]');
     if (stripWorkerBtn) {
       const wid = stripWorkerBtn.dataset.selectStripWorker;
       const w = (app.state?.workers || []).find((x) => x.id === wid);
       if (w) {
+        const lw = localizeWorker(w, loc);
         soundFX.playClick();
         const hint = $('stage-overlay-hint');
         if (hint) {
-          hint.textContent = `👾 【${w.name}】Lv.${w.level} · 體力 ${w.stamina}/${w.maxStamina} · ${w.lastMessage || '待命中'}`;
+          hint.textContent = t('stage.workerHint', {
+            name: lw.name,
+            level: w.level,
+            stamina: w.stamina,
+            maxStamina: w.maxStamina,
+            msg: lw.lastMessage || t('stage.idleFallback'),
+          });
         }
-        if (w.track === 'api') {
-          const sel = $('factory-worker-select');
-          if (sel) sel.value = w.id;
-        } else {
-          const sel = $('guild-worker-select');
-          if (sel) sel.value = w.id;
-        }
+        const sel = $(w.track === 'api' ? 'factory-worker-select' : 'guild-worker-select');
+        if (sel) sel.value = w.id;
       }
       return;
     }
@@ -2188,12 +2948,13 @@ function bindEvents() {
       try {
         const res = await apiFetch(`/api/projects/${encodeURIComponent(pid)}/vote`, { method: 'POST' });
         applyNewState(res.state);
+        const lp = localizeProject(res.project, loc);
         if (res.unlocked) {
           soundFX.playLaunch();
-          showToast(`🎉 《${res.project.shortName}》票數達標破土動工！已自動生成 5 張雙軌任務！`, 'success', 5000);
+          showToast(t('toast.voteUnlocked', { name: lp.shortName }), 'success', 5000);
         } else {
           soundFX.playClick();
-          showToast(`🗳️ 投票成功！《${res.project.shortName}》目前 ${res.project.votes}/${res.project.votesRequired} 票`, 'info');
+          showToast(t('toast.voteOk', { name: lp.shortName, votes: res.project.votes, req: res.project.votesRequired }), 'info');
         }
       } catch (err) {
         soundFX.playReject();
@@ -2202,18 +2963,20 @@ function bindEvents() {
       return;
     }
 
+    // Billboard ad opens 3-in-1 Payment Modal ($29)
     const billboardBtn = e.target.closest('[data-billboard-project]');
     if (billboardBtn) {
       const pid = billboardBtn.dataset.billboardProject;
-      try {
-        const res = await apiFetch(`/api/projects/${encodeURIComponent(pid)}/billboard`, { method: 'POST', body: {} });
-        applyNewState(res.state);
-        soundFX.playCoin();
-        showToast(`📺 已為《${res.project.shortName}》點亮像素廣場霓虹廣告牌（+$${res.feeUsd} 平臺廣告收入）！`, 'success');
-      } catch (err) {
-        soundFX.playReject();
-        showToast(err.message, 'error');
-      }
+      const proj = (app.state?.projects || []).find((p) => p.id === pid);
+      const lp = proj ? localizeProject(proj, loc) : null;
+      const billItem = localizeShopItem({ id: 'billboard-ad' }, loc);
+      const price = app.config?.billboardPriceUsd ?? 29;
+      openPaymentModal({
+        productId: 'billboard-ad',
+        targetProjectId: pid,
+        displayName: `${billItem.name}${lp ? ` · ${lp.shortName}` : ''}`,
+        priceUsd: price,
+      });
       return;
     }
 
@@ -2229,8 +2992,14 @@ function bindEvents() {
         applyNewState(res.state);
         soundFX.playLaunch();
         app.engine?.triggerProjectLaunch(pid);
+        const lp = localizeProject(res.project, loc);
         showToast(
-          `🎆 《${res.project.shortName}》正式上線！首日營收 $${res.dividend.grossRevenueUsd} 分紅入帳：你實得 $${res.dividend.playerShareUsd}，平臺 Carry $${res.dividend.platformCarryUsd}！`,
+          t('toast.launchOk', {
+            name: lp.shortName,
+            gross: res.dividend.grossRevenueUsd,
+            share: res.dividend.playerShareUsd,
+            carry: res.dividend.platformCarryUsd,
+          }),
           'success',
           6000,
         );
@@ -2251,8 +3020,14 @@ function bindEvents() {
         });
         applyNewState(res.state);
         soundFX.playCoin();
+        const lp = localizeProject(res.project, loc);
         showToast(
-          `💸 《${res.project.shortName}》新增 $${res.dividend.grossRevenueUsd} 營收！你分得 +$${res.dividend.playerShareUsd}，平臺 10% Carry +$${res.dividend.platformCarryUsd}！`,
+          t('toast.simRevOk', {
+            name: lp.shortName,
+            gross: res.dividend.grossRevenueUsd,
+            share: res.dividend.playerShareUsd,
+            carry: res.dividend.platformCarryUsd,
+          }),
           'success',
           4800,
         );
@@ -2273,7 +3048,8 @@ function bindEvents() {
         });
         applyNewState(res.state);
         soundFX.playCoin();
-        showToast(`☕ 【${res.worker.name}】喝完像素特調咖啡，體力與今日額度已回復！`, 'success');
+        const lw = localizeWorker(res.worker, loc);
+        showToast(t('toast.coffeeOk', { name: lw.name }), 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -2292,16 +3068,35 @@ function bindEvents() {
         });
         applyNewState(res.state);
         soundFX.playClick();
-        showToast(`🔧 已更新【${res.worker.name}】每日安全額度上限為 ${res.worker.dailyTokenCap.toLocaleString()}`, 'success');
+        const lw = localizeWorker(res.worker, loc);
+        showToast(t('toast.capSaved', { name: lw.name, cap: res.worker.dailyTokenCap.toLocaleString() }), 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }
       return;
     }
 
+    // Shop buy: USD items open 3-in-1 Payment Modal; Gold items purchase directly
     const buyBtn = e.target.closest('[data-buy-item]');
     if (buyBtn) {
       const itemId = buyBtn.dataset.buyItem;
+      const item = (app.shopItems || []).find((it) => it.id === itemId);
+      if (item && item.priceUsd > 0) {
+        const li = localizeShopItem(item, loc);
+        const mappedProductId =
+          item.id === 'pro-pass-monthly'
+            ? 'shop-pro-pass'
+            : item.id === 'founder-skin-bundle'
+              ? 'shop-genesis-pack'
+              : item.id;
+        openPaymentModal({
+          productId: mappedProductId,
+          displayName: li.name,
+          priceUsd: item.priceUsd,
+        });
+        return;
+      }
+
       const firstWorkerId = app.state?.workers?.[0]?.id || null;
       try {
         const res = await apiFetch('/api/shop/buy', {
@@ -2310,11 +3105,66 @@ function bindEvents() {
         });
         applyNewState(res.state);
         soundFX.playCoin();
-        showToast(`🛍️ 購買成功：「${res.item.name}」！`, 'success');
+        const li = localizeShopItem(res.item, loc);
+        showToast(t('toast.shopBought', { name: li.name }), 'success');
       } catch (err) {
         soundFX.playReject();
         showToast(err.message, 'error');
       }
+      return;
+    }
+
+    // Admin: mark payout paid (sandbox simulate)
+    const markPaidBtn = e.target.closest('[data-mark-payout-paid]');
+    if (markPaidBtn) {
+      const pid = markPaidBtn.dataset.markPayoutPaid;
+      try {
+        const res = await apiFetch(`/api/admin/payouts/${encodeURIComponent(pid)}/mark-paid`, {
+          method: 'POST',
+          body: { simulate: true },
+        });
+        if (res.state) applyNewState(res.state);
+        await refreshBootstrapNow();
+        soundFX.playVerify();
+        showToast(t('toast.payoutPaid'), 'success');
+      } catch (err) {
+        soundFX.playReject();
+        showToast(err.message, 'error');
+      }
+      return;
+    }
+
+    // Admin: approve/reject device
+    const reviewBtn = e.target.closest('[data-review-device]');
+    if (reviewBtn) {
+      const code = reviewBtn.dataset.reviewDevice;
+      const action = reviewBtn.dataset.reviewAction;
+      try {
+        const res = await apiFetch(`/api/admin/devices/${encodeURIComponent(code)}/review`, {
+          method: 'POST',
+          body: { action },
+        });
+        if (res.state) applyNewState(res.state);
+        await refreshBootstrapNow();
+        soundFX.playVerify();
+        showToast(
+          t('toast.adminDeviceReviewed', {
+            code,
+            action: action === 'approve' ? t('admin.approveBtn') : t('admin.rejectBtn'),
+          }),
+          'success',
+        );
+      } catch (err) {
+        soundFX.playReject();
+        showToast(err.message, 'error');
+      }
+      return;
+    }
+
+    // Admin: copy generated redeem code
+    const copyCodeBtn = e.target.closest('[data-copy-redeem-code]');
+    if (copyCodeBtn) {
+      copyText(copyCodeBtn.dataset.copyRedeemCode);
       return;
     }
   });
@@ -2323,6 +3173,7 @@ function bindEvents() {
   document.addEventListener('change', async (e) => {
     const skinSelect = e.target.closest('[data-skin-select]');
     if (!skinSelect) return;
+    const loc = getLocale();
     const wid = skinSelect.dataset.skinSelect;
     const skin = skinSelect.value;
     try {
@@ -2332,7 +3183,8 @@ function bindEvents() {
       });
       applyNewState(res.state);
       soundFX.playClick();
-      showToast(`✨ 【${res.worker.name}】已換上「${SKIN_LABELS[skin] || skin}」！`, 'success');
+      const lw = localizeWorker(res.worker, loc);
+      showToast(t('toast.skinChanged', { worker: lw.name, skin: localizeSkinLabel(skin, loc) }), 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -2343,18 +3195,16 @@ function bindEvents() {
 // Bootstrap Application
 // ============================================================================
 async function init() {
-  // Apply saved UI language
-  const initialLang = getLang();
-  setLang(initialLang);
+  const initialLang = getLocale();
+  setLocale(initialLang);
   document.querySelectorAll('#lang-switch [data-lang]').forEach((b) => {
     b.classList.toggle('active', b.dataset.lang === initialLang);
   });
-  applyI18nToDom();
+  applyI18n();
 
   bindEvents();
   syncAutoFollowUi();
 
-  // Initialize PixelTownEngine canvas
   const canvas = $('town-canvas');
   if (canvas) {
     app.engine = new PixelTownEngine(canvas, {
@@ -2365,8 +3215,10 @@ async function init() {
         selectScene(sceneId, { syncTab: shouldSyncTab, fromEngine: true, silent: true });
       },
       onSelectTask: (taskId) => {
+        const loc = getLocale();
         const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
         if (!task) return;
+        const lt = localizeTask(task, loc);
         soundFX.playClick();
         if (task.status === 'completed') {
           openTaskReportModal(task.id);
@@ -2376,27 +3228,33 @@ async function init() {
         } else {
           switchTab('factory');
           const hint = $('stage-overlay-hint');
-          if (hint) hint.textContent = `🏭 已選取任務：${task.title}`;
+          if (hint) hint.textContent = t('stage.taskSelectedHint', { title: lt.title });
         }
       },
       onSelectWorker: (workerId) => {
+        const loc = getLocale();
         const w = (app.state?.workers || []).find((x) => x.id === workerId);
         if (!w) return;
+        const lw = localizeWorker(w, loc);
         soundFX.playClick();
         const hint = $('stage-overlay-hint');
         if (hint) {
-          hint.textContent = `👾 【${w.name}】Lv.${w.level} · 體力 ${w.stamina}/${w.maxStamina} · ${w.lastMessage || '待命中'}`;
+          hint.textContent = t('stage.workerHint', {
+            name: lw.name,
+            level: w.level,
+            stamina: w.stamina,
+            maxStamina: w.maxStamina,
+            msg: lw.lastMessage || t('stage.idleFallback'),
+          });
         }
-        if (w.track === 'api') {
-          const sel = $('factory-worker-select');
-          if (sel) sel.value = w.id;
-        } else {
-          const sel = $('guild-worker-select');
-          if (sel) sel.value = w.id;
-        }
+        const sel = $(w.track === 'api' ? 'factory-worker-select' : 'guild-worker-select');
+        if (sel) sel.value = w.id;
       },
     });
     app.engine.setDayNight(app.dayNight);
+    if (typeof app.engine.setLocale === 'function') {
+      app.engine.setLocale(initialLang);
+    }
     if (typeof app.engine.setScene === 'function') {
       app.engine.setScene(app.activeScene);
     }
@@ -2406,23 +3264,25 @@ async function init() {
 
   try {
     const data = await apiFetch('/api/bootstrap');
-    app.user = data.user;
-    app.state = data.state;
-    app.shopItems = data.shopItems || [];
-    app.workerTemplates = data.workerTemplates || [];
-    app.config = data.config || {};
-    seedSeenAchievements(app.state);
-    app.engine?.syncState(app.state);
-    renderAll();
+    seedSeenAchievements(data.state);
+    applyBootstrapPayload(data, { silentAchievements: true });
     connectSse();
 
     const params = new URLSearchParams(window.location.search);
-    if (params.get('auth') === 'github_ok') {
-      showToast(`🐙 GitHub 登入成功！歡迎回來，${app.user?.displayName || '開發者'}！`, 'success');
-      window.history.replaceState({}, '', '/');
+    const authParam = params.get('auth');
+    if (authParam) {
+      const locUser = localizeUser(app.user, getLocale());
+      if (authParam === 'github_ok') {
+        showToast(t('toast.authGithubOk', { name: locUser.displayName }), 'success');
+      } else if (authParam === 'google_ok') {
+        showToast(t('toast.authGoogleOk', { name: locUser.displayName }), 'success');
+      } else if (authParam === 'google_unconfigured') {
+        showToast(t('toast.authGoogleUnconfigured'), 'warn', 5000);
+      }
+      window.history.replaceState({}, '', window.location.pathname);
     }
   } catch (err) {
-    showToast(`無法連線至像素算力鎮伺服器：${err.message}`, 'error', 6000);
+    showToast(t('toast.serverError', { err: err.message }), 'error', 6000);
   }
 }
 

@@ -1,4 +1,4 @@
-// PixelCompute Town — Zero-Dependency Node.js HTTP + REST + SSE Server
+// PixelCompute Town — Zero-Dependency Node.js v1.0 HTTP + REST + SSE Server
 
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -12,19 +12,56 @@ import {
   SHOP_ITEMS,
   WORKER_TEMPLATES,
   createInitialAchievements,
+  ensureStateSchema,
   generateTasksForProject,
   round2,
 } from './src/server/seed.mjs';
 import { createStore } from './src/server/store.mjs';
 import { verifySubmission, validateGitHubPrUrl } from './src/server/verifier.mjs';
 import {
-  getSessionUser,
+  FOUNDER_USER_ID,
+  getActiveUserContext,
   handleDemoLogin,
   handleGitHubCallback,
   handleGitHubLogin,
+  handleGoogleCallback,
+  handleGoogleLogin,
+  handleLogin,
   handleLogout,
+  handleMe,
+  handleRegister,
   isGitHubOAuthEnabled,
+  isGoogleOAuthEnabled,
+  projectStateForUser,
+  sanitizeUserForClient,
+  syncUserLeaderboard,
 } from './src/server/auth.mjs';
+import {
+  PAYMENT_PRODUCTS,
+  getPaymentConfig,
+  handleAdminGenerateCodes,
+  handleAdminMarkPayoutPaid,
+  handleFiatCheckout,
+  handlePaymentWebhook,
+  handlePayoutRequest,
+  handleRedeemCode,
+  handleSandboxComplete,
+  handleStablecoinConfirm,
+  handleStablecoinCreate,
+  handleWalletBind,
+} from './src/server/payments.mjs';
+import {
+  getAdminDevicesData,
+  handleAdminDeviceReview,
+  handleAdminSettings,
+  handleDeviceApprove,
+  handleDevicePoll,
+  handleDeviceStart,
+  handleDeviceStatus,
+  handleDownloadWorkerCli,
+  handleInstallPs1,
+  handleInstallSh,
+} from './src/server/deviceFlow.mjs';
 import { createSseHub } from './src/server/sse.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,7 +91,6 @@ function uid(prefix) {
 
 function sanitizeText(value, maxLen = 120, { multiline = false } = {}) {
   if (typeof value !== 'string') return '';
-  // Strip C0/C1 control characters; collapse newlines/tabs to single spaces for single-line fields
   let cleaned = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
   if (!multiline) {
     cleaned = cleaned.replace(/[\r\n\t]+/g, ' ');
@@ -186,36 +222,37 @@ function generateFallbackIssues(repoInfo, maxIssues = 3) {
   return templates.slice(0, Math.min(Math.max(1, maxIssues), 3));
 }
 
-function unlockAchievements(state, candidateIds) {
-  if (!Array.isArray(state.achievements) || state.achievements.length === 0) {
-    state.achievements = createInitialAchievements();
+function unlockAchievements(state, user, candidateIds) {
+  if (!Array.isArray(user.achievements) || user.achievements.length === 0) {
+    user.achievements = createInitialAchievements();
   }
   const now = new Date().toISOString();
   const newlyUnlocked = [];
 
   for (const id of candidateIds) {
-    const ach = state.achievements.find((a) => a.id === id);
+    const ach = user.achievements.find((a) => a.id === id);
     if (!ach || ach.unlocked) continue;
     ach.unlocked = true;
     ach.unlockedAt = now;
     if (ach.rewardGold > 0) {
-      state.player.gold += ach.rewardGold;
+      user.gold += ach.rewardGold;
     }
     newlyUnlocked.push({ ...ach });
     pushActivity(state, {
       type: 'achievement',
       icon: '🏆',
-      message: `解鎖創世成就【${ach.icon} ${ach.name}】！額外獲得 +${ach.rewardGold}G 獎勵！`,
+      message: `${user.displayName} 解鎖創世成就【${ach.icon} ${ach.name}】！額外獲得 +${ach.rewardGold}G 獎勵！`,
     });
   }
   return newlyUnlocked;
 }
 
-function broadcastAchievements(sseHub, newlyUnlocked, state) {
+function broadcastAchievements(sseHub, newlyUnlocked, user) {
   for (const achievement of newlyUnlocked) {
     sseHub.broadcast('achievement_unlocked', {
       achievement,
-      playerGold: state.player.gold,
+      userId: user.id,
+      playerGold: user.gold,
     });
   }
 }
@@ -236,7 +273,7 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-async function parseJsonBody(req) {
+async function readRawBody(req) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
@@ -246,7 +283,11 @@ async function parseJsonBody(req) {
     }
     chunks.push(chunk);
   }
-  const raw = Buffer.concat(chunks).toString('utf8').trim();
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function parseJsonBody(req) {
+  const raw = (await readRawBody(req)).trim();
   if (!raw) return {};
   try {
     return JSON.parse(raw);
@@ -308,43 +349,22 @@ function pushActivity(state, entry) {
   }
 }
 
-function syncPlayerLeaderboard(state) {
-  const p = state.player;
-  let row = state.leaderboard.find((r) => r.isCurrentUser || r.userId === p.id);
-  if (!row) {
-    row = {
-      userId: p.id,
-      displayName: p.displayName,
-      handle: `@${p.username}`,
-      reputation: p.reputation,
-      completedTasks: p.completedTasks,
-      contributionPoints: p.totalContribution,
-      earnedUsd: p.usdBalance,
-      badge: p.isPro ? '創世 PRO' : '創始鎮長',
-      isCurrentUser: true,
-    };
-    state.leaderboard.push(row);
+function creditUserOrNpcUsd(state, userId, amountUsd) {
+  const amt = round2(amountUsd);
+  if (amt <= 0) return;
+  if (state.users && state.users[userId]) {
+    const u = state.users[userId];
+    u.usdBalance = round2((u.usdBalance || 0) + amt);
+    syncUserLeaderboard(state, u);
   } else {
-    row.userId = p.id;
-    row.displayName = p.displayName;
-    row.handle = `@${p.username}`;
-    row.reputation = p.reputation;
-    row.completedTasks = p.completedTasks;
-    row.contributionPoints = p.totalContribution;
-    row.earnedUsd = round2(p.usdBalance);
-    row.badge = p.isPro ? '創世 PRO' : (row.badge || '創始鎮長');
-    row.isCurrentUser = true;
-  }
-
-  state.leaderboard.sort((a, b) => {
-    if (b.contributionPoints !== a.contributionPoints) {
-      return b.contributionPoints - a.contributionPoints;
+    const npcRow = state.leaderboard.find((r) => r.userId === userId);
+    if (npcRow) {
+      npcRow.earnedUsd = round2((npcRow.earnedUsd || 0) + amt);
     }
-    return b.earnedUsd - a.earnedUsd;
-  });
+  }
 }
 
-function distributeProjectRevenue(state, project, grossRevenueUsd, label) {
+function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, label) {
   const gross = round2(grossRevenueUsd);
   const creatorShareUsd = round2(gross * (REVENUE_SPLIT.creatorPct / 100));
   const platformCarryUsd = round2(gross * (REVENUE_SPLIT.platformPct / 100));
@@ -362,13 +382,9 @@ function distributeProjectRevenue(state, project, grossRevenueUsd, label) {
     amountUsd: creatorShareUsd,
   });
 
-  if (project.creatorId === state.player.id) {
+  creditUserOrNpcUsd(state, project.creatorId, creatorShareUsd);
+  if (project.creatorId === activeUser.id) {
     playerShareUsd = round2(playerShareUsd + creatorShareUsd);
-  } else {
-    const npcRow = state.leaderboard.find((r) => r.userId === project.creatorId);
-    if (npcRow) {
-      npcRow.earnedUsd = round2(npcRow.earnedUsd + creatorShareUsd);
-    }
   }
 
   // 2) Contributors 60% proportional to contribution points
@@ -402,19 +418,16 @@ function distributeProjectRevenue(state, project, grossRevenueUsd, label) {
 
     for (const cp of contribPayouts) {
       payouts.push(cp);
-      if (cp.userId === state.player.id) {
+      creditUserOrNpcUsd(state, cp.userId, cp.amountUsd);
+      if (cp.userId === activeUser.id) {
         playerShareUsd = round2(playerShareUsd + cp.amountUsd);
-      } else {
-        const npcRow = state.leaderboard.find((r) => r.userId === cp.userId);
-        if (npcRow) {
-          npcRow.earnedUsd = round2(npcRow.earnedUsd + cp.amountUsd);
-        }
       }
     }
   } else {
     // Fallback if zero contributions recorded: goes to creator
     payouts[0].amountUsd = round2(payouts[0].amountUsd + contributorsPoolUsd);
-    if (project.creatorId === state.player.id) {
+    creditUserOrNpcUsd(state, project.creatorId, contributorsPoolUsd);
+    if (project.creatorId === activeUser.id) {
       playerShareUsd = round2(playerShareUsd + contributorsPoolUsd);
     }
   }
@@ -427,10 +440,6 @@ function distributeProjectRevenue(state, project, grossRevenueUsd, label) {
     sharePct: REVENUE_SPLIT.platformPct,
     amountUsd: platformCarryUsd,
   });
-
-  if (playerShareUsd > 0) {
-    state.player.usdBalance = round2(state.player.usdBalance + playerShareUsd);
-  }
 
   project.totalRevenueUsd = round2((project.totalRevenueUsd || 0) + gross);
   project.distributedRevenueUsd = round2((project.distributedRevenueUsd || 0) + gross);
@@ -461,8 +470,17 @@ function distributeProjectRevenue(state, project, grossRevenueUsd, label) {
     state.dividendLedger.length = 60;
   }
 
-  syncPlayerLeaderboard(state);
+  syncUserLeaderboard(state, activeUser);
   return dividend;
+}
+
+function findWorkerAcrossUsers(state, workerId) {
+  if (!workerId || !state?.users) return null;
+  for (const user of Object.values(state.users)) {
+    const w = (user.workers || []).find((item) => item.id === workerId);
+    if (w) return { user, worker: w };
+  }
+  return null;
 }
 
 export function createAppServer(options = {}) {
@@ -511,13 +529,37 @@ export function createAppServer(options = {}) {
       return false;
     }
 
-    // Periodic lightweight cleanup to avoid unbounded map growth
     if (rateBuckets.size > 500) {
       for (const [k, b] of rateBuckets.entries()) {
         if (now >= b.resetAt) rateBuckets.delete(k);
       }
     }
     return true;
+  }
+
+  async function serveStaticFile(res, method, relPath, fallbackRelPath = null) {
+    const targetPath = path.resolve(publicDir, relPath);
+    if (targetPath !== publicDir && !targetPath.startsWith(`${publicDir}${path.sep}`)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Forbidden');
+    }
+
+    try {
+      const fileData = await fs.readFile(targetPath);
+      const ext = path.extname(targetPath).toLowerCase();
+      res.writeHead(200, {
+        'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+        'Cache-Control': 'no-cache',
+      });
+      if (method === 'HEAD') return res.end();
+      return res.end(fileData);
+    } catch {
+      if (fallbackRelPath) {
+        return serveStaticFile(res, method, fallbackRelPath, null);
+      }
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Not Found');
+    }
   }
 
   const server = http.createServer(async (req, res) => {
@@ -538,6 +580,17 @@ export function createAppServer(options = {}) {
         }
       }
 
+      // One-click Install & CLI Download routes
+      if (pathname === '/install.ps1' && (method === 'GET' || method === 'HEAD')) {
+        return handleInstallPs1(req, res);
+      }
+      if (pathname === '/install.sh' && (method === 'GET' || method === 'HEAD')) {
+        return handleInstallSh(req, res);
+      }
+      if (pathname === '/download/pixel-worker.mjs' && (method === 'GET' || method === 'HEAD')) {
+        return await handleDownloadWorkerCli(req, res);
+      }
+
       // Health check
       if (pathname === '/api/health' && method === 'GET') {
         return sendJson(res, 200, {
@@ -547,7 +600,61 @@ export function createAppServer(options = {}) {
           uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
           sseClients: sseHub.getClientCount(),
           githubOAuthEnabled: isGitHubOAuthEnabled(),
+          googleOAuthEnabled: isGoogleOAuthEnabled(),
           timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Public landing page stats
+      if (pathname === '/api/public/stats' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        const projects = state.projects || [];
+        const tasks = state.tasks || [];
+        const users = Object.values(state.users || {});
+        const buildingCount = projects.filter((p) => p.status === 'building').length;
+        const launchedCount = projects.filter((p) => p.status === 'launched').length;
+        const votingCount = projects.filter((p) => p.status === 'voting').length;
+        const completedTasksCount = tasks.filter((t) => t.status === 'completed').length;
+        const openTasksCount = tasks.filter((t) => t.status === 'open').length;
+        const communityCompletedTasksCount = (state.leaderboard || []).reduce(
+          (sum, row) => sum + (Number(row.completedTasks) || 0),
+          0,
+        );
+        const totalRevenueUsd = round2(state.founderRevenue?.totalUsd || 0);
+        const totalUsersCount = Math.max(users.length, (state.leaderboard || []).length);
+        const totalWorkersCount = users.reduce(
+          (sum, u) => sum + (Array.isArray(u.workers) ? u.workers.length : 0),
+          0,
+        );
+        const featuredProjects = projects.slice(0, 6).map((p) => ({
+          id: p.id,
+          name: p.name,
+          shortName: p.shortName,
+          tagline: p.tagline,
+          status: p.status,
+          votes: p.votes,
+          votesRequired: p.votesRequired,
+          progressPct: p.progressPct,
+          bountyPoolUsd: p.bountyPoolUsd,
+          totalRevenueUsd: p.totalRevenueUsd,
+          sponsoredBillboard: Boolean(p.sponsoredBillboard),
+          billboardText: p.billboardText || '',
+        }));
+
+        return sendJson(res, 200, {
+          ok: true,
+          projectsCount: projects.length,
+          buildingCount,
+          launchedCount,
+          votingCount,
+          completedTasksCount,
+          communityCompletedTasksCount,
+          openTasksCount,
+          totalRevenueUsd,
+          totalUsersCount,
+          totalWorkersCount,
+          featuredProjects,
         });
       }
 
@@ -556,38 +663,87 @@ export function createAppServer(options = {}) {
         return sseHub.handleConnection(req, res);
       }
 
-      // Bootstrap payload
+      // Bootstrap payload (multi-user projected + v1.0 configs + adminData)
       if (pathname === '/api/bootstrap' && method === 'GET') {
         const state = await store.load();
-        const user = getSessionUser(req, state);
+        const ctx = getActiveUserContext(req, state);
+        const user = sanitizeUserForClient(ctx.user);
+        const projected = projectStateForUser(state, ctx.userId);
+        const isAdmin = ctx.user.role === 'founder';
+        const { pendingDevices, allDevices } = getAdminDevicesData(state);
+
         return sendJson(res, 200, {
           ok: true,
           user,
-          state,
+          state: projected,
           shopItems: SHOP_ITEMS,
           workerTemplates: WORKER_TEMPLATES,
+          paymentProducts: Object.values(PAYMENT_PRODUCTS),
           config: {
             githubOAuthEnabled: isGitHubOAuthEnabled(),
+            googleOAuthEnabled: isGoogleOAuthEnabled(),
+            strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
             version: VERSION,
             platformFeePct: PLATFORM_BOUNTY_FEE_PCT,
             billboardPriceUsd: BILLBOARD_PRICE_USD,
             revenueSplit: REVENUE_SPLIT,
           },
+          authConfig: {
+            githubOAuthEnabled: isGitHubOAuthEnabled(),
+            googleOAuthEnabled: isGoogleOAuthEnabled(),
+            strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+          },
+          paymentConfig: getPaymentConfig(),
+          adminData: isAdmin
+            ? {
+              isAdmin: true,
+              strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+              pendingDevices,
+              allDevices,
+              redeemCodes: state.redeemCodes || [],
+              payouts: state.payouts || [],
+            }
+            : {
+              isAdmin: false,
+              strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+              pendingDevices: [],
+              allDevices: [],
+              redeemCodes: [],
+              payouts: [],
+            },
         });
       }
 
       // Legacy compatibility endpoint
       if (pathname === '/api/state' && method === 'GET') {
         const state = await store.load();
-        return sendJson(res, 200, { ok: true, state });
+        const ctx = getActiveUserContext(req, state);
+        return sendJson(res, 200, { ok: true, state: projectStateForUser(state, ctx.userId) });
       }
 
       // Auth routes
+      if (pathname === '/api/auth/register' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleRegister(req, res, body, store);
+      }
+      if (pathname === '/api/auth/login' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleLogin(req, res, body, store);
+      }
+      if (pathname === '/api/auth/me' && method === 'GET') {
+        return await handleMe(req, res, store);
+      }
       if (pathname === '/api/auth/github' && method === 'GET') {
-        return handleGitHubLogin(req, res);
+        return await handleGitHubLogin(req, res, store);
       }
       if (pathname === '/api/auth/github/callback' && method === 'GET') {
         return await handleGitHubCallback(req, res, url, store);
+      }
+      if (pathname === '/api/auth/google' && method === 'GET') {
+        return await handleGoogleLogin(req, res, store);
+      }
+      if (pathname === '/api/auth/google/callback' && method === 'GET') {
+        return await handleGoogleCallback(req, res, url, store);
       }
       if (pathname === '/api/auth/demo' && method === 'POST') {
         const body = await parseJsonBody(req);
@@ -600,7 +756,81 @@ export function createAppServer(options = {}) {
         return await handleLogout(req, res, store);
       }
 
-      // Workers: POST /api/workers (recruit new worker)
+      // Three-in-One Payment & Stablecoin Payout routes
+      if (pathname === '/api/payments/stablecoin/create' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleStablecoinCreate(req, res, body, store, sseHub);
+      }
+      if (pathname === '/api/payments/stablecoin/confirm' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleStablecoinConfirm(req, res, body, store, sseHub);
+      }
+      if (pathname === '/api/payments/checkout' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleFiatCheckout(req, res, body, store, sseHub);
+      }
+      if (pathname === '/api/payments/sandbox/complete' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleSandboxComplete(req, res, body, store, sseHub);
+      }
+      if (pathname === '/api/payments/redeem' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleRedeemCode(req, res, body, store, sseHub);
+      }
+      if (pathname === '/api/webhooks/polar' && method === 'POST') {
+        const rawBody = await readRawBody(req);
+        return await handlePaymentWebhook(req, res, 'polar', rawBody, store, sseHub);
+      }
+      if (pathname === '/api/webhooks/stripe' && method === 'POST') {
+        const rawBody = await readRawBody(req);
+        return await handlePaymentWebhook(req, res, 'stripe', rawBody, store, sseHub);
+      }
+      if (pathname === '/api/wallet/bind' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleWalletBind(req, res, body, store, sseHub);
+      }
+      if (pathname === '/api/payouts/request' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handlePayoutRequest(req, res, body, store, sseHub);
+      }
+      const adminPayoutPaidMatch = pathname.match(/^\/api\/admin\/payouts\/([^/]+)\/mark-paid$/);
+      if (adminPayoutPaidMatch && method === 'POST') {
+        const payoutId = decodeURIComponent(adminPayoutPaidMatch[1]);
+        const body = await parseJsonBody(req);
+        return await handleAdminMarkPayoutPaid(req, res, payoutId, body, store, sseHub);
+      }
+      if (pathname === '/api/admin/codes/generate' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleAdminGenerateCodes(req, res, body, store, sseHub);
+      }
+
+      // Device Flow & Admin Review routes
+      if (pathname === '/api/device/start' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleDeviceStart(req, res, body, store, sseHub);
+      }
+      if (pathname === '/api/device/status' && method === 'GET') {
+        return await handleDeviceStatus(req, res, url, store);
+      }
+      if (pathname === '/api/device/poll' && method === 'GET') {
+        return await handleDevicePoll(req, res, url, store);
+      }
+      if (pathname === '/api/device/approve' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return await handleDeviceApprove(req, res, body, store, sseHub);
+      }
+      const adminDeviceReviewMatch = pathname.match(/^\/api\/admin\/devices\/([^/]+)\/review$/);
+      if (adminDeviceReviewMatch && method === 'POST') {
+        const codeParam = decodeURIComponent(adminDeviceReviewMatch[1]);
+        const body = await parseJsonBody(req);
+        return await handleAdminDeviceReview(req, res, codeParam, body, store, sseHub);
+      }
+      if (pathname === '/api/admin/settings' && method === 'PATCH') {
+        const body = await parseJsonBody(req);
+        return await handleAdminSettings(req, res, body, store, sseHub);
+      }
+
+      // Workers: POST /api/workers (recruit new worker for active user)
       if (pathname === '/api/workers' && method === 'POST') {
         const body = await parseJsonBody(req);
         const roleClass = body.roleClass || 'flash_worker';
@@ -609,14 +839,16 @@ export function createAppServer(options = {}) {
           throw new HttpError(400, `不支援的職業類型：${roleClass}`);
         }
 
-        const { state, result: worker } = await store.mutate((s) => {
+        const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           const cost = template.recruitCostGold;
-          if (s.player.gold < cost) {
-            throw new HttpError(400, `金幣不足！招募 ${template.label} 需要 ${cost}G，目前僅有 ${s.player.gold}G`);
+          if (user.gold < cost) {
+            throw new HttpError(400, `金幣不足！招募 ${template.label} 需要 ${cost}G，目前僅有 ${user.gold}G`);
           }
-          s.player.gold -= cost;
+          user.gold -= cost;
 
-          const idx = s.workers.length + 1;
+          const idx = user.workers.length + 1;
           const cleanName = sanitizeText(body.name, 32) || `${template.label} #${idx}`;
           const track = body.track === 'api' || body.track === 'quota' ? body.track : template.track;
           const dailyTokenCap = Number(body.dailyTokenCap) > 0
@@ -641,7 +873,7 @@ export function createAppServer(options = {}) {
             currentTaskId: null,
             currentProjectId: null,
             currentZone: 'lounge',
-            skin: (body.skin && s.player.ownedSkins.includes(body.skin)) ? body.skin : 'default',
+            skin: (body.skin && user.ownedSkins.includes(body.skin)) ? body.skin : 'default',
             autoMode: Boolean(body.autoMode),
             completedCount: 0,
             earnedGold: 0,
@@ -650,19 +882,23 @@ export function createAppServer(options = {}) {
             lastHeartbeatAt: null,
           };
 
-          s.workers.push(newWorker);
+          user.workers.push(newWorker);
           pushActivity(s, {
             type: 'worker',
             icon: '👾',
-            message: `招募了新算力小人【${newWorker.name}】（${template.label} / -${cost}G）`,
+            message: `${user.displayName} 招募了新算力小人【${newWorker.name}】（${template.label} / -${cost}G）`,
             workerId: newWorker.id,
           });
-          return newWorker;
+          return { worker: newWorker, userId: user.id };
         });
 
-        sseHub.broadcast('worker_updated', { action: 'created', worker });
+        sseHub.broadcast('worker_updated', { action: 'created', worker: result.worker });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
-        return sendJson(res, 201, { ok: true, worker, state });
+        return sendJson(res, 201, {
+          ok: true,
+          worker: result.worker,
+          state: projectStateForUser(state, result.userId),
+        });
       }
 
       // Workers: PATCH /api/workers/:id
@@ -671,8 +907,10 @@ export function createAppServer(options = {}) {
         const workerId = decodeURIComponent(workerPatchMatch[1]);
         const body = await parseJsonBody(req);
 
-        const { state, result: worker } = await store.mutate((s) => {
-          const w = s.workers.find((item) => item.id === workerId);
+        const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+          const w = user.workers.find((item) => item.id === workerId);
           if (!w) {
             throw new HttpError(404, `找不到算力小人：${workerId}`);
           }
@@ -700,7 +938,7 @@ export function createAppServer(options = {}) {
             w.autoMode = body.autoMode;
           }
           if (typeof body.skin === 'string') {
-            if (body.skin !== 'default' && !s.player.ownedSkins.includes(body.skin)) {
+            if (body.skin !== 'default' && !user.ownedSkins.includes(body.skin)) {
               throw new HttpError(400, `尚未解鎖該皮膚：${body.skin}`);
             }
             w.skin = body.skin;
@@ -719,12 +957,16 @@ export function createAppServer(options = {}) {
             });
           }
 
-          return w;
+          return { worker: w, userId: user.id };
         });
 
-        sseHub.broadcast('worker_updated', { action: 'updated', worker });
+        sseHub.broadcast('worker_updated', { action: 'updated', worker: result.worker });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
-        return sendJson(res, 200, { ok: true, worker, state });
+        return sendJson(res, 200, {
+          ok: true,
+          worker: result.worker,
+          state: projectStateForUser(state, result.userId),
+        });
       }
 
       // Projects: POST /api/projects (propose new project)
@@ -736,7 +978,9 @@ export function createAppServer(options = {}) {
           throw new HttpError(400, '請輸入至少 2 個字的項目名稱');
         }
 
-        const { state, result: project } = await store.mutate((s) => {
+        const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           const votesRequired = Number(body.votesRequired) >= 2 && Number(body.votesRequired) <= 100
             ? Math.round(Number(body.votesRequired))
             : 10;
@@ -755,8 +999,8 @@ export function createAppServer(options = {}) {
             votes: 1,
             votesRequired,
             progressPct: 0,
-            creatorId: s.player.id,
-            creatorName: s.player.displayName,
+            creatorId: user.id,
+            creatorName: user.displayName,
             repoUrl: sanitizeText(body.repoUrl, 200),
             bountyPoolUsd,
             revenueSplit: { ...REVENUE_SPLIT },
@@ -767,10 +1011,10 @@ export function createAppServer(options = {}) {
             launchedAt: null,
             createdAt: new Date().toISOString(),
             contributions: {
-              [s.player.id]: 15,
+              [user.id]: 15,
             },
             contributorNames: {
-              [s.player.id]: s.player.displayName,
+              [user.id]: user.displayName,
             },
           };
 
@@ -778,15 +1022,19 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'proposal',
             icon: '💡',
-            message: `${s.player.displayName} 發起新項目提案《${newProj.name}》（1/${newProj.votesRequired} 票）`,
+            message: `${user.displayName} 發起新項目提案《${newProj.name}》（1/${newProj.votesRequired} 票）`,
             projectId: newProj.id,
           });
-          return newProj;
+          return { project: newProj, userId: user.id };
         });
 
-        sseHub.broadcast('project_updated', { action: 'proposed', project });
+        sseHub.broadcast('project_updated', { action: 'proposed', project: result.project });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
-        return sendJson(res, 201, { ok: true, project, state });
+        return sendJson(res, 201, {
+          ok: true,
+          project: result.project,
+          state: projectStateForUser(state, result.userId),
+        });
       }
 
       // Projects: POST /api/projects/:id/vote
@@ -795,6 +1043,8 @@ export function createAppServer(options = {}) {
         const projectId = decodeURIComponent(voteMatch[1]);
 
         const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           const proj = s.projects.find((p) => p.id === projectId);
           if (!proj) {
             throw new HttpError(404, `找不到項目：${projectId}`);
@@ -804,8 +1054,8 @@ export function createAppServer(options = {}) {
           }
 
           proj.votes += 1;
-          if (!s.player.votedProjectIds.includes(proj.id)) {
-            s.player.votedProjectIds.push(proj.id);
+          if (!user.votedProjectIds.includes(proj.id)) {
+            user.votedProjectIds.push(proj.id);
           }
 
           let unlocked = false;
@@ -826,17 +1076,17 @@ export function createAppServer(options = {}) {
               message: `《${proj.name}》投票達標（${proj.votes}/${proj.votesRequired}）正式破土立項！已自動生成 3 張自動工坊 + 2 張懸賞工會任務！`,
               projectId: proj.id,
             });
-            unlockedAchievements = unlockAchievements(s, ['community_builder']);
+            unlockedAchievements = unlockAchievements(s, user, ['community_builder']);
           } else {
             pushActivity(s, {
               type: 'vote',
               icon: '🗳️',
-              message: `${s.player.displayName} 投給《${proj.shortName}》一票（目前 ${proj.votes}/${proj.votesRequired} 票）`,
+              message: `${user.displayName} 投給《${proj.shortName}》一票（目前 ${proj.votes}/${proj.votesRequired} 票）`,
               projectId: proj.id,
             });
           }
 
-          return { project: proj, unlocked, generatedTasks, unlockedAchievements };
+          return { project: proj, unlocked, generatedTasks, unlockedAchievements, user };
         });
 
         sseHub.broadcast(result.unlocked ? 'project_unlocked' : 'project_updated', {
@@ -844,7 +1094,7 @@ export function createAppServer(options = {}) {
           unlocked: result.unlocked,
           generatedTaskCount: result.generatedTasks.length,
         });
-        broadcastAchievements(sseHub, result.unlockedAchievements, state);
+        broadcastAchievements(sseHub, result.unlockedAchievements, result.user);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
@@ -852,7 +1102,7 @@ export function createAppServer(options = {}) {
           unlocked: result.unlocked,
           generatedTasks: result.generatedTasks,
           unlockedAchievements: result.unlockedAchievements,
-          state,
+          state: projectStateForUser(state, result.user.id),
         });
       }
 
@@ -862,7 +1112,8 @@ export function createAppServer(options = {}) {
         const projectId = decodeURIComponent(billboardMatch[1]);
         const body = await parseJsonBody(req);
 
-        const { state, result: project } = await store.mutate((s) => {
+        const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
           const proj = s.projects.find((p) => p.id === projectId);
           if (!proj) {
             throw new HttpError(404, `找不到項目：${projectId}`);
@@ -889,17 +1140,17 @@ export function createAppServer(options = {}) {
             projectId: proj.id,
           });
 
-          return proj;
+          return { project: proj, userId: ctx.userId };
         });
 
-        sseHub.broadcast('billboard_updated', { project, feeUsd: BILLBOARD_PRICE_USD });
+        sseHub.broadcast('billboard_updated', { project: result.project, feeUsd: BILLBOARD_PRICE_USD });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
-          project,
+          project: result.project,
           feeUsd: BILLBOARD_PRICE_USD,
           founderRevenue: state.founderRevenue,
-          state,
+          state: projectStateForUser(state, result.userId),
         });
       }
 
@@ -910,6 +1161,8 @@ export function createAppServer(options = {}) {
         const body = await parseJsonBody(req);
 
         const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           const proj = s.projects.find((p) => p.id === projectId);
           if (!proj) {
             throw new HttpError(404, `找不到項目：${projectId}`);
@@ -928,7 +1181,7 @@ export function createAppServer(options = {}) {
             ? round2(Number(body.initialRevenueUsd))
             : 200;
 
-          const dividend = distributeProjectRevenue(s, proj, initialRevenueUsd, '首日上線營收');
+          const dividend = distributeProjectRevenue(s, user, proj, initialRevenueUsd, '首日上線營收');
 
           pushActivity(s, {
             type: 'launch',
@@ -939,16 +1192,16 @@ export function createAppServer(options = {}) {
 
           const achIds = ['launch_founder'];
           if (dividend.playerShareUsd > 0) achIds.push('dividend_earner');
-          const unlockedAchievements = unlockAchievements(s, achIds);
+          const unlockedAchievements = unlockAchievements(s, user, achIds);
 
-          return { project: proj, dividend, unlockedAchievements };
+          return { project: proj, dividend, unlockedAchievements, user };
         });
 
         sseHub.broadcast('project_launched', {
           project: result.project,
           dividend: result.dividend,
         });
-        broadcastAchievements(sseHub, result.unlockedAchievements, state);
+        broadcastAchievements(sseHub, result.unlockedAchievements, result.user);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
@@ -956,7 +1209,7 @@ export function createAppServer(options = {}) {
           dividend: result.dividend,
           founderRevenue: state.founderRevenue,
           unlockedAchievements: result.unlockedAchievements,
-          state,
+          state: projectStateForUser(state, result.user.id),
         });
       }
 
@@ -967,6 +1220,8 @@ export function createAppServer(options = {}) {
         const body = await parseJsonBody(req);
 
         const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           const proj = s.projects.find((p) => p.id === projectId);
           if (!proj) {
             throw new HttpError(404, `找不到項目：${projectId}`);
@@ -976,7 +1231,7 @@ export function createAppServer(options = {}) {
           }
 
           const amountUsd = Number(body.amountUsd) > 0 ? round2(Number(body.amountUsd)) : 100;
-          const dividend = distributeProjectRevenue(s, proj, amountUsd, '新進產品營收');
+          const dividend = distributeProjectRevenue(s, user, proj, amountUsd, '新進產品營收');
 
           pushActivity(s, {
             type: 'dividend',
@@ -986,17 +1241,17 @@ export function createAppServer(options = {}) {
           });
 
           const unlockedAchievements = dividend.playerShareUsd > 0
-            ? unlockAchievements(s, ['dividend_earner'])
+            ? unlockAchievements(s, user, ['dividend_earner'])
             : [];
 
-          return { project: proj, dividend, unlockedAchievements };
+          return { project: proj, dividend, unlockedAchievements, user };
         });
 
         sseHub.broadcast('revenue_distributed', {
           project: result.project,
           dividend: result.dividend,
         });
-        broadcastAchievements(sseHub, result.unlockedAchievements, state);
+        broadcastAchievements(sseHub, result.unlockedAchievements, result.user);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
@@ -1004,7 +1259,7 @@ export function createAppServer(options = {}) {
           dividend: result.dividend,
           founderRevenue: state.founderRevenue,
           unlockedAchievements: result.unlockedAchievements,
-          state,
+          state: projectStateForUser(state, result.user.id),
         });
       }
 
@@ -1015,6 +1270,8 @@ export function createAppServer(options = {}) {
         const body = await parseJsonBody(req);
 
         const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           const task = s.tasks.find((t) => t.id === taskId);
           if (!task) {
             throw new HttpError(404, `找不到任務：${taskId}`);
@@ -1028,8 +1285,8 @@ export function createAppServer(options = {}) {
 
           const expectedTrack = task.track === 'api_auto' ? 'api' : 'quota';
           let worker = body.workerId
-            ? s.workers.find((w) => w.id === body.workerId)
-            : s.workers.find((w) => w.track === expectedTrack && w.status === 'idle');
+            ? user.workers.find((w) => w.id === body.workerId)
+            : user.workers.find((w) => w.track === expectedTrack && w.status === 'idle');
 
           if (!worker) {
             throw new HttpError(400, body.workerId
@@ -1053,7 +1310,7 @@ export function createAppServer(options = {}) {
           const now = new Date().toISOString();
           task.status = 'in_progress';
           task.assignedWorkerId = worker.id;
-          task.claimedBy = s.player.id;
+          task.claimedBy = user.id;
           task.claimedAt = now;
 
           worker.status = 'working';
@@ -1072,7 +1329,7 @@ export function createAppServer(options = {}) {
             taskId: task.id,
           });
 
-          return { task, worker, project: proj || null };
+          return { task, worker, project: proj || null, userId: user.id };
         });
 
         sseHub.broadcast('task_claimed', {
@@ -1086,17 +1343,19 @@ export function createAppServer(options = {}) {
           task: result.task,
           worker: result.worker,
           project: result.project,
-          state,
+          state: projectStateForUser(state, result.userId),
         });
       }
 
-      // Tasks: POST /api/tasks/:id/release (safe no-penalty release on BYOK/CLI abort)
+      // Tasks: POST /api/tasks/:id/release
       const releaseMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/release$/);
       if (releaseMatch && method === 'POST') {
         const taskId = decodeURIComponent(releaseMatch[1]);
         const body = await parseJsonBody(req);
 
         const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           const task = s.tasks.find((t) => t.id === taskId);
           if (!task) {
             throw new HttpError(404, `找不到任務：${taskId}`);
@@ -1106,9 +1365,13 @@ export function createAppServer(options = {}) {
           }
 
           const targetWorkerId = body.workerId || task.assignedWorkerId;
-          const worker = targetWorkerId
-            ? s.workers.find((w) => w.id === targetWorkerId)
+          let worker = targetWorkerId
+            ? user.workers.find((w) => w.id === targetWorkerId)
             : null;
+          if (!worker && targetWorkerId) {
+            const cross = findWorkerAcrossUsers(s, targetWorkerId);
+            if (cross) worker = cross.worker;
+          }
 
           const wasInProgress = task.status === 'in_progress';
           task.status = 'open';
@@ -1139,7 +1402,7 @@ export function createAppServer(options = {}) {
             });
           }
 
-          return { task, worker: worker || null };
+          return { task, worker: worker || null, userId: user.id };
         });
 
         sseHub.broadcast('task_released', {
@@ -1151,7 +1414,7 @@ export function createAppServer(options = {}) {
           ok: true,
           task: result.task,
           worker: result.worker,
-          state,
+          state: projectStateForUser(state, result.userId),
         });
       }
 
@@ -1162,6 +1425,8 @@ export function createAppServer(options = {}) {
         const body = await parseJsonBody(req);
 
         const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          let user = ctx.user;
           const task = s.tasks.find((t) => t.id === taskId);
           if (!task) {
             throw new HttpError(404, `找不到任務：${taskId}`);
@@ -1172,9 +1437,18 @@ export function createAppServer(options = {}) {
 
           const expectedTrack = task.track === 'api_auto' ? 'api' : 'quota';
           const workerId = body.workerId || task.assignedWorkerId;
-          const worker = workerId
-            ? s.workers.find((w) => w.id === workerId)
-            : s.workers.find((w) => w.track === expectedTrack);
+          let worker = workerId
+            ? user.workers.find((w) => w.id === workerId)
+            : user.workers.find((w) => w.track === expectedTrack);
+
+          // If submitted by a CLI worker belonging to another user, resolve owner cleanly
+          if (!worker && workerId) {
+            const cross = findWorkerAcrossUsers(s, workerId);
+            if (cross) {
+              user = cross.user;
+              worker = cross.worker;
+            }
+          }
 
           const verification = verifySubmission(task, {
             content: body.content,
@@ -1187,7 +1461,7 @@ export function createAppServer(options = {}) {
           const now = new Date().toISOString();
 
           if (!verification.passed) {
-            s.player.reputation = Math.max(0, s.player.reputation - 2);
+            user.reputation = Math.max(0, user.reputation - 2);
             task.status = 'open';
             task.assignedWorkerId = null;
             task.lastRejectedVerification = verification;
@@ -1201,7 +1475,7 @@ export function createAppServer(options = {}) {
               worker.lastMessage = '交卷未通過驗收，需要修正後重交！';
             }
 
-            syncPlayerLeaderboard(s);
+            syncUserLeaderboard(s, user);
             pushActivity(s, {
               type: 'reject',
               icon: '🛡️',
@@ -1227,6 +1501,8 @@ export function createAppServer(options = {}) {
               task,
               worker: worker || null,
               project: proj || null,
+              unlockedAchievements: [],
+              user,
             };
           }
 
@@ -1258,18 +1534,18 @@ export function createAppServer(options = {}) {
             notes: sanitizeText(body.notes, 500, { multiline: true }),
             executionMode: sanitizeText(body.executionMode, 32) || (task.track === 'api_auto' ? 'byok' : 'byot_cli'),
             tokensUsed,
-            submittedBy: s.player.displayName,
+            submittedBy: user.displayName,
+            submittedByUserId: user.id,
             submittedAt: now,
           };
 
-          // Update player stats
-          s.player.gold += gold;
-          s.player.usdBalance = round2(s.player.usdBalance + bountyNetUsd);
-          s.player.completedTasks += 1;
-          s.player.totalContribution += contributionPoints;
-          s.player.reputation += reputationDelta;
+          // Update user stats
+          user.gold += gold;
+          user.usdBalance = round2((user.usdBalance || 0) + bountyNetUsd);
+          user.completedTasks += 1;
+          user.totalContribution += contributionPoints;
+          user.reputation += reputationDelta;
 
-          // Record 10% platform bounty fee
           if (platformFeeUsd > 0) {
             addFounderRevenueEntry(s, {
               stream: 'bounty_fee',
@@ -1310,8 +1586,8 @@ export function createAppServer(options = {}) {
             proj.progressPct = Math.min(100, (proj.progressPct || 0) + (task.progressWeight || 15));
             proj.contributions = proj.contributions || {};
             proj.contributorNames = proj.contributorNames || {};
-            proj.contributions[s.player.id] = (proj.contributions[s.player.id] || 0) + contributionPoints;
-            proj.contributorNames[s.player.id] = s.player.displayName;
+            proj.contributions[user.id] = (proj.contributions[user.id] || 0) + contributionPoints;
+            proj.contributorNames[user.id] = user.displayName;
           }
 
           // Contribution ledger
@@ -1322,8 +1598,8 @@ export function createAppServer(options = {}) {
             projectName: proj?.name || task.projectId,
             taskId: task.id,
             taskTitle: task.title,
-            userId: s.player.id,
-            userName: s.player.displayName,
+            userId: user.id,
+            userName: user.displayName,
             workerId: worker?.id || null,
             workerName: worker?.name || '手動提交',
             points: contributionPoints,
@@ -1337,7 +1613,7 @@ export function createAppServer(options = {}) {
             s.contributionLedger.length = 100;
           }
 
-          syncPlayerLeaderboard(s);
+          syncUserLeaderboard(s, user);
 
           const bountyText = bountyGrossUsd > 0
             ? `、實得懸賞 $${bountyNetUsd}（平臺服務費 $${platformFeeUsd}）`
@@ -1347,7 +1623,7 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'complete',
             icon: '✅',
-            message: `【${worker?.name || s.player.displayName}】完成《${task.title}》（評分 ${verification.score}）：+${gold}G、+${contributionPoints} 貢獻點${bountyText}`,
+            message: `【${worker?.name || user.displayName}】完成《${task.title}》（評分 ${verification.score}）：+${gold}G、+${contributionPoints} 貢獻點${bountyText}`,
             workerId: worker?.id || null,
             projectId: task.projectId,
             taskId: task.id,
@@ -1356,12 +1632,14 @@ export function createAppServer(options = {}) {
 
           const achCandidates = ['first_blood'];
           const completedTracks = new Set(
-            s.tasks.filter((t) => t.status === 'completed').map((t) => t.track),
+            s.tasks
+              .filter((t) => t.status === 'completed' && (!t.submission?.submittedByUserId || t.submission.submittedByUserId === user.id))
+              .map((t) => t.track),
           );
           if (completedTracks.has('api_auto') && completedTracks.has('guild_bounty')) {
             achCandidates.push('dual_track_master');
           }
-          const unlockedAchievements = unlockAchievements(s, achCandidates);
+          const unlockedAchievements = unlockAchievements(s, user, achCandidates);
 
           return {
             passed: true,
@@ -1380,6 +1658,7 @@ export function createAppServer(options = {}) {
             worker: worker || null,
             project: proj || null,
             unlockedAchievements,
+            user,
           };
         });
 
@@ -1390,7 +1669,7 @@ export function createAppServer(options = {}) {
           verification: result.verification,
           rewards: result.rewards,
         });
-        broadcastAchievements(sseHub, result.unlockedAchievements || [], state);
+        broadcastAchievements(sseHub, result.unlockedAchievements || [], result.user);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
 
         return sendJson(res, 200, {
@@ -1402,7 +1681,7 @@ export function createAppServer(options = {}) {
           worker: result.worker,
           project: result.project,
           unlockedAchievements: result.unlockedAchievements || [],
-          state,
+          state: projectStateForUser(state, result.user.id),
         });
       }
 
@@ -1414,16 +1693,18 @@ export function createAppServer(options = {}) {
           throw new HttpError(404, `找不到商店商品：${body.itemId}`);
         }
 
-        const { state } = await store.mutate((s) => {
-          if (s.player.ownedItems.includes(item.id)) {
+        const { state, result: userId } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+          if (user.ownedItems.includes(item.id)) {
             throw new HttpError(409, `你已經擁有「${item.name}」了`);
           }
 
           if (item.priceGold > 0) {
-            if (s.player.gold < item.priceGold) {
-              throw new HttpError(400, `金幣不足！購買「${item.name}」需要 ${item.priceGold}G，目前僅有 ${s.player.gold}G`);
+            if (user.gold < item.priceGold) {
+              throw new HttpError(400, `金幣不足！購買「${item.name}」需要 ${item.priceGold}G，目前僅有 ${user.gold}G`);
             }
-            s.player.gold -= item.priceGold;
+            user.gold -= item.priceGold;
           }
 
           if (item.priceUsd > 0) {
@@ -1434,40 +1715,41 @@ export function createAppServer(options = {}) {
             });
           }
 
-          s.player.ownedItems.push(item.id);
+          user.ownedItems.push(item.id);
 
           if (item.type === 'skin' && item.skinId) {
-            if (!s.player.ownedSkins.includes(item.skinId)) {
-              s.player.ownedSkins.push(item.skinId);
+            if (!user.ownedSkins.includes(item.skinId)) {
+              user.ownedSkins.push(item.skinId);
             }
             if (body.workerId) {
-              const target = s.workers.find((w) => w.id === body.workerId);
+              const target = user.workers.find((w) => w.id === body.workerId);
               if (target) target.skin = item.skinId;
             }
           } else if (item.type === 'skin_bundle') {
             for (const sid of item.unlockSkins || []) {
-              if (!s.player.ownedSkins.includes(sid)) {
-                s.player.ownedSkins.push(sid);
+              if (!user.ownedSkins.includes(sid)) {
+                user.ownedSkins.push(sid);
               }
             }
             if (body.workerId && item.skinId) {
-              const target = s.workers.find((w) => w.id === body.workerId);
+              const target = user.workers.find((w) => w.id === body.workerId);
               if (target) target.skin = item.skinId;
             }
           } else if (item.type === 'decor' && item.decorId) {
-            if (!s.player.ownedDecor.includes(item.decorId)) {
-              s.player.ownedDecor.push(item.decorId);
+            if (!user.ownedDecor.includes(item.decorId)) {
+              user.ownedDecor.push(item.decorId);
             }
           } else if (item.type === 'pro') {
-            s.player.isPro = true;
-            syncPlayerLeaderboard(s);
+            user.isPro = true;
+            syncUserLeaderboard(s, user);
           }
 
           pushActivity(s, {
             type: 'shop',
             icon: item.icon || '🛍️',
-            message: `${s.player.displayName} 購買了「${item.name}」（${item.priceUsd > 0 ? `$${item.priceUsd} USD` : `${item.priceGold}G`}）`,
+            message: `${user.displayName} 購買了「${item.name}」（${item.priceUsd > 0 ? `$${item.priceUsd} USD` : `${item.priceGold}G`}）`,
           });
+          return user.id;
         });
 
         sseHub.broadcast('shop_purchased', { item });
@@ -1476,7 +1758,7 @@ export function createAppServer(options = {}) {
           ok: true,
           item,
           founderRevenue: state.founderRevenue,
-          state,
+          state: projectStateForUser(state, userId),
         });
       }
 
@@ -1486,9 +1768,19 @@ export function createAppServer(options = {}) {
         const now = new Date().toISOString();
 
         const { state, result } = await store.mutate((s) => {
-          const worker = body.workerId
-            ? s.workers.find((w) => w.id === body.workerId)
-            : s.workers.find((w) => w.track === 'quota') || s.workers[0];
+          const ctx = getActiveUserContext(req, s);
+          let ownerUser = ctx.user;
+          let worker = body.workerId
+            ? ownerUser.workers.find((w) => w.id === body.workerId)
+            : ownerUser.workers.find((w) => w.track === 'quota') || ownerUser.workers[0];
+
+          if (!worker && body.workerId) {
+            const cross = findWorkerAcrossUsers(s, body.workerId);
+            if (cross) {
+              ownerUser = cross.user;
+              worker = cross.worker;
+            }
+          }
 
           const message = sanitizeText(body.message, 120) || '本機 CLI 同步運行中...';
           const progressPct = body.progressPct !== undefined
@@ -1530,19 +1822,19 @@ export function createAppServer(options = {}) {
             });
           }
 
-          const unlockedAchievements = unlockAchievements(s, ['cli_pioneer']);
-          return { heartbeat, worker: worker || null, unlockedAchievements };
+          const unlockedAchievements = unlockAchievements(s, ownerUser, ['cli_pioneer']);
+          return { heartbeat, worker: worker || null, unlockedAchievements, user: ownerUser };
         });
 
         sseHub.broadcast('cli_heartbeat', result.heartbeat);
-        broadcastAchievements(sseHub, result.unlockedAchievements, state);
+        broadcastAchievements(sseHub, result.unlockedAchievements, result.user);
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 200, {
           ok: true,
           heartbeat: result.heartbeat,
           worker: result.worker,
           unlockedAchievements: result.unlockedAchievements,
-          state,
+          state: projectStateForUser(state, result.user.id),
         });
       }
 
@@ -1614,6 +1906,8 @@ export function createAppServer(options = {}) {
         }
 
         const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
           let project = null;
           let createdProject = false;
 
@@ -1638,8 +1932,8 @@ export function createAppServer(options = {}) {
                 votes: 10,
                 votesRequired: 10,
                 progressPct: 10,
-                creatorId: s.player.id,
-                creatorName: s.player.displayName,
+                creatorId: user.id,
+                creatorName: user.displayName,
                 repoUrl: parsedRepo.url,
                 bountyPoolUsd: 0,
                 revenueSplit: { ...REVENUE_SPLIT },
@@ -1650,10 +1944,10 @@ export function createAppServer(options = {}) {
                 launchedAt: null,
                 createdAt: new Date().toISOString(),
                 contributions: {
-                  [s.player.id]: 15,
+                  [user.id]: 15,
                 },
                 contributorNames: {
-                  [s.player.id]: s.player.displayName,
+                  [user.id]: user.displayName,
                 },
               };
               s.projects.push(project);
@@ -1677,7 +1971,7 @@ export function createAppServer(options = {}) {
             projectId: project.id,
           });
 
-          return { project, createdProject, tasks: importedTasks };
+          return { project, createdProject, tasks: importedTasks, userId: user.id };
         });
 
         sseHub.broadcast('tasks_imported', {
@@ -1698,7 +1992,7 @@ export function createAppServer(options = {}) {
           importedCount: result.tasks.length,
           fallbackUsed,
           fallbackReason,
-          state,
+          state: projectStateForUser(state, result.userId),
         });
       }
 
@@ -1775,7 +2069,10 @@ export function createAppServer(options = {}) {
         const state = await store.reset();
         sseHub.broadcast('world_reset', { timestamp: state.updatedAt });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
-        return sendJson(res, 200, { ok: true, state });
+        return sendJson(res, 200, {
+          ok: true,
+          state: projectStateForUser(state, FOUNDER_USER_ID),
+        });
       }
 
       // Unknown API route
@@ -1783,35 +2080,25 @@ export function createAppServer(options = {}) {
         return sendJson(res, 404, { ok: false, error: `未知的 API 路徑：${method} ${pathname}` });
       }
 
-      // Serve static files from public/
+      // Serve static pages & assets from public/
       if (method !== 'GET' && method !== 'HEAD') {
         res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
         return res.end('Method Not Allowed');
       }
 
       const decodedPath = decodeURIComponent(pathname);
-      const safeRelPath = decodedPath === '/' ? 'index.html' : decodedPath.replace(/^\/+/, '');
-      const targetPath = path.resolve(publicDir, safeRelPath);
-      if (targetPath !== publicDir && !targetPath.startsWith(`${publicDir}${path.sep}`)) {
-        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-        return res.end('Forbidden');
+      if (decodedPath === '/') {
+        return await serveStaticFile(res, method, 'landing.html', 'index.html');
+      }
+      if (decodedPath === '/app' || decodedPath === '/app/') {
+        return await serveStaticFile(res, method, 'index.html');
+      }
+      if (decodedPath === '/onboard' || decodedPath === '/onboard/') {
+        return await serveStaticFile(res, method, 'onboard.html');
       }
 
-      try {
-        const fileData = await fs.readFile(targetPath);
-        const ext = path.extname(targetPath).toLowerCase();
-        res.writeHead(200, {
-          'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-          'Cache-Control': 'no-cache',
-        });
-        if (method === 'HEAD') {
-          return res.end();
-        }
-        return res.end(fileData);
-      } catch {
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        return res.end('Not Found');
-      }
+      const safeRelPath = decodedPath.replace(/^\/+/, '');
+      return await serveStaticFile(res, method, safeRelPath);
     } catch (err) {
       if (err instanceof HttpError) {
         return sendJson(res, err.statusCode, {

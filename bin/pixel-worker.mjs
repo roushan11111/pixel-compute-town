@@ -14,13 +14,14 @@
  */
 
 import { spawn } from 'node:child_process';
+import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
-const CLI_VERSION = '0.3.0';
+const CLI_VERSION = '0.4.0';
 const DEFAULT_SERVER = (process.env.PIXEL_TOWN_SERVER || 'http://localhost:3456').replace(/\/+$/, '');
 
 const USE_COLOR = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
@@ -47,8 +48,11 @@ function printBanner() {
 function printHelp() {
   printBanner();
   console.log(`${c.bold('用法 (Usage):')}
-  node bin/pixel-worker.mjs [options]
-  npx pixel-worker [options]
+  node bin/pixel-worker.mjs [command] [options]
+  npx pixel-worker [command] [options]
+
+${c.bold('子指令 (Commands):')}
+  onboard                    自動偵測本機環境、發起 Device Flow 授權碼並引導瀏覽器核准綁定本機小人
 
 ${c.bold('常用參數 (Options):')}
   -h, --help                 顯示本說明訊息
@@ -57,7 +61,10 @@ ${c.bold('常用參數 (Options):')}
   -l, --list                 列出目前工會可接懸賞單、自動工坊任務與算力小人
   -w, --worker <id>          指定要同步動畫的算力小人 ID（未指定時自動挑選合適小人）
   -t, --task <id>            指定要承接並提交的任務 ID
-      --demo                 執行完整本機模擬流程（接單 → 即時心跳直播 → 驗收交卷）
+      --demo                 執行完整本機模擬流程（或搭配 onboard 執行端對端示範授權）
+      --no-open              搭配 onboard 使用：不自動開啟系統瀏覽器，僅在終端顯示授權連結
+      --name <deviceName>    搭配 onboard 使用：自訂本機裝置名稱（預設為系統主機名稱）
+      --timeout <sec>        搭配 onboard 使用：輪詢等待核准的逾時秒數（預設: 300）
       --watch                常駐輪詢模式：定時偵測該小人的待辦任務並持續推送心跳
       --interval <sec>       配合 --watch 使用的輪詢間隔秒數（預設: 5）
       --max-ticks <n>        配合 --watch 使用的最大輪詢次數，0 代表不限（適合自動化測試）
@@ -69,6 +76,9 @@ ${c.bold('常用參數 (Options):')}
       --dry-run              僅執行本機指令與預覽結果，不送出最終 /submit
 
 ${c.bold('實用範例 (Examples):')}
+  ${c.dim('# 0. 一鍵初始化並透過瀏覽器完成本機裝置與算力小人綁定 (Device Flow)')}
+  node bin/pixel-worker.mjs onboard --server http://localhost:3456
+
   ${c.dim('# 1. 查看小鎮中可接的懸賞單與小人 ID')}
   node bin/pixel-worker.mjs --list
 
@@ -86,6 +96,10 @@ ${c.bold('實用範例 (Examples):')}
   node bin/pixel-worker.mjs --task task-i18n-ast-pr --output ./solution.md \\
     --pr https://github.com/pixel-compute-town/i18n-pixelbot/pull/42
 
+${c.bold('環境變數 (Environment):')}
+  PIXEL_TOWN_SERVER          預設伺服器網址（預設 ${DEFAULT_SERVER}）
+  PIXEL_CONFIG_DIR           本機憑證設定檔存放目錄（預設 ~/.pixelcompute）
+
 ${c.bold('合規與安全保證 (BYOT Security):')}
   • 本工具僅在你的本機啟動子行程，絕不存取 ~/.gemini、~/.claude、~/.codex 或任何憑證。
   • 伺服器只會收到輕量工作進度心跳 (POST /api/cli/heartbeat) 與你親自確認後的成果內容。
@@ -94,10 +108,14 @@ ${c.bold('合規與安全保證 (BYOT Security):')}
 
 function parseArgs(argv) {
   const opts = {
+    command: '',
     help: false,
     version: false,
     list: false,
     demo: false,
+    noOpen: false,
+    deviceName: '',
+    timeout: 300,
     watch: false,
     interval: 5,
     maxTicks: 0,
@@ -121,10 +139,16 @@ function parseArgs(argv) {
       return argv[i];
     };
 
-    if (arg === '-h' || arg === '--help') opts.help = true;
+    if (arg === 'onboard' || arg === '--onboard') opts.command = 'onboard';
+    else if (arg === '-h' || arg === '--help') opts.help = true;
     else if (arg === '-v' || arg === '--version') opts.version = true;
     else if (arg === '-l' || arg === '--list') opts.list = true;
     else if (arg === '--demo') opts.demo = true;
+    else if (arg === '--no-open') opts.noOpen = true;
+    else if (arg === '--name') opts.deviceName = next();
+    else if (arg.startsWith('--name=')) opts.deviceName = arg.slice('--name='.length);
+    else if (arg === '--timeout') opts.timeout = Number(next());
+    else if (arg.startsWith('--timeout=')) opts.timeout = Number(arg.slice('--timeout='.length));
     else if (arg === '--watch') opts.watch = true;
     else if (arg === '-y' || arg === '--yes') opts.yes = true;
     else if (arg === '--dry-run') opts.dryRun = true;
@@ -154,6 +178,9 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(opts.maxTicks) || opts.maxTicks < 0) {
     throw new Error(`--max-ticks 必須為大於等於 0 的整數（收到: ${opts.maxTicks}）`);
+  }
+  if (!Number.isFinite(opts.timeout) || opts.timeout < 1) {
+    throw new Error(`--timeout 必須為大於等於 1 的秒數（收到: ${opts.timeout}）`);
   }
 
   return opts;
@@ -853,6 +880,273 @@ async function runWatchLoop(opts) {
   }
 }
 
+function getConfigDir() {
+  return process.env.PIXEL_CONFIG_DIR
+    ? path.resolve(process.env.PIXEL_CONFIG_DIR)
+    : path.join(os.homedir(), '.pixelcompute');
+}
+
+function getConfigPath() {
+  return path.join(getConfigDir(), 'config.json');
+}
+
+async function saveLocalConfig(configData) {
+  const dir = getConfigDir();
+  const filePath = getConfigPath();
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(filePath, `${JSON.stringify(configData, null, 2)}\n`, 'utf8');
+  return filePath;
+}
+
+async function checkCommandInPath(cmdName) {
+  const pathEnv = process.env.PATH || process.env.Path || '';
+  const dirs = pathEnv.split(path.delimiter).filter(Boolean);
+  const isWin = process.platform === 'win32';
+  const exts = isWin
+    ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM;.PS1')
+        .split(';')
+        .map((e) => e.toLowerCase())
+        .filter(Boolean)
+    : [''];
+
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const candidate = path.join(dir, isWin ? `${cmdName}${ext}` : cmdName);
+      try {
+        await fs.access(candidate, isWin ? fsConstants.F_OK : fsConstants.X_OK);
+        return true;
+      } catch {
+        // continue searching PATH
+      }
+    }
+  }
+  return false;
+}
+
+async function detectLocalEnvironment(customName) {
+  const platformNames = {
+    win32: 'Windows',
+    darwin: 'macOS',
+    linux: 'Linux',
+  };
+  const osFriendly = platformNames[process.platform] || process.platform;
+  const osLabel = `${osFriendly} (${process.platform} ${os.arch()} ${os.release()})`;
+  const deviceName = (customName || os.hostname() || 'pixel-workstation').trim();
+
+  const candidateTools = ['gemini', 'claude', 'codex', 'git'];
+  const checks = await Promise.all(
+    candidateTools.map(async (tool) => ((await checkCommandInPath(tool)) ? tool : null))
+  );
+  const cliTools = checks.filter(Boolean);
+
+  return { deviceName, osLabel, cliTools };
+}
+
+function openBrowser(url) {
+  try {
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn('cmd', ['/c', 'start', '', url], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+    } else if (process.platform === 'darwin') {
+      child = spawn('open', [url], {
+        detached: true,
+        stdio: 'ignore',
+      });
+    } else {
+      child = spawn('xdg-open', [url], {
+        detached: true,
+        stdio: 'ignore',
+      });
+    }
+    child.on('error', () => {
+      // Non-fatal: user can still open verifyUrl manually
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function printOnboardBox({ code, verifyUrl, deviceName, osLabel, cliTools }) {
+  const innerWidth = Math.max(64, verifyUrl.length + 16, code.length + 22);
+  const hr = '═'.repeat(innerWidth);
+  const line = (label, value = '') => {
+    const raw = value ? `  ${label}: ${value}` : `  ${label}`;
+    return `║ ${raw}`;
+  };
+
+  console.log(c.cyan(`╔${hr}╗`));
+  console.log(c.cyan('║') + c.bold(c.magenta('  👾 PIXELCOMPUTE TOWN · DEVICE ONBOARDING AUTHORIZATION (BYOT)')));
+  console.log(c.cyan(`╠${hr}╣`));
+  console.log(c.cyan(line('裝置名稱 (Device)', c.bold(deviceName))));
+  console.log(c.cyan(line('作業系統 (OS)    ', osLabel)));
+  console.log(
+    c.cyan(
+      line(
+        '偵測 CLI 工具    ',
+        cliTools.length > 0 ? c.green(cliTools.join(', ')) : c.dim('未偵測到官方 CLI（仍可使用 --demo / --output）')
+      )
+    )
+  );
+  console.log(c.cyan(`╟${'─'.repeat(innerWidth)}╢`));
+  console.log(c.cyan(line('🔑 裝置授權碼 (Code)', c.bold(c.yellow(code)))));
+  console.log(c.cyan(line('🌐 瀏覽器核准網址   ', c.bold(c.green(verifyUrl)))));
+  console.log(c.cyan(`╠${hr}╣`));
+  console.log(c.cyan('║') + c.dim('  🛡️ 零信任承諾：本機授權僅綁定算力小人，絕不存取任何本地 AI Token/Cookie'));
+  console.log(c.cyan(`╚${hr}╝\n`));
+}
+
+async function runOnboard(opts) {
+  printBanner();
+  console.log(`${c.bold('🌐 連線伺服器')}: ${c.cyan(opts.server)}`);
+
+  // 1. Health check
+  const health = await apiRequest(opts.server, '/api/health');
+  console.log(c.green(`✓ 伺服器健康檢查通過 (${health.service || 'pixel-compute-town'} v${health.version || '1.0.0'})`));
+
+  // 2. Detect local OS, hostname, and installed CLI tools
+  const envInfo = await detectLocalEnvironment(opts.deviceName);
+  console.log(
+    `${c.cyan('🔍 本機環境偵測')}: ${c.bold(envInfo.deviceName)} · ${envInfo.osLabel} · CLI: ${
+      envInfo.cliTools.length > 0 ? c.green(envInfo.cliTools.join(', ')) : c.dim('none')
+    }`
+  );
+
+  // 3. Request device authorization code
+  const startRes = await apiRequest(opts.server, '/api/device/start', {
+    method: 'POST',
+    body: {
+      deviceName: envInfo.deviceName,
+      os: envInfo.osLabel,
+      cliTools: envInfo.cliTools,
+    },
+  });
+
+  const code = startRes.code || startRes.device?.code;
+  const deviceSecret = startRes.deviceSecret || startRes.secret || startRes.device?.deviceSecret;
+  if (!code || !deviceSecret) {
+    throw new Error('伺服器未回傳完整的 Device Flow 授權碼與 deviceSecret。');
+  }
+
+  let verifyUrl = startRes.verifyUrl || `/onboard?code=${encodeURIComponent(code)}`;
+  if (verifyUrl.startsWith('/')) {
+    verifyUrl = `${opts.server}${verifyUrl}`;
+  }
+
+  console.log('');
+  printOnboardBox({
+    code,
+    verifyUrl,
+    deviceName: envInfo.deviceName,
+    osLabel: envInfo.osLabel,
+    cliTools: envInfo.cliTools,
+  });
+
+  // 4. Auto-open browser unless --no-open
+  if (!opts.noOpen) {
+    const opened = openBrowser(verifyUrl);
+    if (opened) {
+      console.log(c.cyan(`🚀 已自動開啟系統瀏覽器前往核准頁：${verifyUrl}`));
+    } else {
+      console.log(c.yellow(`⚠️  無法自動啟動瀏覽器，請手動開啟：${verifyUrl}`));
+    }
+  } else {
+    console.log(c.dim(`ℹ️  已略過自動開啟瀏覽器 (--no-open)，請於瀏覽器開啟上述網址完成核准。`));
+  }
+
+  // 5. If --demo, execute end-to-end demo approval against server
+  if (opts.demo) {
+    console.log(c.magenta('\n🎬 [--demo] 正在執行端對端示範裝置授權 (POST /api/device/approve)...'));
+    const approveRes = await apiRequest(opts.server, '/api/device/approve', {
+      method: 'POST',
+      body: {
+        code,
+        workerRoleClass: 'pro_architect',
+        workerName: `${envInfo.deviceName.slice(0, 18)} (BYOT)`,
+      },
+    });
+    const approveStatus = approveRes.status || approveRes.device?.status || 'approved';
+    console.log(c.green(`   ✓ 示範核准請求已送出，目前狀態: ${approveStatus}`));
+  }
+
+  // 6. Poll GET /api/device/poll until approved / rejected / expired / timeout
+  const pollIntervalMs = opts.demo ? 250 : 2000;
+  const deadlineMs = Date.now() + Math.round(opts.timeout * 1000);
+  let lastStatus = '';
+  let pollData = null;
+
+  console.log(c.cyan(`⏳ 正在輪詢等待瀏覽器端核准（逾時上限 ${opts.timeout} 秒）...`));
+
+  while (Date.now() <= deadlineMs) {
+    pollData = await apiRequest(
+      opts.server,
+      `/api/device/poll?code=${encodeURIComponent(code)}&secret=${encodeURIComponent(deviceSecret)}`
+    );
+
+    const status = pollData.status || pollData.device?.status || 'pending';
+    if (status !== lastStatus) {
+      lastStatus = status;
+      if (status === 'pending') {
+        console.log(c.dim(`   • 狀態: pending（等待於瀏覽器點擊「核准並綁定此裝置」...）`));
+      } else if (status === 'pending_review') {
+        console.log(c.yellow(`   • 狀態: pending_review（已綁定帳號，等待鎮長審核通過...）`));
+      }
+    }
+
+    if (status === 'approved') {
+      break;
+    }
+    if (status === 'rejected') {
+      throw new Error(`裝置授權碼 ${code} 已被拒絕（rejected）。`);
+    }
+    if (status === 'expired') {
+      throw new Error(`裝置授權碼 ${code} 已逾時過期（expired），請重新執行 onboard。`);
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  const finalStatus = pollData?.status || pollData?.device?.status;
+  if (finalStatus !== 'approved') {
+    throw new Error(`等待裝置核准逾時（${opts.timeout} 秒，最後狀態: ${finalStatus || 'unknown'}）。`);
+  }
+
+  // 7. Persist local credentials & workerId
+  const workerObj = pollData.worker || pollData.device?.worker || null;
+  const workerId = pollData.workerId || workerObj?.id || pollData.device?.workerId || 'w-pro-01';
+  const workerName = pollData.workerName || workerObj?.name || pollData.device?.workerName || envInfo.deviceName;
+  const userId = pollData.userId || pollData.user?.id || pollData.device?.userId || 'founder-demo';
+
+  const savedConfig = {
+    version: CLI_VERSION,
+    server: opts.server,
+    deviceName: envInfo.deviceName,
+    os: envInfo.osLabel,
+    cliTools: envInfo.cliTools,
+    deviceCode: code,
+    deviceSecret,
+    workerId,
+    workerName,
+    userId,
+    approvedAt: pollData.approvedAt || pollData.device?.approvedAt || new Date().toISOString(),
+  };
+
+  const configFilePath = await saveLocalConfig(savedConfig);
+
+  console.log(c.green(c.bold('\n🎉 裝置核准與綁定成功！(Device Onboarded & Approved)')));
+  console.log(`   授權碼 (Code)    : ${c.yellow(code)}`);
+  console.log(`   綁定小人 (Worker): ${c.magenta(workerName)} (${c.cyan(workerId)})`);
+  console.log(`   設定檔已寫入     : ${c.cyan(configFilePath)}`);
+  console.log(`\n${c.bold('💡 下一步 — 立即啟動算力小人直播：')}`);
+  console.log(c.green(`   node bin/pixel-worker.mjs --watch --server ${opts.server} --worker ${workerId}`));
+  console.log(c.dim(`   node bin/pixel-worker.mjs --demo --server ${opts.server} --worker ${workerId}\n`));
+}
+
 async function main() {
   try {
     const opts = parseArgs(process.argv.slice(2));
@@ -862,6 +1156,10 @@ async function main() {
     }
     if (opts.help || process.argv.length <= 2) {
       printHelp();
+      return;
+    }
+    if (opts.command === 'onboard') {
+      await runOnboard(opts);
       return;
     }
     if (opts.list) {

@@ -27,13 +27,27 @@ async function stopServer(server) {
   await new Promise((resolve) => server.close(resolve));
 }
 
-async function apiJson(baseUrl, method, route, body) {
+function extractCookieHeader(headers) {
+  const rawList = typeof headers.getSetCookie === 'function'
+    ? headers.getSetCookie()
+    : (headers.get('set-cookie') ? [headers.get('set-cookie')] : []);
+  const pairs = rawList
+    .map((line) => String(line).split(';')[0].trim())
+    .filter(Boolean);
+  return pairs.join('; ');
+}
+
+async function apiJson(baseUrl, method, route, body, cookie = '') {
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+  if (cookie) {
+    headers.Cookie = cookie;
+  }
   const res = await fetch(`${baseUrl}${route}`, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -43,7 +57,12 @@ async function apiJson(baseUrl, method, route, body) {
   } catch {
     json = { raw: text };
   }
-  return { status: res.status, headers: res.headers, json };
+  return {
+    status: res.status,
+    headers: res.headers,
+    cookie: extractCookieHeader(res.headers),
+    json,
+  };
 }
 
 /**
@@ -816,5 +835,558 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await stopServer(rlServer);
       await fs.rm(rlTmpDir, { recursive: true, force: true });
     }
+  });
+
+  it('15. Multi-user email register, login, logout, error codes (401/409) & user state isolation', async () => {
+    // Reset world cleanly before v1.0 multi-user tests
+    const resetRes = await apiJson(baseUrl, 'POST', '/api/reset', {});
+    assert.equal(resetRes.status, 200);
+
+    // Register User A
+    const regA = await apiJson(baseUrl, 'POST', '/api/auth/register', {
+      email: 'alice@pixelcompute.test',
+      password: 'alice-password-123',
+      displayName: 'Alice Builder',
+    });
+    assert.equal(regA.status, 201);
+    assert.equal(regA.json.ok, true);
+    assert.equal(regA.json.user.email, 'alice@pixelcompute.test');
+    assert.ok(regA.cookie.includes('pct_session='), 'Registration must issue pct_session cookie');
+    const cookieA = regA.cookie;
+
+    // Duplicate email rejected with 409
+    const dupReg = await apiJson(baseUrl, 'POST', '/api/auth/register', {
+      email: 'ALICE@pixelcompute.test',
+      password: 'another-password-123',
+    });
+    assert.equal(dupReg.status, 409);
+
+    // Wrong password rejected with 401
+    const badLogin = await apiJson(baseUrl, 'POST', '/api/auth/login', {
+      email: 'alice@pixelcompute.test',
+      password: 'wrong-password',
+    });
+    assert.equal(badLogin.status, 401);
+
+    // Register User B
+    const regB = await apiJson(baseUrl, 'POST', '/api/auth/register', {
+      email: 'bob@pixelcompute.test',
+      password: 'bob-password-456',
+      displayName: 'Bob Architect',
+    });
+    assert.equal(regB.status, 201);
+    assert.ok(regB.cookie.includes('pct_session='));
+    const cookieB = regB.cookie;
+
+    // Verify GET /api/auth/me reflects each isolated session
+    const meA = await apiJson(baseUrl, 'GET', '/api/auth/me', undefined, cookieA);
+    assert.equal(meA.status, 200);
+    assert.equal(meA.json.user.email, 'alice@pixelcompute.test');
+    assert.equal(meA.json.isGuestDemo, false);
+
+    const meB = await apiJson(baseUrl, 'GET', '/api/auth/me', undefined, cookieB);
+    assert.equal(meB.status, 200);
+    assert.equal(meB.json.user.email, 'bob@pixelcompute.test');
+
+    // User A recruits a worker -> only User A's gold & workers change; User B stays isolated
+    const bootABefore = await apiJson(baseUrl, 'GET', '/api/bootstrap', undefined, cookieA);
+    const bootBBefore = await apiJson(baseUrl, 'GET', '/api/bootstrap', undefined, cookieB);
+    const goldABefore = bootABefore.json.state.player.gold;
+    const goldBBefore = bootBBefore.json.state.player.gold;
+
+    const recruitA = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/workers',
+      {
+        name: 'Alice-Isolated-Bot',
+        roleClass: 'flash_worker',
+        providerLabel: 'Gemini 2.5 Flash',
+        dailyTokenCap: 500000,
+      },
+      cookieA,
+    );
+    assert.equal(recruitA.status, 201);
+    assert.equal(recruitA.json.state.player.gold, goldABefore - 120);
+    assert.ok(recruitA.json.state.workers.some((w) => w.name === 'Alice-Isolated-Bot'));
+
+    const bootBAfter = await apiJson(baseUrl, 'GET', '/api/bootstrap', undefined, cookieB);
+    assert.equal(bootBAfter.json.state.player.gold, goldBBefore, 'User B gold must stay isolated from User A');
+    assert.ok(
+      !bootBAfter.json.state.workers.some((w) => w.name === 'Alice-Isolated-Bot'),
+      'User B must NOT see User A private workers',
+    );
+
+    // Shared project pool & leaderboard: User A proposes a project -> User B sees it
+    const propA = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/projects',
+      {
+        name: 'SharedPixelCLI',
+        tagline: 'Cross-user shared project test',
+        votesRequired: 4,
+      },
+      cookieA,
+    );
+    assert.equal(propA.status, 201);
+    const bootBShared = await apiJson(baseUrl, 'GET', '/api/bootstrap', undefined, cookieB);
+    assert.ok(
+      bootBShared.json.state.projects.some((p) => p.id === propA.json.project.id),
+      'Projects pool must be shared across users',
+    );
+    assert.ok(Array.isArray(bootBShared.json.state.leaderboard) && bootBShared.json.state.leaderboard.length >= 5);
+
+    // Logout User A -> reverts to guest demo context
+    const logoutA = await apiJson(baseUrl, 'POST', '/api/auth/logout', {}, cookieA);
+    assert.equal(logoutA.status, 200);
+    const meAfterLogout = await apiJson(baseUrl, 'GET', '/api/auth/me', undefined, cookieA);
+    assert.equal(meAfterLogout.status, 200);
+    assert.equal(meAfterLogout.json.isGuestDemo, true);
+
+    // Log back in as User A -> isolated worker & gold restored
+    const loginA = await apiJson(baseUrl, 'POST', '/api/auth/login', {
+      email: 'alice@pixelcompute.test',
+      password: 'alice-password-123',
+    });
+    assert.equal(loginA.status, 200);
+    assert.ok(loginA.cookie.includes('pct_session='));
+    assert.ok(loginA.json.state.workers.some((w) => w.name === 'Alice-Isolated-Bot'));
+    assert.equal(loginA.json.state.player.gold, goldABefore - 120);
+
+    // Google OAuth unconfigured fallback returns clean JSON when Accept: application/json
+    const googleAuth = await apiJson(baseUrl, 'GET', '/api/auth/google');
+    assert.equal(googleAuth.status, 200);
+    assert.equal(googleAuth.json.googleOAuthEnabled, false);
+  });
+
+  it('16. Stablecoin USDC/USDT payment lifecycle (create -> reject invalid TxHash 400 -> confirm -> founderRevenue)', async () => {
+    const loginA = await apiJson(baseUrl, 'POST', '/api/auth/login', {
+      email: 'alice@pixelcompute.test',
+      password: 'alice-password-123',
+    });
+    const cookieA = loginA.cookie;
+    const revBefore = loginA.json.state.founderRevenue;
+
+    // Create Base USDC order for Pro Pass ($9)
+    const createOrder = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/stablecoin/create',
+      {
+        productId: 'shop-pro-pass',
+        chain: 'base',
+        token: 'USDC',
+      },
+      cookieA,
+    );
+    assert.equal(createOrder.status, 201);
+    assert.equal(createOrder.json.ok, true);
+    const order = createOrder.json.order;
+    assert.equal(order.productId, 'shop-pro-pass');
+    assert.equal(order.amountUsd, 9);
+    assert.equal(order.chain, 'base');
+    assert.equal(order.token, 'USDC');
+    assert.equal(order.status, 'pending');
+    assert.ok(order.receiverAddress && order.receiverAddress.startsWith('0x'));
+    assert.ok(order.memoCode);
+
+    // Invalid TxHash rejected with 400
+    const badTx = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/stablecoin/confirm',
+      {
+        orderId: order.id,
+        txHash: '0x1234-invalid-hash',
+      },
+      cookieA,
+    );
+    assert.equal(badTx.status, 400);
+
+    // Valid EVM TxHash confirms order, grants Pro Pass, and updates founderRevenue
+    const validEvmTx = `0x${'ab'.repeat(32)}`;
+    const confirmPro = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/stablecoin/confirm',
+      {
+        orderId: order.id,
+        txHash: validEvmTx,
+      },
+      cookieA,
+    );
+    assert.equal(confirmPro.status, 200);
+    assert.equal(confirmPro.json.ok, true);
+    assert.equal(confirmPro.json.order.status, 'confirmed');
+    assert.equal(confirmPro.json.order.txHash, validEvmTx);
+    assert.equal(confirmPro.json.state.player.isPro, true);
+    assert.equal(confirmPro.json.founderRevenue.proSkinsUsd, round2(revBefore.proSkinsUsd + 9));
+    assert.equal(confirmPro.json.founderRevenue.totalUsd, round2(revBefore.totalUsd + 9));
+
+    // Confirming the same order twice returns 409
+    const dupConfirm = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/stablecoin/confirm',
+      { orderId: order.id, txHash: validEvmTx },
+      cookieA,
+    );
+    assert.equal(dupConfirm.status, 409);
+
+    // Solana USDT billboard-ad ($29) with simulate: true
+    const createAd = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/stablecoin/create',
+      {
+        productId: 'billboard-ad',
+        targetProjectId: 'proj-meta',
+        billboardText: '💎 Base & Solana USDC Live!',
+        chain: 'solana',
+        token: 'USDT',
+      },
+      cookieA,
+    );
+    assert.equal(createAd.status, 201);
+    assert.equal(createAd.json.order.amountUsd, 29);
+
+    const confirmAd = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/stablecoin/confirm',
+      { orderId: createAd.json.order.id, simulate: true },
+      cookieA,
+    );
+    assert.equal(confirmAd.status, 200);
+    assert.equal(confirmAd.json.order.status, 'confirmed');
+    assert.equal(confirmAd.json.founderRevenue.billboardAdsUsd, round2(revBefore.billboardAdsUsd + 29));
+    assert.equal(confirmAd.json.founderRevenue.totalUsd, round2(revBefore.totalUsd + 9 + 29));
+    const metaProj = confirmAd.json.state.projects.find((p) => p.id === 'proj-meta');
+    assert.equal(metaProj.sponsoredBillboard, true);
+  });
+
+  it('17. Stablecoin wallet binding & dividend withdrawal (<$5 rejected -> valid payout -> admin mark-paid TxHash)', async () => {
+    // Use founder-demo (has default balance or earn $36 net bounty to guarantee >= $10 USD balance)
+    const claim = await apiJson(baseUrl, 'POST', '/api/tasks/task-i18n-ast-pr/claim', { workerId: 'w-pro-01' });
+    assert.equal(claim.status, 200);
+    const submit = await apiJson(baseUrl, 'POST', '/api/tasks/task-i18n-ast-pr/submit', {
+      workerId: 'w-pro-01',
+      prUrl: 'https://github.com/pixel-compute-town/i18n-pixelbot/pull/200',
+      content: [
+        'export function parseAstKeys(code) {',
+        '  const found = [];',
+        '  const rx = /t\\([\'"]([^\'"]+)[\'"]\\)/g;',
+        '  let m; while ((m = rx.exec(code)) !== null) found.push(m[1]);',
+        '  return found;',
+        '}',
+      ].join('\n'),
+    });
+    assert.equal(submit.status, 200);
+    assert.equal(submit.json.passed, true);
+
+    const balanceBefore = submit.json.state.player.usdBalance;
+    assert.ok(balanceBefore >= 36, `Expected founder balance >= $36, got $${balanceBefore}`);
+
+    // Requesting payout before binding wallet must fail with 400
+    const noWalletPayout = await apiJson(baseUrl, 'POST', '/api/payouts/request', { amountUsd: 10 });
+    assert.equal(noWalletPayout.status, 400);
+
+    // Invalid EVM wallet address rejected with 400
+    const badWallet = await apiJson(baseUrl, 'POST', '/api/wallet/bind', {
+      chain: 'base',
+      address: 'not-an-evm-wallet',
+    });
+    assert.equal(badWallet.status, 400);
+
+    // Bind valid Base wallet
+    const validWallet = '0x111122223333444455556666777788889999AaBb';
+    const bindRes = await apiJson(baseUrl, 'POST', '/api/wallet/bind', {
+      chain: 'base',
+      address: validWallet,
+    });
+    assert.equal(bindRes.status, 200);
+    assert.equal(bindRes.json.ok, true);
+    assert.equal(bindRes.json.wallet.chain, 'base');
+    assert.equal(bindRes.json.wallet.address, validWallet);
+
+    // Below $5 minimum rejected with 400
+    const tooSmall = await apiJson(baseUrl, 'POST', '/api/payouts/request', {
+      amountUsd: 4.5,
+      chain: 'base',
+      token: 'USDC',
+    });
+    assert.equal(tooSmall.status, 400);
+
+    // Valid $12 payout request deducts balance & creates pending payout
+    const payoutReq = await apiJson(baseUrl, 'POST', '/api/payouts/request', {
+      amountUsd: 12,
+      chain: 'base',
+      token: 'USDC',
+    });
+    assert.equal(payoutReq.status, 201);
+    assert.equal(payoutReq.json.ok, true);
+    assert.equal(payoutReq.json.payout.amountUsd, 12);
+    assert.equal(payoutReq.json.payout.status, 'pending');
+    assert.equal(payoutReq.json.state.player.usdBalance, round2(balanceBefore - 12));
+
+    // Mayor marks payout paid with real EVM TxHash
+    const payoutTxHash = `0x${'cd'.repeat(32)}`;
+    const markPaid = await apiJson(
+      baseUrl,
+      'POST',
+      `/api/admin/payouts/${encodeURIComponent(payoutReq.json.payout.id)}/mark-paid`,
+      { txHash: payoutTxHash },
+    );
+    assert.equal(markPaid.status, 200);
+    assert.equal(markPaid.json.ok, true);
+    assert.equal(markPaid.json.payout.status, 'paid');
+    assert.equal(markPaid.json.payout.txHash, payoutTxHash);
+  });
+
+  it('18. Fiat Polar/Stripe sandbox checkout & Redeem Code system (PIXEL-PRO-2026, 409 duplicate, admin generate)', async () => {
+    const loginB = await apiJson(baseUrl, 'POST', '/api/auth/login', {
+      email: 'bob@pixelcompute.test',
+      password: 'bob-password-456',
+    });
+    const cookieB = loginB.cookie;
+    const revBefore = loginB.json.state.founderRevenue;
+
+    // Polar sandbox checkout for Genesis Skin Pack ($15)
+    const polarOrder = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/checkout',
+      { productId: 'shop-genesis-pack', provider: 'polar' },
+      cookieB,
+    );
+    assert.equal(polarOrder.status, 201);
+    assert.equal(polarOrder.json.provider, 'polar');
+    assert.equal(polarOrder.json.sandboxMode, true);
+    assert.equal(polarOrder.json.order.amountUsd, 15);
+
+    const completePolar = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/sandbox/complete',
+      { orderId: polarOrder.json.order.id },
+      cookieB,
+    );
+    assert.equal(completePolar.status, 200);
+    assert.equal(completePolar.json.order.status, 'confirmed');
+    assert.ok(completePolar.json.state.player.ownedSkins.includes('skin-gold'));
+    assert.ok(completePolar.json.state.player.ownedSkins.includes('skin-cat'));
+    assert.equal(completePolar.json.founderRevenue.proSkinsUsd, round2(revBefore.proSkinsUsd + 15));
+
+    // Redeem pre-seeded PIXEL-PRO-2026 -> activates Pro Pass for Bob
+    const redeemPro = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/redeem',
+      { code: 'PIXEL-PRO-2026' },
+      cookieB,
+    );
+    assert.equal(redeemPro.status, 200);
+    assert.equal(redeemPro.json.ok, true);
+    assert.equal(redeemPro.json.state.player.isPro, true);
+
+    // Redeeming the same code again returns 409
+    const dupRedeem = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/redeem',
+      { code: 'PIXEL-PRO-2026' },
+      cookieB,
+    );
+    assert.equal(dupRedeem.status, 409);
+
+    // Unknown redeem code returns 404
+    const badRedeem = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/redeem',
+      { code: 'NON-EXISTENT-CODE-999' },
+      cookieB,
+    );
+    assert.equal(badRedeem.status, 404);
+
+    // Founder admin generates a new gold_500 code and Bob redeems it
+    const genRes = await apiJson(baseUrl, 'POST', '/api/admin/codes/generate', {
+      rewardType: 'gold_500',
+      count: 1,
+      note: 'QA Automated Promo Batch',
+    });
+    assert.equal(genRes.status, 201);
+    assert.equal(genRes.json.ok, true);
+    assert.equal(genRes.json.codes.length, 1);
+    const newCode = typeof genRes.json.codes[0] === 'string' ? genRes.json.codes[0] : genRes.json.codes[0].code;
+    assert.ok(newCode && newCode.length >= 6);
+
+    const goldBeforeRedeem = redeemPro.json.state.player.gold;
+    const redeemGen = await apiJson(
+      baseUrl,
+      'POST',
+      '/api/payments/redeem',
+      { code: newCode },
+      cookieB,
+    );
+    assert.equal(redeemGen.status, 200);
+    assert.equal(redeemGen.json.state.player.gold, goldBeforeRedeem + 500);
+  });
+
+  it('19. One-click install scripts (/install.ps1, /install.sh, /download/pixel-worker.mjs) & Device Flow + strictDeviceReview', async () => {
+    // Verify one-click install endpoints return 200 with expected content
+    const ps1Res = await fetch(`${baseUrl}/install.ps1`);
+    assert.equal(ps1Res.status, 200);
+    const ps1Text = await ps1Res.text();
+    assert.match(ps1Text, /download\/pixel-worker\.mjs/i);
+    assert.match(ps1Text, /onboard/i);
+
+    const shRes = await fetch(`${baseUrl}/install.sh`);
+    assert.equal(shRes.status, 200);
+    const shText = await shRes.text();
+    assert.match(shText, /download\/pixel-worker\.mjs/i);
+    assert.match(shText, /onboard/i);
+
+    const dlRes = await fetch(`${baseUrl}/download/pixel-worker.mjs`);
+    assert.equal(dlRes.status, 200);
+    const dlText = await dlRes.text();
+    assert.match(dlText, /pixel-worker/i);
+    assert.match(dlText, /runOnboard/);
+
+    // Standard Device Flow (strictDeviceReview = false)
+    const start1 = await apiJson(baseUrl, 'POST', '/api/device/start', {
+      deviceName: 'QA-Laptop-01',
+      os: 'Windows (win32 x64)',
+      cliTools: ['gemini', 'git'],
+    });
+    assert.equal(start1.status, 201);
+    assert.equal(start1.json.ok, true);
+    assert.match(start1.json.code, /^PCT-[A-Z0-9]{4}-[A-Z0-9]{2}$/);
+    assert.ok(start1.json.deviceSecret);
+    assert.match(start1.json.verifyUrl, /\/onboard\?code=PCT-/);
+
+    // Public status omits deviceSecret
+    const status1 = await apiJson(baseUrl, 'GET', `/api/device/status?code=${encodeURIComponent(start1.json.code)}`);
+    assert.equal(status1.status, 200);
+    assert.equal(status1.json.device.deviceName, 'QA-Laptop-01');
+    assert.equal(status1.json.device.status, 'pending');
+    assert.equal(status1.json.device.deviceSecret, undefined);
+
+    // Poll before approval -> pending
+    const poll1Before = await apiJson(
+      baseUrl,
+      'GET',
+      `/api/device/poll?code=${encodeURIComponent(start1.json.code)}&secret=${encodeURIComponent(start1.json.deviceSecret)}`,
+    );
+    assert.equal(poll1Before.status, 200);
+    assert.equal(poll1Before.json.status, 'pending');
+
+    // Approve -> immediately approved
+    const approve1 = await apiJson(baseUrl, 'POST', '/api/device/approve', {
+      code: start1.json.code,
+      workerRoleClass: 'pro_architect',
+      workerName: 'QA-Laptop 小人',
+    });
+    assert.equal(approve1.status, 200);
+    assert.equal(approve1.json.status, 'approved');
+    assert.equal(approve1.json.requiresAdminReview, false);
+
+    // Poll after approval -> approved + workerId
+    const poll1After = await apiJson(
+      baseUrl,
+      'GET',
+      `/api/device/poll?code=${encodeURIComponent(start1.json.code)}&secret=${encodeURIComponent(start1.json.deviceSecret)}`,
+    );
+    assert.equal(poll1After.status, 200);
+    assert.equal(poll1After.json.status, 'approved');
+    assert.ok(poll1After.json.workerId);
+
+    // Enable strictDeviceReview mode -> device enters pending_review until mayor approves
+    const enableStrict = await apiJson(baseUrl, 'PATCH', '/api/admin/settings', {
+      strictDeviceReview: true,
+    });
+    assert.equal(enableStrict.status, 200);
+    assert.equal(enableStrict.json.settings.strictDeviceReview, true);
+
+    const start2 = await apiJson(baseUrl, 'POST', '/api/device/start', {
+      deviceName: 'Strict-Workstation-02',
+      os: 'macOS (darwin arm64)',
+      cliTools: ['claude', 'codex', 'git'],
+    });
+    assert.equal(start2.status, 201);
+
+    const approve2 = await apiJson(baseUrl, 'POST', '/api/device/approve', {
+      code: start2.json.code,
+      workerRoleClass: 'guild_hunter',
+      workerName: '嚴格審核小人',
+    });
+    assert.equal(approve2.status, 200);
+    assert.equal(approve2.json.status, 'pending_review');
+    assert.equal(approve2.json.requiresAdminReview, true);
+
+    const poll2Pending = await apiJson(
+      baseUrl,
+      'GET',
+      `/api/device/poll?code=${encodeURIComponent(start2.json.code)}&secret=${encodeURIComponent(start2.json.deviceSecret)}`,
+    );
+    assert.equal(poll2Pending.status, 200);
+    assert.equal(poll2Pending.json.status, 'pending_review');
+
+    // Mayor reviews & approves
+    const review2 = await apiJson(
+      baseUrl,
+      'POST',
+      `/api/admin/devices/${encodeURIComponent(start2.json.code)}/review`,
+      { action: 'approve', note: 'Verified trusted developer machine' },
+    );
+    assert.equal(review2.status, 200);
+    assert.equal(review2.json.status, 'approved');
+
+    const poll2Approved = await apiJson(
+      baseUrl,
+      'GET',
+      `/api/device/poll?code=${encodeURIComponent(start2.json.code)}&secret=${encodeURIComponent(start2.json.deviceSecret)}`,
+    );
+    assert.equal(poll2Approved.status, 200);
+    assert.equal(poll2Approved.json.status, 'approved');
+    assert.ok(poll2Approved.json.workerId);
+
+    // Turn strictDeviceReview back off cleanly
+    await apiJson(baseUrl, 'PATCH', '/api/admin/settings', { strictDeviceReview: false });
+  });
+
+  it('20. Official Landing (/), Town App (/app), Onboard (/onboard) HTML routes & GET /api/public/stats', async () => {
+    const landingRes = await fetch(`${baseUrl}/`);
+    assert.equal(landingRes.status, 200);
+    assert.match(landingRes.headers.get('content-type') || '', /^text\/html/i);
+    const landingHtml = await landingRes.text();
+    assert.match(landingHtml, /landing\.js|landing\.css/, 'GET / must serve public/landing.html');
+
+    const appRes = await fetch(`${baseUrl}/app`);
+    assert.equal(appRes.status, 200);
+    assert.match(appRes.headers.get('content-type') || '', /^text\/html/i);
+    const appHtml = await appRes.text();
+    assert.match(appHtml, /town-canvas/, 'GET /app must serve public/index.html');
+
+    const onboardRes = await fetch(`${baseUrl}/onboard`);
+    assert.equal(onboardRes.status, 200);
+    assert.match(onboardRes.headers.get('content-type') || '', /^text\/html/i);
+    const onboardHtml = await onboardRes.text();
+    assert.match(onboardHtml, /onboard\.js|onboard\.css/, 'GET /onboard must serve public/onboard.html');
+
+    const statsRes = await apiJson(baseUrl, 'GET', '/api/public/stats');
+    assert.equal(statsRes.status, 200);
+    assert.equal(statsRes.json.ok, true);
+    assert.equal(typeof statsRes.json.projectsCount, 'number');
+    assert.ok(statsRes.json.projectsCount >= 3);
+    assert.equal(typeof statsRes.json.buildingCount, 'number');
+    assert.equal(typeof statsRes.json.launchedCount, 'number');
+    assert.equal(typeof statsRes.json.completedTasksCount, 'number');
+    assert.equal(typeof statsRes.json.openTasksCount, 'number');
+    assert.equal(typeof statsRes.json.totalRevenueUsd, 'number');
+    assert.equal(typeof statsRes.json.totalUsersCount, 'number');
+    assert.ok(statsRes.json.totalUsersCount >= 3, 'Should count founder + registered test users');
+    assert.ok(Array.isArray(statsRes.json.featuredProjects) && statsRes.json.featuredProjects.length >= 1);
   });
 });

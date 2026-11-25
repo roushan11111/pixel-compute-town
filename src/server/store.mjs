@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createInitialAchievements, createInitialState } from './seed.mjs';
+import { createInitialState, ensureStateSchema } from './seed.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,10 +43,7 @@ export class StateStore {
       const raw = await fs.readFile(this.stateFile, 'utf8');
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && parsed.player && Array.isArray(parsed.projects)) {
-        if (!Array.isArray(parsed.achievements) || parsed.achievements.length === 0) {
-          parsed.achievements = createInitialAchievements();
-        }
-        return parsed;
+        return ensureStateSchema(parsed);
       }
       return null;
     } catch {
@@ -56,6 +53,7 @@ export class StateStore {
 
   async _atomicWrite(stateObj) {
     await this._ensureDir();
+    ensureStateSchema(stateObj);
     stateObj.updatedAt = new Date().toISOString();
     const serialized = JSON.stringify(stateObj, null, 2);
     const tmpFile = `${this.stateFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;

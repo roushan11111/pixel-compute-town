@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>裝置註冊與安全審核 — 像素算力鎮 PixelCompute Town</title>
+  <link rel="stylesheet" href="/onboard.css" />
+</head>
+<body data-theme="night">
+  <div class="pixel-grid-bg" aria-hidden="true"></div>
+
+  <!-- 頂部導覽列 -->
+  <header class="onboard-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">
+        <span class="brand-logo" aria-hidden="true">👾</span>
+        <span class="brand-copy">
+          <span class="brand-title">
+            <span data-i18n="brand.name">像素算力鎮</span>
+            <span class="badge-pill">DEVICE AUTH</span>
+          </span>
+          <span class="brand-sub" data-i18n="brand.sub">Zero-Trust 本機算力裝置註冊與審核中心</span>
+        </span>
+      </a>
+
+      <div class="header-actions">
+        <div class="lang-switch" id="onboard-lang-switch" role="group" aria-label="Language Switcher">
+          <button type="button" class="lang-btn active" data-lang="zh-TW">繁中</button>
+          <button type="button" class="lang-btn" data-lang="zh-CN">简中</button>
+          <button type="button" class="lang-btn" data-lang="en">EN</button>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="/" data-i18n="nav.home">🏠 返回官網</a>
+        <a class="btn btn-primary btn-sm" href="/app" data-i18n="nav.enterApp">🚀 進入小鎮</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container onboard-main">
+    <!-- Demo 預覽橫幅（?demo=1 或自動建立預覽碼時顯示） -->
+    <div class="demo-ribbon" id="demo-ribbon" hidden>
+      <span>✨</span>
+      <span data-i18n="demo.banner">
+        目前為「互動預覽模式（Demo）」：系統已自動建立一筆真實可用的裝置授權碼，您可完整體驗 3 步綁定與審核流程！
+      </span>
+    </div>
+
+    <!-- 裝置識別與安全權限審核卡 -->
+    <section class="panel device-hero-panel" aria-label="Device Information and Security Audit">
+      <div class="device-top-row">
+        <div>
+          <div class="eyebrow" data-i18n="device.eyebrow">INCOMING LOCAL WORKER DEVICE</div>
+          <h1 class="page-title" data-i18n="device.title">🛡️ 確認並核准本機算力小人裝置</h1>
+        </div>
+        <div class="code-box" id="device-code-box">
+          <span class="code-label" data-i18n="device.codeLabel">裝置授權碼</span>
+          <strong class="code-value" id="device-code-value">LOADING...</strong>
+          <span class="status-chip pending" id="device-status-chip" data-i18n="status.pending">等待核准</span>
+        </div>
+      </div>
+
+      <div class="device-meta-grid">
+        <div class="meta-tile">
+          <span class="meta-label" data-i18n="device.nameLabel">裝置名稱</span>
+          <strong class="meta-value" id="device-name-val">—</strong>
+        </div>
+        <div class="meta-tile">
+          <span class="meta-label" data-i18n="device.osLabel">作業系統</span>
+          <strong class="meta-value" id="device-os-val">—</strong>
+        </div>
+        <div class="meta-tile wide">
+          <span class="meta-label" data-i18n="device.cliLabel">偵測到的本機官方 CLI 工具</span>
+          <div class="cli-badges" id="device-cli-list">
+            <span class="cli-chip muted" data-i18n="device.detecting">偵測中...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 零信任安全權限審核清單 -->
+      <div class="audit-box">
+        <div class="audit-head">
+          <span>🔐</span>
+          <strong data-i18n="audit.title">零信任安全權限審核清單（Zero-Trust Permission Audit）</strong>
+        </div>
+        <ul class="audit-list">
+          <li data-i18n="audit.item1">✅ 僅於本機 <code>~/.pixelcompute/</code> 儲存裝置憑證與心跳設定，不修改任何專案源碼。</li>
+          <li data-i18n="audit.item2">✅ 絕不讀取瀏覽器 Cookie、AI 訂閱帳密或系統環境變數內的 API Key。</li>
+          <li data-i18n="audit.item3">✅ 僅傳送任務狀態心跳（任務名稱、進度百分比、工位動畫）回像素算力鎮。</li>
+          <li data-i18n="audit.item4">✅ 您隨時可於 <code>/app</code> 控制台解除綁定或由鎮長啟用「嚴格防刷人工審核」。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 三步完成核准 -->
+    <div class="steps-layout" id="approval-steps-wrap">
+      <!-- STEP 1: 帳號確認 / 註冊與登入 -->
+      <section class="panel step-panel" id="step-1-panel">
+        <div class="step-head">
+          <span class="step-tag">STEP 1</span>
+          <div>
+            <h2 data-i18n="step1.title">確認或建立您的小鎮帳號</h2>
+            <p data-i18n="step1.desc">裝置綁定後的算力貢獻點數與 60% 項目分紅將直接記入此帳號。</p>
+          </div>
+        </div>
+
+        <!-- 目前登入狀態卡片 -->
+        <div class="account-status-card" id="account-status-card">
+          <div class="account-avatar" id="account-avatar">🧑‍💻</div>
+          <div class="account-info">
+            <div class="account-name-row">
+              <strong id="account-display-name">Loading...</strong>
+              <span class="account-mode-tag" id="account-mode-tag">Demo</span>
+            </div>
+            <div class="account-sub" id="account-sub-info">—</div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-onboard-logout" hidden data-i18n="step1.logoutBtn">
+            登出切換
+          </button>
+        </div>
+
+        <!-- 登入 / 註冊切換表單 -->
+        <div class="auth-box" id="auth-box">
+          <div class="auth-tabs" role="tablist">
+            <button type="button" class="auth-tab active" data-auth-mode="register" data-i18n="step1.tabRegister">
+              ✨ 免費信箱註冊
+            </button>
+            <button type="button" class="auth-tab" data-auth-mode="login" data-i18n="step1.tabLogin">
+              🔑 已有帳號登入
+            </button>
+          </div>
+
+          <form class="auth-form" id="onboard-auth-form">
+            <div class="form-row" id="field-display-name">
+              <label for="auth-display-name" data-i18n="step1.nameLabel">鎮長暱稱</label>
+              <input
+                id="auth-display-name"
+                type="text"
+                maxlength="40"
+                placeholder="例如：CyberBuilder"
+                autocomplete="nickname"
+              />
+            </div>
+            <div class="form-row">
+              <label for="auth-email" data-i18n="step1.emailLabel">電子信箱</label>
+              <input
+                id="auth-email"
+                type="email"
+                required
+                placeholder="you@example.com"
+                autocomplete="email"
+              />
+            </div>
+            <div class="form-row">
+              <label for="auth-password" data-i18n="step1.passwordLabel">密碼（至少 6 字元）</label>
+              <input
+                id="auth-password"
+                type="password"
+                required
+                minlength="6"
+                placeholder="••••••••"
+                autocomplete="current-password"
+              />
+            </div>
+
+            <div class="auth-error" id="auth-error-msg" hidden></div>
+
+            <button type="submit" class="btn btn-primary btn-block" id="btn-auth-submit" data-i18n="step1.registerSubmit">
+              ✨ 立即註冊並綁定此帳號
+            </button>
+          </form>
+
+          <div class="divider-line">
+            <span data-i18n="step1.orDivider">或使用第三方／快速模式</span>
+          </div>
+
+          <div class="social-auth-row">
+            <a class="btn btn-ghost btn-sm" id="btn-oauth-github" href="/api/auth/github" data-i18n="step1.githubBtn">
+              🐙 GitHub 登入
+            </a>
+            <a class="btn btn-ghost btn-sm" id="btn-oauth-google" href="/api/auth/google" data-i18n="step1.googleBtn">
+              🌐 Google 登入
+            </a>
+            <button type="button" class="btn btn-amber btn-sm" id="btn-fast-demo" data-i18n="step1.demoFastBtn">
+              ⚡ Demo 創始帳號快速綁定
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: 挑選 32×32 HD 像素小人化身 -->
+      <section class="panel step-panel" id="step-2-panel">
+        <div class="step-head">
+          <span class="step-tag">STEP 2</span>
+          <div>
+            <h2 data-i18n="step2.title">挑選本機裝置的 32×32 HD 像素小人化身</h2>
+            <p data-i18n="step2.desc">您的本機終端將化身這位像素小人進駐小鎮工位，即時敲碼直播心跳。</p>
+          </div>
+        </div>
+
+        <div class="worker-selector-layout">
+          <div class="worker-role-grid" id="worker-role-grid" role="radiogroup" aria-label="Select Pixel Worker">
+            <!-- JS 動態渲染 4 大 32x32 HD 角色卡 + renderWorkerPortrait Canvas -->
+          </div>
+
+          <div class="worker-preview-box">
+            <div class="preview-portrait-frame">
+              <canvas id="selected-worker-preview" width="96" height="96" aria-label="Selected HD Pixel Worker Preview"></canvas>
+            </div>
+            <div class="preview-meta">
+              <div class="preview-role-name" id="preview-role-name">紫金貓頭鷹架構師</div>
+              <div class="preview-role-desc" id="preview-role-desc">—</div>
+            </div>
+            <div class="form-row">
+              <label for="onboard-worker-name" data-i18n="step2.nicknameLabel">自訂像素小人暱稱</label>
+              <input
+                id="onboard-worker-name"
+                type="text"
+                maxlength="36"
+                placeholder="例如：本機架構師 Pro-01"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3: 核准並綁定此裝置 -->
+      <section class="panel step-panel approve-panel" id="step-3-panel">
+        <div class="step-head">
+          <span class="step-tag green">STEP 3</span>
+          <div>
+            <h2 data-i18n="step3.title">最終核准與裝置綁定</h2>
+            <p data-i18n="step3.desc">確認上方權限清單、帳號與像素小人無誤後，點擊下方按鈕完成核准。</p>
+          </div>
+        </div>
+
+        <div class="approve-summary" id="approve-summary">
+          <div class="summary-chip">
+            <span data-i18n="step3.sumAccount">綁定帳號</span>
+            <strong id="summary-account">—</strong>
+          </div>
+          <div class="summary-chip">
+            <span data-i18n="step3.sumDevice">本機裝置</span>
+            <strong id="summary-device">—</strong>
+          </div>
+          <div class="summary-chip">
+            <span data-i18n="step3.sumWorker">像素小人</span>
+            <strong id="summary-worker">—</strong>
+          </div>
+        </div>
+
+        <div class="approve-error" id="approve-error-msg" hidden></div>
+
+        <div class="approve-actions" id="approve-actions">
+          <button type="button" class="btn btn-green btn-lg" id="btn-approve-device" data-i18n="step3.approveBtn">
+            ✅ 核准並綁定此裝置
+          </button>
+        </div>
+
+        <!-- 結果回饋區（核准成功 / 嚴格審核排隊 / 已拒絕） -->
+        <div class="result-card" id="result-card" hidden>
+          <div class="result-icon" id="result-icon">🎉</div>
+          <div class="result-body">
+            <h3 id="result-title">🎉 綁定核准成功！本機終端已同步上線</h3>
+            <p id="result-desc">您的本機協作器已取得安全授權憑證，像素小人已經進駐小鎮工位準備開工！</p>
+            <div class="result-meta" id="result-meta"></div>
+            <div class="result-cta-row">
+              <a class="btn btn-primary btn-lg" href="/app" data-i18n="result.enterTownBtn">
+                🚀 立即進入像素算力鎮（/app）
+              </a>
+              <button type="button" class="btn btn-ghost" id="btn-recheck-status" hidden data-i18n="result.recheckBtn">
+                🔄 重新檢查鎮長審核狀態
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast-container" id="onboard-toast" aria-live="polite"></div>
+
+  <script type="module" src="/js/onboard.js"></script>
+</body>
+</html>
