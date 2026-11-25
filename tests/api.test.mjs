@@ -3197,4 +3197,115 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('34. Personal Profile & Project History Center (GET & PATCH /api/profile/me) returns published, participated & timeline history', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-profile-center-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      // 1. Register a real user
+      const reg = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'builder-profile@pixelcompute.test',
+        password: 'profile-password-123',
+        displayName: 'Pixel Builder Mei',
+      });
+      assert.equal(reg.status, 201);
+      const cookie = reg.cookie;
+      const userId = reg.json.user.id;
+
+      // 2. Claim tutorial bonus to unlock a title
+      const bonus = await apiJson(isoUrl, 'POST', '/api/tutorial/claim-bonus', {}, cookie);
+      assert.equal(bonus.status, 200);
+      const unlockedTitle = bonus.json.unlockedTitle;
+
+      // 3. Publish an original project
+      const pubRes = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects',
+        {
+          name: 'PixelCanvas Studio',
+          tagline: 'Browser-based collaborative 16x16 sprite sheet editor',
+          votesRequired: 3,
+        },
+        cookie,
+      );
+      assert.equal(pubRes.status, 201);
+      const publishedId = pubRes.json.project.id;
+
+      // 4. Participate in an existing project (proj-meta beginner task)
+      const boot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, cookie);
+      const apiWorker = boot.json.state.workers.find((w) => w.track === 'api');
+      const sloganTask = boot.json.state.tasks.find((t) => t.id === 'task-meta-slogan');
+      await apiJson(isoUrl, 'POST', `/api/tasks/${sloganTask.id}/claim`, { workerId: apiWorker.id }, cookie);
+      const subRes = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${sloganTask.id}/submit`,
+        {
+          workerId: apiWorker.id,
+          content: '# PixelCompute Slogans\n1. Co-build open source with idle AI.\n2. Every pixel counts toward 85% merit pool.\n3. Provenance-first indie creation.',
+        },
+        cookie,
+      );
+      assert.equal(subRes.status, 200);
+      assert.equal(subRes.json.passed, true);
+
+      // 5. Founder records real revenue on proj-meta -> user earns dividend in timeline
+      const revRes = await apiJson(isoUrl, 'POST', '/api/admin/projects/proj-meta/record-revenue', {
+        amountUsd: 500,
+        note: 'Profile Test Dividend',
+      });
+      assert.equal(revRes.status, 200);
+
+      // 6. GET /api/profile/me returns complete profile, publishedProjects, participatedProjects & projectHistory
+      const profRes = await apiJson(isoUrl, 'GET', '/api/profile/me', undefined, cookie);
+      assert.equal(profRes.status, 200);
+      assert.equal(profRes.json.ok, true);
+      assert.equal(profRes.json.profile.id, userId);
+      assert.equal(profRes.json.profile.displayName, 'Pixel Builder Mei');
+      assert.equal(profRes.json.profile.authMode, 'email');
+      assert.equal(profRes.json.profile.completedTasks, 1);
+      assert.ok(profRes.json.profile.usdBalance > 0);
+
+      assert.equal(profRes.json.publishedProjects.length, 1);
+      assert.equal(profRes.json.publishedProjects[0].id, publishedId);
+      assert.equal(profRes.json.publishedProjects[0].myRole, 'originator');
+      assert.ok(profRes.json.publishedProjects[0].ideaHash.length === 64);
+
+      assert.ok(profRes.json.participatedProjects.length >= 2, 'Must include both originated and contributed projects');
+      const metaParticipation = profRes.json.participatedProjects.find((p) => p.id === 'proj-meta');
+      assert.ok(metaParticipation, 'proj-meta must appear in participatedProjects');
+      assert.equal(metaParticipation.myRole, 'contributor');
+      assert.equal(metaParticipation.myTasksCompleted, 1);
+      assert.ok(metaParticipation.myPoints >= 20);
+      assert.ok(metaParticipation.myDividendUsd > 0);
+
+      const histTypes = new Set(profRes.json.projectHistory.map((h) => h.type));
+      assert.ok(histTypes.has('originated'), 'projectHistory must include originated');
+      assert.ok(histTypes.has('task_completed'), 'projectHistory must include task_completed');
+      assert.ok(histTypes.has('dividend'), 'projectHistory must include dividend');
+
+      // 7. PATCH /api/profile/me updates displayName & title and syncs cleanly
+      const patchRes = await apiJson(
+        isoUrl,
+        'PATCH',
+        '/api/profile/me',
+        { displayName: 'Pixel Architect Mei', title: unlockedTitle },
+        cookie,
+      );
+      assert.equal(patchRes.status, 200);
+      assert.equal(patchRes.json.ok, true);
+      assert.equal(patchRes.json.user.displayName, 'Pixel Architect Mei');
+
+      const profAfter = await apiJson(isoUrl, 'GET', '/api/profile/me', undefined, cookie);
+      assert.equal(profAfter.json.profile.displayName, 'Pixel Architect Mei');
+      assert.equal(profAfter.json.profile.title, unlockedTitle);
+      assert.equal(profAfter.json.publishedProjects[0].originatorName, 'Pixel Architect Mei');
+    } finally {
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });

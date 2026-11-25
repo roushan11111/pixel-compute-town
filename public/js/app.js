@@ -811,10 +811,308 @@ function renderAuthModalStatus() {
   }
 }
 
+function isSignedInUser() {
+  const u = app.user || app.state?.player || {};
+  return Boolean(u.isAuthenticated || (u.authMode && u.authMode !== 'demo'));
+}
+
 function openAuthModal(defaultMode = 'login') {
   setAuthModalMode(defaultMode);
   renderAuthModalStatus();
   openModal('auth-modal');
+}
+
+// ============================================================================
+// Personal Profile & Project History Modal (#profile-modal)
+// ============================================================================
+function setProfileModalTab(tab) {
+  const next = ['participated', 'published', 'history'].includes(tab) ? tab : 'participated';
+  app.profileActiveTab = next;
+  document.querySelectorAll('#profile-modal [data-profile-tab]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.profileTab === next);
+  });
+  document.querySelectorAll('#profile-modal [data-profile-pane]').forEach((pane) => {
+    pane.classList.toggle('active', pane.dataset.profilePane === next);
+  });
+}
+
+function fmtProfileTime(iso) {
+  if (!iso) return '—';
+  try {
+    const loc = getLocale();
+    return new Date(iso).toLocaleString(loc === 'en' ? 'en-US' : loc, { hour12: false });
+  } catch {
+    return String(iso);
+  }
+}
+
+function renderProfileProjectCard(proj, mode = 'participated') {
+  const loc = getLocale();
+  const lp = localizeProject(proj, loc);
+  const statusLabel =
+    proj.status === 'launched'
+      ? t('profile.statusLaunched')
+      : proj.status === 'building'
+        ? t('profile.statusBuilding')
+        : t('profile.statusVoting');
+  const statusCls = proj.status === 'launched' ? 'green' : proj.status === 'building' ? 'cyan' : 'amber';
+
+  const roleKey =
+    proj.myRole === 'originator'
+      ? 'profile.roleOriginator'
+      : proj.myRole === 'contributor'
+        ? 'profile.roleContributor'
+        : proj.myRole === 'co_builder'
+          ? 'profile.roleCoBuilder'
+          : 'profile.roleParticipant';
+  const roleCls = proj.myRole === 'originator' ? 'pink' : proj.myRole === 'contributor' ? 'green' : 'cyan';
+
+  const progressText =
+    proj.status === 'voting'
+      ? `${proj.votes}/${proj.votesRequired}`
+      : `${proj.progressPct}%`;
+  const shortHash = proj.ideaHash ? `#${String(proj.ideaHash).slice(0, 10)}` : '';
+
+  return `
+    <article class="profile-project-card">
+      <div class="profile-project-head">
+        <div>
+          <div class="profile-project-title">${escapeHtml(lp.name || proj.name)}</div>
+          ${lp.tagline ? `<div class="profile-project-tagline">${escapeHtml(lp.tagline)}</div>` : ''}
+        </div>
+        <div class="badge-row" style="gap: 4px;">
+          <span class="badge ${statusCls}">${escapeHtml(statusLabel)} (${escapeHtml(progressText)})</span>
+          <span class="badge ${roleCls}">${escapeHtml(t(roleKey))}</span>
+        </div>
+      </div>
+      <div class="profile-project-meta mono">
+        <span>${escapeHtml(t('profile.metaPoints', { pts: proj.myPoints || 0, core: proj.myCorePoints || 0, periph: proj.myPeripheralPoints || 0 }))}</span>
+        <span>${escapeHtml(t('profile.metaTasks', { count: proj.myTasksCompleted || 0 }))}</span>
+        <span>${escapeHtml(t('profile.metaCoBuilders', { count: proj.coBuildersCount || 1 }))}</span>
+        ${proj.totalRevenueUsd > 0 ? `<span style="color: var(--accent-gold);">${escapeHtml(t('profile.metaRevenue', { usd: Number(proj.totalRevenueUsd).toFixed(2) }))}</span>` : ''}
+        ${proj.myDividendUsd > 0 ? `<span style="color: var(--accent-green);">${escapeHtml(t('profile.metaDividend', { usd: Number(proj.myDividendUsd).toFixed(2) }))}</span>` : ''}
+        ${mode === 'published' && shortHash ? `<span style="color: var(--accent-cyan);">POFS ${escapeHtml(shortHash)}</span>` : ''}
+      </div>
+      <div class="profile-project-actions">
+        <button type="button" class="btn btn-sm" data-profile-jump-project="${escapeHtml(proj.id)}">${escapeHtml(t('profile.btnViewInTown'))}</button>
+        <a class="btn btn-sm btn-primary" href="/p/${encodeURIComponent(proj.id)}" target="_blank" rel="noopener">${escapeHtml(t('profile.btnPublicPage'))} ↗</a>
+        ${proj.ideaHash ? `<a class="btn btn-sm" href="/verify/${encodeURIComponent(proj.ideaHash)}" target="_blank" rel="noopener">${escapeHtml(t('profile.btnVerifyHash'))} ↗</a>` : ''}
+      </div>
+    </article>
+  `;
+}
+
+function renderProfileHistoryItem(item) {
+  const typeLabel =
+    item.type === 'originated'
+      ? t('profile.histOriginated')
+      : item.type === 'task_completed'
+        ? t('profile.histTaskCompleted')
+        : item.type === 'dividend'
+          ? t('profile.histDividend')
+          : t('profile.histPayout');
+
+  const deltas = [];
+  if (item.goldDelta > 0) deltas.push(`<span style="color: var(--accent-gold);">+${item.goldDelta}G</span>`);
+  if (item.pointsDelta > 0) deltas.push(`<span style="color: var(--accent-cyan);">+${item.pointsDelta} pts</span>`);
+  if (item.usdDelta > 0) deltas.push(`<span style="color: var(--accent-green);">+$${Number(item.usdDelta).toFixed(2)}</span>`);
+  if (item.usdDelta < 0) deltas.push(`<span style="color: var(--accent-amber);">-$${Math.abs(Number(item.usdDelta)).toFixed(2)}</span>`);
+
+  let extraTag = '';
+  if (item.type === 'payout') {
+    extraTag = item.status === 'paid'
+      ? `<span class="badge green">${escapeHtml(t('profile.payoutPaid'))}</span>`
+      : `<span class="badge amber">${escapeHtml(t('profile.payoutPending'))}</span>`;
+  } else if (item.type === 'originated' && item.ideaHash) {
+    extraTag = `<a class="mono" style="font-size:10.5px;color:var(--accent-cyan);" href="/verify/${encodeURIComponent(item.ideaHash)}" target="_blank" rel="noopener">#${escapeHtml(String(item.ideaHash).slice(0, 10))} ↗</a>`;
+  }
+
+  return `
+    <div class="profile-history-item type-${escapeHtml(item.type || 'info')}">
+      <div class="profile-history-left">
+        <div class="profile-history-title">${escapeHtml(typeLabel)} · ${escapeHtml(item.title || '')}</div>
+        <div class="profile-history-sub mono">
+          ${item.projectName ? `<span>${escapeHtml(item.projectName)}</span> · ` : ''}
+          <span>${escapeHtml(fmtProfileTime(item.timestamp))}</span>
+          ${item.txHash ? ` · Tx: ${escapeHtml(String(item.txHash).slice(0, 12))}...` : ''}
+        </div>
+      </div>
+      <div class="profile-history-right mono">
+        <div>${deltas.join(' ')}</div>
+        ${extraTag}
+      </div>
+    </div>
+  `;
+}
+
+function renderProfileModal(data) {
+  if (!data || !data.profile) return;
+  const p = data.profile;
+  const loc = getLocale();
+  const locUser = localizeUser(p, loc);
+
+  const avatarEl = $('profile-avatar-icon');
+  if (avatarEl) {
+    avatarEl.textContent = p.authMode === 'github' ? '🐙' : p.authMode === 'google' ? '🌐' : p.authMode === 'email' ? '✉️' : '🧑‍💻';
+  }
+  const nameEl = $('profile-display-name');
+  if (nameEl) nameEl.textContent = locUser.displayName || p.displayName;
+
+  const modeKey =
+    p.authMode === 'github'
+      ? 'auth.modeGithub'
+      : p.authMode === 'google'
+        ? 'auth.modeGoogle'
+        : p.authMode === 'email'
+          ? 'auth.modeEmail'
+          : 'auth.modeDemo';
+  const authBadge = $('profile-auth-badge');
+  if (authBadge) authBadge.textContent = t(modeKey);
+
+  const roleBadge = $('profile-role-badge');
+  if (roleBadge) {
+    roleBadge.style.display = 'inline-flex';
+    roleBadge.textContent = p.isFounderAdmin || p.role === 'founder' ? t('profile.roleFounder') : t('profile.roleCitizen');
+  }
+
+  const proBadge = $('profile-pro-badge');
+  if (proBadge) proBadge.style.display = p.isPro ? 'inline-flex' : 'none';
+
+  const titleBadge = $('profile-title-badge');
+  if (titleBadge) {
+    if (p.title) {
+      titleBadge.style.display = 'inline-flex';
+      titleBadge.textContent = p.title;
+    } else {
+      titleBadge.style.display = 'none';
+    }
+  }
+
+  const adminBtn = $('btn-profile-admin');
+  if (adminBtn) adminBtn.style.display = p.isFounderAdmin ? 'inline-flex' : 'none';
+
+  const metaEl = $('profile-meta-line');
+  if (metaEl) {
+    const parts = [`@${p.username || p.id}`];
+    if (p.email) parts.push(p.email);
+    parts.push(t('profile.joinedAt', { date: fmtProfileTime(p.createdAt) }));
+    metaEl.textContent = parts.join(' · ');
+  }
+
+  const editNameInput = $('profile-edit-name');
+  if (editNameInput) editNameInput.value = p.displayName || '';
+  const editTitleSelect = $('profile-edit-title');
+  if (editTitleSelect) {
+    const titles = Array.isArray(p.unlockedTitles) ? p.unlockedTitles : [];
+    if (titles.length > 0) {
+      editTitleSelect.style.display = '';
+      editTitleSelect.innerHTML = [
+        `<option value="">${escapeHtml(t('profile.noTitleOption'))}</option>`,
+        ...titles.map((ti) => `<option value="${escapeHtml(ti.name)}" ${p.title === ti.name ? 'selected' : ''}>${escapeHtml(ti.name)}</option>`),
+      ].join('');
+    } else {
+      editTitleSelect.style.display = 'none';
+    }
+  }
+
+  const statsGrid = $('profile-stats-grid');
+  if (statsGrid) {
+    const walletMain = p.walletAddress
+      ? `${String(p.walletChain || '').toUpperCase()} · ${t('profile.walletBound')}`
+      : t('profile.walletUnbound');
+    const walletSub = p.walletAddress
+      ? `${p.walletAddress.slice(0, 8)}...${p.walletAddress.slice(-6)}`
+      : t('profile.walletUnboundSub');
+    statsGrid.innerHTML = `
+      <div class="profile-stat-card">
+        <div class="profile-stat-label">${escapeHtml(t('profile.statGold'))}</div>
+        <div class="profile-stat-val mono" style="color: var(--accent-gold);">${Number(p.gold || 0).toLocaleString()} G</div>
+        <div class="profile-stat-sub">${escapeHtml(t('profile.statWorkersAch', { workers: p.workersCount || 0, unlocked: p.achievementsUnlocked || 0, total: p.achievementsTotal || 6 }))}</div>
+      </div>
+      <div class="profile-stat-card">
+        <div class="profile-stat-label">${escapeHtml(t('profile.statUsd'))}</div>
+        <div class="profile-stat-val mono" style="color: var(--accent-green);">$${Number(p.usdBalance || 0).toFixed(2)}</div>
+        <div class="profile-stat-sub">USDC / USDT</div>
+      </div>
+      <div class="profile-stat-card">
+        <div class="profile-stat-label">${escapeHtml(t('profile.statContribution'))}</div>
+        <div class="profile-stat-val mono" style="color: var(--accent-cyan);">${Number(p.totalContribution || 0).toLocaleString()} pts</div>
+        <div class="profile-stat-sub">${escapeHtml(t('profile.statTasks'))}: ${Number(p.completedTasks || 0)}</div>
+      </div>
+      <div class="profile-stat-card">
+        <div class="profile-stat-label">${escapeHtml(t('profile.statRep'))}</div>
+        <div class="profile-stat-val mono">${Number(p.reputation ?? 100)}</div>
+        <div class="profile-stat-sub">PoAW Verified</div>
+      </div>
+      <div class="profile-stat-card" style="grid-column: span 2;">
+        <div class="profile-stat-label">${escapeHtml(t('profile.statWallet'))}</div>
+        <div class="profile-stat-val mono" style="font-size: 13px; color: ${p.walletAddress ? 'var(--accent-green)' : 'var(--accent-amber)'};">${escapeHtml(walletMain)}</div>
+        <div class="profile-stat-sub mono">${escapeHtml(walletSub)}</div>
+      </div>
+    `;
+  }
+
+  const participated = Array.isArray(data.participatedProjects) ? data.participatedProjects : [];
+  const published = Array.isArray(data.publishedProjects) ? data.publishedProjects : [];
+  const history = Array.isArray(data.projectHistory) ? data.projectHistory : [];
+
+  const cpEl = $('profile-count-participated');
+  if (cpEl) cpEl.textContent = String(participated.length);
+  const cpubEl = $('profile-count-published');
+  if (cpubEl) cpubEl.textContent = String(published.length);
+  const chEl = $('profile-count-history');
+  if (chEl) chEl.textContent = String(history.length);
+
+  const partList = $('profile-participated-list');
+  if (partList) {
+    partList.innerHTML = participated.length
+      ? participated.map((proj) => renderProfileProjectCard(proj, 'participated')).join('')
+      : `<div class="empty-state">${escapeHtml(t('profile.emptyParticipated'))}</div>`;
+  }
+
+  const pubList = $('profile-published-list');
+  if (pubList) {
+    pubList.innerHTML = published.length
+      ? published.map((proj) => renderProfileProjectCard(proj, 'published')).join('')
+      : `
+        <div class="empty-state">
+          <div>${escapeHtml(t('profile.emptyPublished'))}</div>
+          <button type="button" class="btn btn-sm btn-green" style="margin-top: 10px;" data-profile-jump-propose="1">${escapeHtml(t('profile.emptyPublishedCta'))}</button>
+        </div>
+      `;
+  }
+
+  const histList = $('profile-history-list');
+  if (histList) {
+    histList.innerHTML = history.length
+      ? history.map((item) => renderProfileHistoryItem(item)).join('')
+      : `<div class="empty-state">${escapeHtml(t('profile.emptyHistory'))}</div>`;
+  }
+
+  const logoutBtn = $('btn-profile-logout');
+  if (logoutBtn) {
+    logoutBtn.style.display = p.isAuthenticated || (p.authMode && p.authMode !== 'demo') ? 'inline-flex' : 'none';
+  }
+}
+
+async function openProfileModal(initialTab = 'participated') {
+  setProfileModalTab(initialTab);
+  const editForm = $('profile-edit-form');
+  if (editForm) editForm.style.display = 'none';
+  const partList = $('profile-participated-list');
+  if (partList && !app.profileData) {
+    partList.innerHTML = `<div class="empty-state">${escapeHtml(t('profile.loading'))}</div>`;
+  }
+  openModal('profile-modal');
+  try {
+    const res = await apiFetch('/api/profile/me');
+    if (res && res.ok) {
+      app.profileData = res;
+      renderProfileModal(res);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 // ============================================================================
@@ -890,6 +1188,9 @@ function renderAll() {
   renderRevenueAndLeaderboardTab();
   renderAuthModalStatus();
   syncLiveModeSandboxControls();
+  if (app.profileData && $('profile-modal')?.classList.contains('open')) {
+    renderProfileModal(app.profileData);
+  }
 }
 
 function renderOnboardingBar() {
@@ -957,6 +1258,10 @@ function renderHud() {
   const ghBtn = $('btn-github-login');
   const logoutBtn = $('btn-logout');
   const isSignedIn = Boolean(u.isAuthenticated || (u.authMode && u.authMode !== 'demo'));
+  const userBadgeBtn = $('hud-user-badge');
+  if (userBadgeBtn) {
+    userBadgeBtn.title = isSignedIn ? t('profile.hudUserTitleLoggedIn') : t('hud.userTitle');
+  }
   if (ghBtn && logoutBtn) {
     if (isSignedIn) {
       ghBtn.style.display = 'none';
@@ -3370,8 +3675,15 @@ function bindEvents() {
     if (e.key === 'Escape') closeAllModals();
   });
 
-  // HUD controls
-  $('hud-user-badge').addEventListener('click', () => openAuthModal('login'));
+  // HUD controls: logged-in users open Personal Profile & Project History; Demo guests open Auth modal
+  $('hud-user-badge').addEventListener('click', () => {
+    soundFX.playClick();
+    if (isSignedInUser()) {
+      openProfileModal('participated');
+    } else {
+      openAuthModal('login');
+    }
+  });
 
   $('btn-hud-tutorial').addEventListener('click', () => {
     soundFX.playClick();
@@ -3545,9 +3857,11 @@ function bindEvents() {
     try {
       const res = await apiFetch('/api/auth/logout', { method: 'POST' });
       app.user = res.user;
+      app.profileData = null;
       if (res.state) applyNewState(res.state, { silentAchievements: true });
       await refreshBootstrapNow({ silentAchievements: true });
       closeModal('auth-modal');
+      closeModal('profile-modal');
       showToast(t('toast.authLogoutOk'), 'info');
     } catch (err) {
       showToast(err.message, 'error');
@@ -3555,6 +3869,101 @@ function bindEvents() {
   };
   $('btn-logout').addEventListener('click', handleLogoutClick);
   $('auth-btn-logout').addEventListener('click', handleLogoutClick);
+  $('btn-profile-logout').addEventListener('click', handleLogoutClick);
+
+  $('auth-btn-view-profile').addEventListener('click', () => {
+    soundFX.playClick();
+    closeModal('auth-modal');
+    openProfileModal('participated');
+  });
+
+  // Personal Profile Modal (#profile-modal) events
+  document.querySelectorAll('#profile-modal [data-profile-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      soundFX.playClick();
+      setProfileModalTab(btn.dataset.profileTab);
+    });
+  });
+
+  $('btn-profile-edit-toggle').addEventListener('click', () => {
+    const form = $('profile-edit-form');
+    if (!form) return;
+    const isHidden = form.style.display === 'none' || !form.style.display;
+    form.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden) $('profile-edit-name')?.focus();
+  });
+
+  $('btn-profile-cancel-edit').addEventListener('click', () => {
+    const form = $('profile-edit-form');
+    if (form) form.style.display = 'none';
+  });
+
+  $('profile-edit-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const displayName = $('profile-edit-name').value.trim();
+    const titleSel = $('profile-edit-title');
+    const payload = { displayName };
+    if (titleSel && titleSel.style.display !== 'none') {
+      payload.title = titleSel.value;
+    }
+    const saveBtn = $('btn-profile-save');
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      const res = await apiFetch('/api/profile/me', { method: 'PATCH', body: payload });
+      if (res.user) app.user = { ...(app.user || {}), ...res.user };
+      if (res.state) applyNewState(res.state, { silentAchievements: true });
+      const freshProfile = await apiFetch('/api/profile/me');
+      if (freshProfile && freshProfile.ok) {
+        app.profileData = freshProfile;
+        renderProfileModal(freshProfile);
+      }
+      const form = $('profile-edit-form');
+      if (form) form.style.display = 'none';
+      soundFX.playVerify();
+      showToast(t('profile.savedToast'), 'success');
+    } catch (err) {
+      soundFX.playReject();
+      showToast(err.message, 'error');
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+
+  $('btn-profile-cert').addEventListener('click', () => {
+    closeModal('profile-modal');
+    openCertModal();
+  });
+
+  $('btn-profile-wallet').addEventListener('click', () => {
+    closeModal('profile-modal');
+    switchTab('revenue');
+    setTimeout(() => {
+      $('wallet-bind-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+  });
+
+  $('btn-profile-switch-account').addEventListener('click', () => {
+    closeModal('profile-modal');
+    openAuthModal('login');
+  });
+
+  $('profile-modal').addEventListener('click', (e) => {
+    const jumpProj = e.target.closest('[data-profile-jump-project]');
+    if (jumpProj) {
+      closeModal('profile-modal');
+      switchTab('incubator');
+      return;
+    }
+    const jumpPropose = e.target.closest('[data-profile-jump-propose]');
+    if (jumpPropose) {
+      closeModal('profile-modal');
+      switchTab('incubator');
+      setTimeout(() => {
+        openModal('modal-propose');
+        $('propose-name')?.focus();
+      }, 100);
+    }
+  });
 
   // Auth Modal (#auth-modal) events
   document.querySelectorAll('#auth-modal [data-auth-mode]').forEach((btn) => {

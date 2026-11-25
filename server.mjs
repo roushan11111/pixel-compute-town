@@ -1616,6 +1616,285 @@ export function createAppServer(options = {}) {
       if (pathname === '/api/auth/me' && method === 'GET') {
         return await handleMe(req, res, store);
       }
+
+      // Personal Profile & Project History Center: GET /api/profile/me
+      if (pathname === '/api/profile/me' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        const ctx = getActiveUserContext(req, state);
+        const user = ctx.user;
+        const userId = user.id;
+        const projects = state.projects || [];
+        const tasks = state.tasks || [];
+        const projectMap = new Map(projects.map((p) => [p.id, p]));
+
+        // Compute per-project task counts & earnings for this user
+        const tasksByProject = new Map();
+        for (const tk of tasks) {
+          const isMine = tk.claimedBy === userId
+            || tk.submission?.submittedByUserId === userId
+            || tk.stakedByUserId === userId;
+          if (!isMine) continue;
+          if (!tasksByProject.has(tk.projectId)) {
+            tasksByProject.set(tk.projectId, { claimed: 0, completed: 0, pendingReview: 0 });
+          }
+          const stat = tasksByProject.get(tk.projectId);
+          stat.claimed += 1;
+          if (tk.status === 'completed') stat.completed += 1;
+          else if (tk.status === 'pending_review') stat.pendingReview += 1;
+        }
+
+        // Compute per-project dividend earnings for this user
+        const dividendByProject = new Map();
+        for (const d of state.dividendLedger || []) {
+          const mine = (d.payoutsByUser && d.payoutsByUser[userId])
+            || (Array.isArray(d.payouts)
+              ? d.payouts
+                .filter((p) => p.userId === userId)
+                .reduce((acc, p) => {
+                  acc.totalUsd = round2(acc.totalUsd + (Number(p.amountUsd) || 0));
+                  return acc;
+                }, { totalUsd: 0 })
+              : null);
+          if (mine && Number(mine.totalUsd) > 0) {
+            dividendByProject.set(
+              d.projectId,
+              round2((dividendByProject.get(d.projectId) || 0) + Number(mine.totalUsd)),
+            );
+          }
+        }
+
+        const buildProjectSummary = (proj) => {
+          ensureProjectBuckets(proj);
+          const isOriginator = proj.originatorId === userId || proj.creatorId === userId;
+          const isCoBuilder = Array.isArray(proj.coBuilders) && proj.coBuilders.some((b) => b.userId === userId);
+          const myCorePoints = Number(proj.bucketPoints?.core?.[userId] || 0);
+          const myPeripheralPoints = Number(proj.bucketPoints?.peripheral?.[userId] || 0);
+          const myPoints = Math.max(
+            Number(proj.contributions?.[userId] || 0),
+            myCorePoints + myPeripheralPoints,
+          );
+          const taskStats = tasksByProject.get(proj.id) || { claimed: 0, completed: 0, pendingReview: 0 };
+          const myRole = isOriginator
+            ? 'originator'
+            : (myPoints > 0 || taskStats.completed > 0)
+              ? 'contributor'
+              : isCoBuilder
+                ? 'co_builder'
+                : 'participant';
+          return {
+            id: proj.id,
+            name: proj.name,
+            shortName: proj.shortName || proj.name,
+            tagline: proj.tagline || '',
+            status: proj.status,
+            votes: Number(proj.votes || 0),
+            votesRequired: Number(proj.votesRequired || 5),
+            progressPct: Number(proj.progressPct || 0),
+            totalRevenueUsd: round2(proj.totalRevenueUsd || 0),
+            bountyPoolUsd: round2(proj.bountyPoolUsd || 0),
+            ideaHash: proj.ideaHash || '',
+            originatedAt: proj.originatedAt || proj.createdAt || '',
+            originatorId: proj.originatorId || proj.creatorId || '',
+            originatorName: proj.originatorName || proj.creatorName || '',
+            coBuildersCount: Array.isArray(proj.coBuilders) ? proj.coBuilders.length : 1,
+            myRole,
+            isOriginator,
+            isCoBuilder,
+            myPoints,
+            myCorePoints,
+            myPeripheralPoints,
+            myTasksCompleted: taskStats.completed,
+            myTasksClaimed: taskStats.claimed,
+            myDividendUsd: round2(dividendByProject.get(proj.id) || 0),
+          };
+        };
+
+        const publishedProjects = projects
+          .filter((p) => p.originatorId === userId || p.creatorId === userId)
+          .map(buildProjectSummary)
+          .sort((a, b) => Date.parse(b.originatedAt || 0) - Date.parse(a.originatedAt || 0));
+
+        const participatedProjects = projects
+          .filter((p) => {
+            ensureProjectBuckets(p);
+            const isOrig = p.originatorId === userId || p.creatorId === userId;
+            const isCo = Array.isArray(p.coBuilders) && p.coBuilders.some((b) => b.userId === userId);
+            const hasPts = Number(p.contributions?.[userId] || 0) > 0
+              || Number(p.bucketPoints?.core?.[userId] || 0) > 0
+              || Number(p.bucketPoints?.peripheral?.[userId] || 0) > 0;
+            const hasTasks = tasksByProject.has(p.id);
+            return isOrig || isCo || hasPts || hasTasks;
+          })
+          .map(buildProjectSummary)
+          .sort((a, b) => (b.myPoints - a.myPoints) || (Date.parse(b.originatedAt || 0) - Date.parse(a.originatedAt || 0)));
+
+        // Build chronological project history timeline for this user
+        const history = [];
+
+        for (const p of publishedProjects) {
+          history.push({
+            id: `hist-orig-${p.id}`,
+            type: 'originated',
+            timestamp: p.originatedAt || state.createdAt,
+            projectId: p.id,
+            projectName: p.shortName || p.name,
+            title: p.name,
+            status: p.status,
+            ideaHash: p.ideaHash,
+            goldDelta: 0,
+            pointsDelta: 0,
+            usdDelta: 0,
+          });
+        }
+
+        for (const c of state.contributionLedger || []) {
+          if (c.userId !== userId) continue;
+          const proj = projectMap.get(c.projectId);
+          history.push({
+            id: c.id || `hist-contrib-${c.taskId}-${c.timestamp}`,
+            type: 'task_completed',
+            timestamp: c.timestamp || state.updatedAt,
+            projectId: c.projectId,
+            projectName: proj?.shortName || c.projectName || c.projectId,
+            taskId: c.taskId,
+            title: c.taskTitle || c.taskId,
+            poolBucket: c.poolBucket || 'peripheral',
+            verificationScore: Number(c.verificationScore || 0),
+            goldDelta: Number(c.gold || 0),
+            pointsDelta: Number(c.points || 0),
+            usdDelta: round2(c.bountyNetUsd || 0),
+          });
+        }
+
+        for (const d of state.dividendLedger || []) {
+          const userPayout = d.payoutsByUser?.[userId];
+          const amt = userPayout
+            ? round2(userPayout.totalUsd || 0)
+            : round2(
+              (Array.isArray(d.payouts) ? d.payouts : [])
+                .filter((p) => p.userId === userId)
+                .reduce((sum, p) => sum + (Number(p.amountUsd) || 0), 0),
+            );
+          if (amt <= 0) continue;
+          const proj = projectMap.get(d.projectId);
+          history.push({
+            id: d.id || `hist-div-${d.projectId}-${d.timestamp}`,
+            type: 'dividend',
+            timestamp: d.timestamp || state.updatedAt,
+            projectId: d.projectId,
+            projectName: proj?.shortName || d.projectName || d.projectId,
+            title: d.label || '項目營收分紅',
+            sparkUsd: round2(userPayout?.sparkUsd || 0),
+            meritUsd: round2(userPayout?.meritUsd || 0),
+            goldDelta: 0,
+            pointsDelta: 0,
+            usdDelta: amt,
+          });
+        }
+
+        for (const pay of state.payouts || []) {
+          if (pay.userId !== userId) continue;
+          history.push({
+            id: pay.id,
+            type: 'payout',
+            timestamp: pay.paidAt || pay.createdAt || state.updatedAt,
+            projectId: null,
+            projectName: `${String(pay.chain || '').toUpperCase()} · ${pay.token || 'USDC'}`,
+            title: `${pay.token || 'USDC'} (${String(pay.chain || '').toUpperCase()})`,
+            status: pay.status,
+            txHash: pay.txHash || null,
+            goldDelta: 0,
+            pointsDelta: 0,
+            usdDelta: -round2(pay.amountUsd || 0),
+          });
+        }
+
+        history.sort((a, b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0));
+
+        const achievements = Array.isArray(user.achievements) ? user.achievements : [];
+        return sendJson(res, 200, {
+          ok: true,
+          profile: {
+            id: user.id,
+            username: user.username || user.id,
+            displayName: user.displayName || user.username || user.id,
+            email: user.email || '',
+            authMode: user.authMode || 'demo',
+            isAuthenticated: Boolean(ctx.isAuthenticated),
+            role: user.role || 'user',
+            isFounderAdmin: isFounderAdmin(req, ctx),
+            isPro: Boolean(user.isPro),
+            title: user.title || '',
+            unlockedTitles: Array.isArray(user.unlockedTitles) ? user.unlockedTitles : [],
+            gold: Number(user.gold || 0),
+            usdBalance: round2(user.usdBalance || 0),
+            reputation: Number(user.reputation ?? 100),
+            completedTasks: Number(user.completedTasks || 0),
+            totalContribution: Number(user.totalContribution || 0),
+            workersCount: Array.isArray(user.workers) ? user.workers.length : 0,
+            walletChain: user.walletChain || '',
+            walletAddress: user.walletAddress || '',
+            achievementsUnlocked: achievements.filter((a) => a.unlocked).length,
+            achievementsTotal: achievements.length,
+            createdAt: user.createdAt || state.createdAt,
+          },
+          publishedProjects,
+          participatedProjects,
+          projectHistory: history.slice(0, 50),
+        });
+      }
+
+      // Personal Profile Update: PATCH /api/profile/me
+      if (pathname === '/api/profile/me' && method === 'PATCH') {
+        const body = await parseJsonBody(req);
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+
+          if (typeof body?.displayName === 'string') {
+            const cleanName = sanitizeText(body.displayName, 32);
+            if (cleanName.length < 2) {
+              throw new HttpError(400, '顯示暱稱至少需要 2 個字元');
+            }
+            user.displayName = cleanName;
+            // Sync name on projects originated/co-built by this user
+            for (const p of s.projects || []) {
+              if (p.originatorId === user.id) p.originatorName = cleanName;
+              if (p.creatorId === user.id) p.creatorName = cleanName;
+              if (p.contributorNames && p.contributorNames[user.id]) {
+                p.contributorNames[user.id] = cleanName;
+              }
+              if (Array.isArray(p.coBuilders)) {
+                for (const b of p.coBuilders) {
+                  if (b.userId === user.id) b.displayName = cleanName;
+                }
+              }
+            }
+          }
+
+          if (typeof body?.title === 'string') {
+            const requestedTitle = sanitizeText(body.title, 32);
+            const allowedTitles = new Set((user.unlockedTitles || []).map((t) => t?.name).filter(Boolean));
+            if (requestedTitle === '' || allowedTitles.has(requestedTitle)) {
+              user.title = requestedTitle;
+            } else {
+              throw new HttpError(400, '尚未解鎖此稱號');
+            }
+          }
+
+          syncUserLeaderboard(s, user);
+          return { user };
+        });
+
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        return sendJson(res, 200, {
+          ok: true,
+          user: sanitizeUserForClient(result.user),
+          state: projectClientState(state, result.user.id),
+        });
+      }
       if (pathname === '/api/auth/github' && method === 'GET') {
         return await handleGitHubLogin(req, res, store);
       }

@@ -879,7 +879,83 @@
           <button type="button" class="btn btn-danger" id="auth-btn-logout" data-i18n="auth.logoutBtn">🚪 登出目前帳號</button>
         </div>
 
+        <button type="button" class="btn" id="auth-btn-view-profile" style="width: 100%; margin-top: 8px;" data-i18n="profile.viewProfileBtn">🧑‍🚀 檢視個人資料與項目歷史</button>
+
         <div class="card-subtitle" data-i18n="auth.multiUserTip">💡 註冊獨立帳號可保存專屬金幣、像素小人與收款錢包，同時與全鎮共享開源孵化池與排行榜！</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6b: 🧑‍🚀 個人資料與項目履歷 (#profile-modal) -->
+  <div class="modal-backdrop" id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+    <div class="modal-dialog" style="max-width: 740px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="profile-modal-title" data-i18n="profile.title">🧑‍🚀 個人資料與項目履歷</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="profile-modal" data-i18n="btn.close">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <div class="profile-hero" id="profile-hero-box">
+          <div class="profile-hero-main">
+            <div class="profile-avatar-badge" id="profile-avatar-icon">🧑‍💻</div>
+            <div class="profile-identity">
+              <div class="profile-name-row">
+                <strong class="profile-display-name" id="profile-display-name">—</strong>
+                <span class="badge cyan" id="profile-auth-badge">Demo</span>
+                <span class="badge amber" id="profile-role-badge" style="display: none;"></span>
+                <span class="badge pink" id="profile-pro-badge" style="display: none;">💎 PRO</span>
+                <span class="badge green" id="profile-title-badge" style="display: none;"></span>
+              </div>
+              <div class="profile-meta-line mono" id="profile-meta-line"></div>
+            </div>
+          </div>
+          <div class="profile-hero-actions">
+            <button type="button" class="btn btn-sm" id="btn-profile-edit-toggle" data-i18n="profile.editBtn">✏️ 編輯暱稱</button>
+            <a class="btn btn-sm btn-amber" id="btn-profile-admin" href="/admin" style="display: none;" data-i18n="profile.adminBtn">📊 鎮長後臺</a>
+          </div>
+        </div>
+
+        <form id="profile-edit-form" class="profile-edit-form" style="display: none;">
+          <input class="input" id="profile-edit-name" type="text" maxlength="32" required data-i18n-placeholder="profile.editNamePlaceholder" placeholder="輸入新的顯示暱稱（2–32字）" />
+          <select class="select" id="profile-edit-title" style="display: none;"></select>
+          <button type="submit" class="btn btn-sm btn-green" id="btn-profile-save" data-i18n="profile.saveBtn">✅ 儲存資料</button>
+          <button type="button" class="btn btn-sm" id="btn-profile-cancel-edit" data-i18n="profile.cancelBtn">取消</button>
+        </form>
+
+        <div class="profile-stats-grid" id="profile-stats-grid"></div>
+
+        <div class="modal-tabs three-col" role="tablist" style="margin-top: 10px;">
+          <button type="button" class="modal-tab-btn active" id="profile-tab-participated" data-profile-tab="participated">
+            <span data-i18n="profile.tabParticipated">🤝 參與過的項目</span> (<span id="profile-count-participated">0</span>)
+          </button>
+          <button type="button" class="modal-tab-btn" id="profile-tab-published" data-profile-tab="published">
+            <span data-i18n="profile.tabPublished">🚀 發佈過的項目</span> (<span id="profile-count-published">0</span>)
+          </button>
+          <button type="button" class="modal-tab-btn" id="profile-tab-history" data-profile-tab="history">
+            <span data-i18n="profile.tabHistory">📜 項目歷史紀錄</span> (<span id="profile-count-history">0</span>)
+          </button>
+        </div>
+
+        <div class="profile-tab-pane active" id="profile-pane-participated" data-profile-pane="participated">
+          <div class="profile-list" id="profile-participated-list"></div>
+        </div>
+
+        <div class="profile-tab-pane" id="profile-pane-published" data-profile-pane="published">
+          <div class="profile-list" id="profile-published-list"></div>
+        </div>
+
+        <div class="profile-tab-pane" id="profile-pane-history" data-profile-pane="history">
+          <div class="profile-list" id="profile-history-list"></div>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm btn-amber" id="btn-profile-cert" data-i18n="profile.certBtn">🪪 我的打工證 PNG</button>
+          <button type="button" class="btn btn-sm" id="btn-profile-wallet" data-i18n="profile.walletBtn">💳 收款錢包與提領</button>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm" id="btn-profile-switch-account" data-i18n="profile.switchAccountBtn">🔄 切換 / 登入其他帳號</button>
+          <button type="button" class="btn btn-sm btn-danger" id="btn-profile-logout" data-i18n="auth.logoutBtn">🚪 登出目前帳號</button>
+        </div>
       </div>
     </div>
   </div>
