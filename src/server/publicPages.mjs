@@ -1058,7 +1058,8 @@ function getTableAlignments(sepLine) {
   });
 }
 
-export function renderMarkdownToHtml(markdown = '') {
+export function renderMarkdownToHtml(markdown = '', options = {}) {
+  const copyCodeLabel = escapeHtml(options?.copyCodeLabel || '📋 複製');
   const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
   const htmlParts = [];
   const toc = [];
@@ -1097,7 +1098,7 @@ export function renderMarkdownToHtml(markdown = '') {
       const escapedCode = escapeHtml(codeLines.join('\n'));
       const langBadge = lang ? `<span class="doc-code-lang">${escapeHtml(lang)}</span>` : '<span class="doc-code-lang">CODE</span>';
       htmlParts.push(
-        `<div class="doc-code-block"><div class="doc-code-head">${langBadge}<button type="button" class="doc-code-copy" data-copy-code="1">📋 複製</button></div><pre><code>${escapedCode}</code></pre></div>`,
+        `<div class="doc-code-block"><div class="doc-code-head">${langBadge}<button type="button" class="doc-code-copy" data-copy-code="1">${copyCodeLabel}</button></div><pre><code>${escapedCode}</code></pre></div>`,
       );
       continue;
     }
@@ -1663,7 +1664,10 @@ export function renderDocPage({
     ? `?lang=${encodeURIComponent(normalizedLang)}`
     : '';
   const canonicalUrl = `${safeOrigin}${safeActive.startsWith('/') ? safeActive : `/${safeActive}`}${langQuery}`;
-  const { html: articleHtml, toc } = renderMarkdownToHtml(markdown);
+  const copyCodeLabels = { 'zh-TW': '📋 複製', 'zh-CN': '📋 复制', en: '📋 Copy', ja: '📋 コピー' };
+  const { html: articleHtml, toc } = renderMarkdownToHtml(markdown, {
+    copyCodeLabel: copyCodeLabels[normalizedLang] || '📋 複製',
+  });
 
   const DOC_CHROME = {
     'zh-TW': {
