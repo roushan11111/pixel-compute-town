@@ -2780,7 +2780,7 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       password: 'bob-password-456',
     });
     assert.equal(loginBob.status, 200);
-    const blockedRes = await apiJson(baseUrl, 'GET', '/api/admin/overview', null, loginBob.cookie);
+    const blockedRes = await apiJson(baseUrl, 'GET', '/api/admin/overview', undefined, loginBob.cookie);
     assert.equal(blockedRes.status, 403);
     assert.equal(blockedRes.json.code, 'ADMIN_ONLY');
 
