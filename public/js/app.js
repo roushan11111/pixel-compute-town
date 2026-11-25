@@ -1556,6 +1556,78 @@ function renderGroupedTaskFolders(trackKey, tasks, projectMap, renderCardFn, loc
     .join('');
 }
 
+function renderSpecContractDetails(task) {
+  const spec = task?.specContract;
+  if (!spec || typeof spec !== 'object') return '';
+  const files = Array.isArray(spec.filesScope) ? spec.filesScope : [];
+  const criteria = Array.isArray(spec.acceptanceCriteria) ? spec.acceptanceCriteria : [];
+  const verifyCmd = spec.verifyCommand || '';
+  if (files.length === 0 && criteria.length === 0 && !verifyCmd) return '';
+  return `
+    <div class="spec-contract-box">
+      <div style="font-weight: 800; color: var(--accent-cyan); font-size: 11px;">${escapeHtml(t('spec.contractTitle'))}</div>
+      ${
+        files.length > 0
+          ? `<div class="spec-contract-row">
+              <span style="color: var(--text-muted);">${escapeHtml(t('spec.filesLabel'))}:</span>
+              ${files.map((f) => `<code class="spec-code-chip">${escapeHtml(f)}</code>`).join('')}
+            </div>`
+          : ''
+      }
+      ${
+        verifyCmd
+          ? `<div class="spec-contract-row">
+              <span style="color: var(--text-muted);">${escapeHtml(t('spec.verifyLabel'))}:</span>
+              <code class="spec-code-chip">${escapeHtml(verifyCmd)}</code>
+            </div>`
+          : ''
+      }
+      ${
+        criteria.length > 0
+          ? `<ul style="margin: 2px 0 0 16px; padding: 0; color: var(--text-sub); line-height: 1.45;">
+              ${criteria.slice(0, 3).map((c) => `<li>${escapeHtml(c)}</li>`).join('')}
+            </ul>`
+          : ''
+      }
+      <div style="margin-top: 4px;">
+        <button type="button" class="btn btn-sm" data-copy-spec-prompt="${escapeHtml(task.id)}">
+          ${escapeHtml(t('spec.copyPromptBtn'))}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function buildAiContractPrompt(task, project) {
+  const spec = task?.specContract || {};
+  const files = Array.isArray(spec.filesScope) && spec.filesScope.length ? spec.filesScope.join(', ') : '(check repository structure)';
+  const criteria = (spec.acceptanceCriteria || task?.acceptanceCriteria || [])
+    .map((c, idx) => `${idx + 1}. ${c}`)
+    .join('\n');
+  return [
+    `# PixelCompute Town Task Spec Contract`,
+    `- Project: ${project?.name || task?.projectId || 'Open-Source Project'}`,
+    `- Task ID: ${task?.id || ''}`,
+    `- Title: ${task?.title || ''}`,
+    `- Description: ${task?.description || ''}`,
+    ``,
+    `## Strict File Scope (DO NOT edit files outside this list!)`,
+    `- filesScope: ${files}`,
+    ``,
+    `## Architecture Context`,
+    spec.contextDoc || 'Keep changes minimal, zero external dependencies, and follow existing code conventions.',
+    ``,
+    `## Acceptance Criteria`,
+    criteria || '1. Deliver clean, working code matching the task title.',
+    ``,
+    `## Mandatory Pre-Submit Verification Command`,
+    `Run locally and confirm 100% PASS before submitting PR:`,
+    `\`${spec.verifyCommand || 'npm test && npm run smoke'}\``,
+    ``,
+    `Include \`Fixes #${task?.id || ''}\` in your PR description for automatic verification & settlement.`,
+  ].join('\n');
+}
+
 function renderFactoryTab() {
   const loc = getLocale();
   const projFilter = $('factory-project-filter');
@@ -1620,6 +1692,11 @@ function renderFactoryTab() {
           : `<span class="badge periph-pool">${escapeHtml(t('gov.bucketPeripheral'))}</span>`;
       const stakeGold = getTaskStakeSafe(task);
       const minRep = getTaskMinRepSafe(task);
+      const isScopeLocked = Boolean(!isCompleted && !isWorking && task.scopeLock?.locked);
+      const lockConflict = isScopeLocked ? task.scopeLock.conflicts?.[0] : null;
+      const scopePreview = Array.isArray(task.specContract?.filesScope) && task.specContract.filesScope.length
+        ? task.specContract.filesScope[0]
+        : '';
 
       return `
         <article class="pixel-card ${isWorking ? 'in-progress' : ''}">
@@ -1635,6 +1712,7 @@ function renderFactoryTab() {
             ${renderAudienceBadge(task)}
             <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
             ${task.cashBountyUsd > 0 ? renderCashBountyBadge(task.cashBountyUsd, 'factory') : bucketBadge}
+            ${isScopeLocked ? `<span class="badge scope-lock-badge" title="${escapeHtml(t('spec.lockedTip', { title: lockConflict?.title || '' }))}">${escapeHtml(t('spec.lockedBadge'))}</span>` : (scopePreview ? `<span class="badge cyan">${escapeHtml(t('spec.scopeBadge', { scope: scopePreview }))}</span>` : '')}
           </div>
           <details class="card-details">
             <summary>${escapeHtml(t('card.detailsToggle'))}</summary>
@@ -1647,6 +1725,7 @@ function renderFactoryTab() {
                 ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
                 <span class="badge">${escapeHtml(task.category)} ｜ +${task.progressWeight || 15}%</span>
               </div>
+              ${renderSpecContractDetails(task)}
             </div>
           </details>
           <div class="card-footer">
@@ -1660,8 +1739,8 @@ function renderFactoryTab() {
               ${
                 isCompleted
                   ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('factory.inspect'))} (${task.verification?.score ?? 90})</button>`
-                  : `<button type="button" class="btn btn-sm btn-green" data-dispatch-api="${escapeHtml(task.id)}" ${isWorking ? 'disabled' : ''}>
-                      ${escapeHtml(isWorking ? t('factory.working') : t('factory.dispatch'))}
+                  : `<button type="button" class="btn btn-sm btn-green" data-dispatch-api="${escapeHtml(task.id)}" ${isWorking || isScopeLocked ? 'disabled' : ''} ${isScopeLocked ? `title="${escapeHtml(t('spec.lockedTip', { title: lockConflict?.title || '' }))}"` : ''}>
+                      ${escapeHtml(isScopeLocked ? t('spec.lockedBadge') : isWorking ? t('factory.working') : t('factory.dispatch'))}
                     </button>`
               }
             </div>
@@ -1767,7 +1846,14 @@ function renderReviewQueuePanel() {
               ${item.contributionPoints ? `<span class="badge pink">✨ +${item.contributionPoints} pt</span>` : ''}
             </div>
 
-            ${lr.summary ? `<p class="review-summary-text">${escapeHtml(lr.summary)}</p>` : ''}
+            ${
+              Array.isArray(ai.reviewerBrief) && ai.reviewerBrief.length > 0
+                ? `<div class="reviewer-brief-box">
+                    <div class="reviewer-brief-title">${escapeHtml(t('review.briefTitle'))}</div>
+                    ${ai.reviewerBrief.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}
+                  </div>`
+                : (lr.summary ? `<p class="review-summary-text">${escapeHtml(lr.summary)}</p>` : '')
+            }
             ${flagsHtml}
 
             <details class="review-preview-details">
@@ -1964,6 +2050,11 @@ function renderGuildTab() {
       const bucket = getTaskBucketSafe(task);
       const stakeGold = getTaskStakeSafe(task);
       const minRep = getTaskMinRepSafe(task);
+      const isScopeLocked = Boolean(!isCompleted && !isPendingReview && !isWorking && task.scopeLock?.locked);
+      const lockConflict = isScopeLocked ? task.scopeLock.conflicts?.[0] : null;
+      const scopePreview = Array.isArray(task.specContract?.filesScope) && task.specContract.filesScope.length
+        ? task.specContract.filesScope[0]
+        : '';
 
       const workerChipHtml =
         assignedWorker && (isWorking || isCompleted || isPendingReview)
@@ -2001,6 +2092,7 @@ function renderGuildTab() {
                 ? renderCashBountyBadge(task.cashBountyUsd, 'guild')
                 : `<span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>`
             }
+            ${isScopeLocked ? `<span class="badge scope-lock-badge" title="${escapeHtml(t('spec.lockedTip', { title: lockConflict?.title || '' }))}">${escapeHtml(t('spec.lockedBadge'))}</span>` : (scopePreview ? `<span class="badge cyan">${escapeHtml(t('spec.scopeBadge', { scope: scopePreview }))}</span>` : '')}
           </div>
           <details class="card-details">
             <summary>${escapeHtml(t('card.detailsToggle'))}</summary>
@@ -2012,6 +2104,7 @@ function renderGuildTab() {
                 ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
                 <span class="badge">${escapeHtml(task.category)} ｜ -${task.staminaCost || 20}⚡ ｜ +${task.progressWeight || 20}%</span>
               </div>
+              ${renderSpecContractDetails(task)}
             </div>
           </details>
           <div class="card-footer">
@@ -2028,8 +2121,8 @@ function renderGuildTab() {
                   ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('factory.inspect'))} (${task.verification?.score ?? 90})</button>`
                   : isPendingReview
                     ? `<button type="button" class="btn btn-sm btn-pink" data-jump-review-queue="1">${escapeHtml(t('review.jumpToQueue'))}</button>`
-                    : `<button type="button" class="btn btn-sm btn-amber" data-open-guild="${escapeHtml(task.id)}">
-                        ${escapeHtml(isWorking ? t('guild.claimResume') : t('guild.claimOpen'))}
+                    : `<button type="button" class="btn btn-sm btn-amber" data-open-guild="${escapeHtml(task.id)}" ${isScopeLocked ? `disabled title="${escapeHtml(t('spec.lockedTip', { title: lockConflict?.title || '' }))}"` : ''}>
+                        ${escapeHtml(isScopeLocked ? t('spec.lockedBadge') : isWorking ? t('guild.claimResume') : t('guild.claimOpen'))}
                       </button>`
               }
             </div>
@@ -2203,6 +2296,21 @@ function renderIncubatorTab() {
                           ${escapeHtml(t('incubator.autoSplitBtn'))}
                         </button>
                       </div>
+                      ${
+                        isOriginator || app.state.player?.role === 'founder'
+                          ? `<details style="margin-top: 6px;">
+                              <summary style="cursor: pointer; font-size: 11px; color: var(--accent-cyan); font-weight: 700;">${escapeHtml(t('spec.publishToggle'))}</summary>
+                              <div class="scoped-task-form" data-scoped-task-wrap="${escapeHtml(p.id)}">
+                                <input type="text" class="input" data-scoped-title="${escapeHtml(p.id)}" maxlength="120" placeholder="${escapeHtml(t('spec.publishTitlePh'))}" />
+                                <input type="text" class="input mono" data-scoped-files="${escapeHtml(p.id)}" maxlength="200" placeholder="${escapeHtml(t('spec.publishScopePh'))}" />
+                                <input type="text" class="input mono" data-scoped-verify="${escapeHtml(p.id)}" maxlength="140" placeholder="${escapeHtml(t('spec.publishVerifyPh'))}" />
+                                <button type="button" class="btn btn-sm btn-primary" data-scoped-task-submit="${escapeHtml(p.id)}">
+                                  ${escapeHtml(t('spec.publishBtn'))}
+                                </button>
+                              </div>
+                            </details>`
+                          : ''
+                      }
                     </div>`
                   : ''
               }
@@ -3955,6 +4063,63 @@ function bindEvents() {
       soundFX.playClick();
       if (gKey.startsWith('factory:')) renderFactoryTab();
       else renderGuildTab();
+      return;
+    }
+
+    const copySpecBtn = e.target.closest('[data-copy-spec-prompt]');
+    if (copySpecBtn) {
+      const taskId = copySpecBtn.dataset.copySpecPrompt;
+      const task = (app.state?.tasks || []).find((tk) => tk.id === taskId);
+      if (!task) return;
+      const proj = (app.state?.projects || []).find((p) => p.id === task.projectId);
+      const promptText = buildAiContractPrompt(task, proj);
+      try {
+        await navigator.clipboard.writeText(promptText);
+        soundFX.playClick();
+        showToast(t('spec.promptCopied'), 'success', 4200);
+      } catch {
+        showToast(promptText.slice(0, 140), 'info', 4000);
+      }
+      return;
+    }
+
+    const scopedSubmitBtn = e.target.closest('[data-scoped-task-submit]');
+    if (scopedSubmitBtn) {
+      const pid = scopedSubmitBtn.dataset.scopedTaskSubmit;
+      const titleEl = document.querySelector(`[data-scoped-title="${CSS.escape(pid)}"]`);
+      const filesEl = document.querySelector(`[data-scoped-files="${CSS.escape(pid)}"]`);
+      const verifyEl = document.querySelector(`[data-scoped-verify="${CSS.escape(pid)}"]`);
+      const title = (titleEl?.value || '').trim();
+      const filesScope = (filesEl?.value || '').trim();
+      const verifyCommand = (verifyEl?.value || '').trim();
+      if (!title || !filesScope) {
+        soundFX.playReject();
+        showToast(t('spec.publishScopePh'), 'error');
+        return;
+      }
+      scopedSubmitBtn.disabled = true;
+      try {
+        app.lastLocalMutationAt = Date.now();
+        const res = await apiFetch(`/api/projects/${encodeURIComponent(pid)}/tasks`, {
+          method: 'POST',
+          body: {
+            title,
+            filesScope,
+            verifyCommand: verifyCommand || 'npm test && npm run smoke',
+          },
+        });
+        if (titleEl) titleEl.value = '';
+        if (filesEl) filesEl.value = '';
+        if (verifyEl) verifyEl.value = '';
+        if (res.state) applyNewState(res.state);
+        soundFX.playCoin();
+        showToast(t('spec.publishOk', { title: res.task?.title || title }), 'success', 4500);
+      } catch (err) {
+        soundFX.playReject();
+        showToast(err.message, 'error');
+      } finally {
+        scopedSubmitBtn.disabled = false;
+      }
       return;
     }
 

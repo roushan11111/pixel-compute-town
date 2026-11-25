@@ -3908,4 +3908,218 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('40. Task Spec Contract, File-Scope Conflict Lock (409), Layer-1 Pre-Check Gate (SCOPE_VIOLATION/CI_CHECK_FAILED) & 3-Line AI Pre-Review Brief', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-spec-contract-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+    try {
+      // Register two builders: Alice and Bob
+      const regAlice = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'alice-spec@pixelcompute.test',
+        password: 'alice-password-123',
+        displayName: 'Alice Scoped',
+      });
+      assert.equal(regAlice.status, 201);
+      const aliceCookie = regAlice.cookie;
+
+      const regBob = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'bob-spec@pixelcompute.test',
+        password: 'bob-password-123',
+        displayName: 'Bob Parallel',
+      });
+      assert.equal(regBob.status, 201);
+      const bobCookie = regBob.cookie;
+
+      // 1. Non-maintainer trying to publish a scoped task on proj-meta MUST get 403 MAINTAINER_ONLY
+      const unauthTask = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects/proj-meta/tasks',
+        { title: 'Random uncoordinated task', filesScope: ['src/export/'] },
+        aliceCookie,
+      );
+      assert.equal(unauthTask.status, 403);
+      assert.equal(unauthTask.json.code, 'MAINTAINER_ONLY');
+
+      // 2. Maintainer (Founder) publishes 2 overlapping tasks (src/export/ vs src/export/csv.mjs) & 1 disjoint task (docs/export.md)
+      const t1Res = await apiJson(isoUrl, 'POST', '/api/projects/proj-meta/tasks', {
+        title: 'Build CSV export engine',
+        track: 'guild_bounty',
+        category: 'feature_pr',
+        filesScope: ['src/export/'],
+        acceptanceCriteria: ['Export valid RFC 4180 CSV', 'Zero external dependencies'],
+        verifyCommand: 'npm test && npm run smoke',
+        contextDoc: 'Keep pure ESM inside src/export/',
+      });
+      assert.equal(t1Res.status, 201);
+      const task1 = t1Res.json.task;
+      assert.deepEqual(task1.specContract.filesScope, ['src/export/']);
+      assert.equal(task1.specContract.verifyCommand, 'npm test && npm run smoke');
+
+      const t2Res = await apiJson(isoUrl, 'POST', '/api/projects/proj-meta/tasks', {
+        title: 'Add UTF-8 BOM to CSV export',
+        track: 'guild_bounty',
+        category: 'bugfix',
+        filesScope: ['src/export/csv.mjs'],
+        verifyCommand: 'npm test',
+      });
+      assert.equal(t2Res.status, 201);
+      const task2 = t2Res.json.task;
+
+      const t3Res = await apiJson(isoUrl, 'POST', '/api/projects/proj-meta/tasks', {
+        title: 'Write CSV export usage guide',
+        track: 'api_auto',
+        category: 'docs',
+        filesScope: ['docs/export.md'],
+        verifyCommand: 'npm run smoke',
+      });
+      assert.equal(t3Res.status, 201);
+      const task3 = t3Res.json.task;
+
+      // 3. Alice claims Task 1 (src/export/) -> succeeds; Task 2 becomes scope-locked while Task 3 stays open!
+      const aliceBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, aliceCookie);
+      const aliceQuota = aliceBoot.json.state.workers.find((w) => w.track === 'quota');
+      const bobBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, bobCookie);
+      const bobQuota = bobBoot.json.state.workers.find((w) => w.track === 'quota');
+      const bobApi = bobBoot.json.state.workers.find((w) => w.track === 'api');
+
+      const claim1 = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${task1.id}/claim`,
+        { workerId: aliceQuota.id },
+        aliceCookie,
+      );
+      assert.equal(claim1.status, 200);
+
+      const projectedT2 = claim1.json.state.tasks.find((t) => t.id === task2.id);
+      const projectedT3 = claim1.json.state.tasks.find((t) => t.id === task3.id);
+      assert.equal(projectedT2.scopeLock.locked, true, 'Overlapping task2 must show scopeLock.locked === true');
+      assert.equal(projectedT3.scopeLock.locked, false, 'Non-overlapping task3 must remain unlocked');
+
+      // 4. Bob tries to claim overlapping Task 2 -> blocked with HTTP 409 FILE_SCOPE_LOCKED!
+      const blockedClaim2 = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${task2.id}/claim`,
+        { workerId: bobQuota.id },
+        bobCookie,
+      );
+      assert.equal(blockedClaim2.status, 409);
+      assert.equal(blockedClaim2.json.code, 'FILE_SCOPE_LOCKED');
+      assert.ok(Array.isArray(blockedClaim2.json.conflicts) && blockedClaim2.json.conflicts.length === 1);
+
+      // 5. Bob claims non-overlapping Task 3 (docs/export.md) -> succeeds cleanly in parallel!
+      const claim3 = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${task3.id}/claim`,
+        { workerId: bobApi.id },
+        bobCookie,
+      );
+      assert.equal(claim3.status, 200);
+
+      // 6. Layer-1 Pre-Check Gate blocks out-of-scope file edits BEFORE wasting human review time!
+      const revCountBefore = claim1.json.state.reviewQueue.length;
+      const scopeViolationSubmit = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${task1.id}/submit`,
+        {
+          workerId: aliceQuota.id,
+          submitForReview: true,
+          prUrl: 'https://github.com/pixel-compute-town/pixel-compute-town/pull/901',
+          content: [
+            'diff --git a/server.mjs b/server.mjs',
+            '+++ b/server.mjs',
+            '+export function sneakyChangeOutsideScope() { return 42; }',
+          ].join('\n'),
+        },
+        aliceCookie,
+      );
+      assert.equal(scopeViolationSubmit.status, 200);
+      assert.equal(scopeViolationSubmit.json.passed, false);
+      assert.equal(scopeViolationSubmit.json.preCheckBlocked, true);
+      assert.equal(scopeViolationSubmit.json.code, 'SCOPE_VIOLATION');
+      assert.ok(scopeViolationSubmit.json.preCheck.outOfScopeFiles.includes('server.mjs'));
+      assert.equal(scopeViolationSubmit.json.state.reviewQueue.length, revCountBefore, 'Out-of-scope PR must NOT enter human reviewQueue');
+
+      // 7. Layer-1 Pre-Check Gate blocks failing CI status BEFORE wasting human review time!
+      const ciFailSubmit = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${task1.id}/submit`,
+        {
+          workerId: aliceQuota.id,
+          submitForReview: true,
+          ciPassed: false,
+          ciCommand: 'npm test',
+          changedFiles: ['src/export/csv.mjs'],
+          content: 'export function formatCsvRow(cells) { return cells.join(","); }',
+        },
+        aliceCookie,
+      );
+      assert.equal(ciFailSubmit.status, 200);
+      assert.equal(ciFailSubmit.json.passed, false);
+      assert.equal(ciFailSubmit.json.preCheckBlocked, true);
+      assert.equal(ciFailSubmit.json.code, 'CI_CHECK_FAILED');
+      assert.equal(ciFailSubmit.json.state.reviewQueue.length, revCountBefore);
+
+      // 8. Clean in-scope diff + CI green passes Layer-1 and generates 3-line AI Pre-Review Brief!
+      const cleanSubmit = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${task1.id}/submit`,
+        {
+          workerId: aliceQuota.id,
+          submitForReview: true,
+          ciPassed: true,
+          prUrl: 'https://github.com/pixel-compute-town/pixel-compute-town/pull/902',
+          content: [
+            'diff --git a/src/export/csv.mjs b/src/export/csv.mjs',
+            '+++ b/src/export/csv.mjs',
+            '+export function escapeCsvCell(val) {',
+            '+  const s = String(val ?? "");',
+            '+  return /[",\\n]/.test(s) ? `"${s.replace(/"/g, \'""\')}"` : s;',
+            '+}',
+            '+export function toCsv(rows = []) {',
+            '+  return rows.map((r) => r.map(escapeCsvCell).join(",")).join("\\n");',
+            '+}',
+          ].join('\n'),
+        },
+        aliceCookie,
+      );
+      assert.equal(cleanSubmit.status, 200);
+      assert.equal(cleanSubmit.json.passed, true);
+      assert.equal(cleanSubmit.json.pendingReview, true);
+      const brief = cleanSubmit.json.reviewItem?.aiReview?.reviewerBrief;
+      assert.ok(Array.isArray(brief) && brief.length === 3, 'Queued reviewItem must include 3-line AI Pre-Review Brief');
+      assert.ok(brief[0].includes('src/export/csv.mjs'));
+      assert.ok(brief[1].includes('CI 預檢綠燈'));
+
+      // 9. Founder approves Task 1 -> Task 2's file-scope lock automatically releases so Bob can now claim it!
+      const approve1 = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/reviews/${cleanSubmit.json.reviewItem.id}/decide`,
+        { decision: 'approve', reason: 'Clean scoped CSV module' },
+      );
+      assert.equal(approve1.status, 200);
+      const unlockedT2 = approve1.json.state.tasks.find((t) => t.id === task2.id);
+      assert.equal(unlockedT2.scopeLock.locked, false, 'Once Task 1 completes, Task 2 scope lock must automatically release');
+
+      const claim2Now = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/tasks/${task2.id}/claim`,
+        { workerId: bobQuota.id },
+        bobCookie,
+      );
+      assert.equal(claim2Now.status, 200);
+    } finally {
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });

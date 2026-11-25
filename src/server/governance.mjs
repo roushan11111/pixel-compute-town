@@ -583,3 +583,255 @@ export function runAiBlindReview(task, content = '', prUrl = '') {
     reviewedAt: new Date().toISOString(),
   };
 }
+
+// ============================================================================
+// Task Spec Contract, File-Scope Conflict Lock & Layer-1 Pre-Check Gate
+// ============================================================================
+
+export function normalizeScopePath(raw) {
+  if (typeof raw !== 'string') return '';
+  let p = raw.trim().replace(/\\/g, '/');
+  p = p.replace(/^\.\/+/, '').replace(/^\/+/, '');
+  p = p.replace(/\/\*+$/, '/');
+  return p.slice(0, 180);
+}
+
+export function doScopePatternsOverlap(rawA, rawB) {
+  const a = normalizeScopePath(rawA);
+  const b = normalizeScopePath(rawB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const aDir = a.endsWith('/') ? a : `${a}/`;
+  const bDir = b.endsWith('/') ? b : `${b}/`;
+  if (a.endsWith('/') && b.startsWith(aDir)) return true;
+  if (b.endsWith('/') && a.startsWith(bDir)) return true;
+  return false;
+}
+
+export function isFilePathAllowedByScope(rawFile, allowedScopes = []) {
+  const scopes = (Array.isArray(allowedScopes) ? allowedScopes : [])
+    .map(normalizeScopePath)
+    .filter(Boolean);
+  if (scopes.length === 0) return true;
+  const file = normalizeScopePath(rawFile);
+  if (!file) return true;
+  return scopes.some((scope) => {
+    if (file === scope) return true;
+    const prefix = scope.endsWith('/') ? scope : `${scope}/`;
+    return scope.endsWith('/') && file.startsWith(prefix);
+  });
+}
+
+export function extractChangedFilesFromSubmission(content = '', explicitFiles = []) {
+  const found = new Set();
+  if (Array.isArray(explicitFiles)) {
+    for (const f of explicitFiles) {
+      const norm = normalizeScopePath(String(f || ''));
+      if (norm) found.add(norm);
+    }
+  }
+  const text = typeof content === 'string' ? content : '';
+  if (text) {
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+      const gitMatch = line.match(/^diff --git a\/(.+?) b\/(.+?)\s*$/);
+      if (gitMatch) {
+        const norm = normalizeScopePath(gitMatch[2]);
+        if (norm && norm !== 'dev/null') found.add(norm);
+        continue;
+      }
+      const plusMatch = line.match(/^\+\+\+\s+(?:b\/)?([^\s\t]+)/);
+      if (plusMatch) {
+        const norm = normalizeScopePath(plusMatch[1]);
+        if (norm && norm !== '/dev/null' && norm !== 'dev/null') found.add(norm);
+      }
+    }
+  }
+  return [...found];
+}
+
+export function inferDefaultFilesScope(task) {
+  const cat = String(task?.category || '').toLowerCase();
+  const id = String(task?.id || '').toLowerCase();
+  if (id === 'task-meta-pr') return ['public/js/app.js', 'public/index.html'];
+  if (id === 'task-meta-sse') return ['public/js/app.js', 'src/server/sse.mjs'];
+  if (id === 'task-meta-i18n') return ['public/js/i18n.js'];
+  if (id === 'task-meta-spec') return ['public/js/pixelEngine.js'];
+  if (id === 'task-meta-docs') return ['docs/USER_GUIDE.md'];
+  if (id === 'task-meta-ux') return ['public/styles.css', 'public/index.html'];
+  if (id === 'task-i18n-ast-pr') return ['src/ast/'];
+  if (id === 'task-i18n-gh-action') return ['.github/actions/i18n-bot/'];
+  if (id === 'task-i18n-test') return ['tests/i18n.test.mjs'];
+  if (cat === 'i18n') return ['locales/'];
+  if (cat === 'docs') return ['docs/'];
+  if (cat === 'unit_test') return ['tests/'];
+  if (cat === 'pixel_spec') return ['assets/specs/'];
+  if (cat === 'bugfix') return ['src/bugfix/'];
+  if (cat === 'feature_pr' || cat === 'architecture') return ['src/core/'];
+  return [];
+}
+
+export function normalizeSpecContract(rawSpec, fallbackTask = null) {
+  const src = rawSpec && typeof rawSpec === 'object' ? rawSpec : {};
+  const rawScope = Array.isArray(src.filesScope)
+    ? src.filesScope
+    : (typeof src.filesScope === 'string'
+      ? src.filesScope.split(/[\n,;]+/)
+      : (Array.isArray(fallbackTask?.filesScope) ? fallbackTask.filesScope : inferDefaultFilesScope(fallbackTask)));
+  const filesScope = [...new Set(rawScope.map(normalizeScopePath).filter(Boolean))].slice(0, 12);
+
+  const rawCriteria = Array.isArray(src.acceptanceCriteria)
+    ? src.acceptanceCriteria
+    : (typeof src.acceptanceCriteria === 'string'
+      ? src.acceptanceCriteria.split(/\r?\n/)
+      : (Array.isArray(fallbackTask?.acceptanceCriteria) ? fallbackTask.acceptanceCriteria : []));
+  const acceptanceCriteria = rawCriteria
+    .map((c) => String(c || '').trim().replace(/^[-*•]\s*/, ''))
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const defaultVerify = fallbackTask?.track === 'guild_bounty'
+    ? 'npm test && npm run smoke'
+    : 'npm run smoke';
+  const verifyCommand = String(src.verifyCommand || fallbackTask?.verifyCommand || defaultVerify).trim().slice(0, 160);
+  const contextDoc = String(
+    src.contextDoc
+      || fallbackTask?.contextDoc
+      || '保持零外部 npm 依賴、遵守既定資料結構，僅改動 filesScope 核准範圍內檔案。',
+  ).trim().slice(0, 320);
+
+  return {
+    filesScope,
+    acceptanceCriteria,
+    verifyCommand,
+    contextDoc,
+  };
+}
+
+export function detectFileScopeConflicts(targetTask, allTasks = []) {
+  if (!targetTask || !targetTask.projectId) {
+    return { locked: false, conflicts: [] };
+  }
+  const targetSpec = normalizeSpecContract(targetTask.specContract, targetTask);
+  if (targetSpec.filesScope.length === 0) {
+    return { locked: false, conflicts: [] };
+  }
+
+  const conflicts = [];
+  for (const other of allTasks || []) {
+    if (!other || other.id === targetTask.id) continue;
+    if (other.projectId !== targetTask.projectId) continue;
+    if (other.status !== 'in_progress' && other.status !== 'pending_review') continue;
+
+    const otherSpec = normalizeSpecContract(other.specContract, other);
+    if (otherSpec.filesScope.length === 0) continue;
+
+    const overlappingScopes = [];
+    for (const sA of targetSpec.filesScope) {
+      for (const sB of otherSpec.filesScope) {
+        if (doScopePatternsOverlap(sA, sB)) {
+          overlappingScopes.push(sA === sB ? sA : `${sA} ↔ ${sB}`);
+        }
+      }
+    }
+    if (overlappingScopes.length > 0) {
+      conflicts.push({
+        taskId: other.id,
+        title: other.title,
+        status: other.status,
+        claimedBy: other.claimedBy || null,
+        overlappingScopes: [...new Set(overlappingScopes)],
+      });
+    }
+  }
+
+  return {
+    locked: conflicts.length > 0,
+    conflicts,
+  };
+}
+
+export function runLayer1PreCheckGate({ task, content = '', changedFiles = [], ciPassed = null, ciCommand = '' }) {
+  const spec = normalizeSpecContract(task?.specContract, task);
+  const touchedFiles = extractChangedFilesFromSubmission(content, changedFiles);
+  const outOfScopeFiles = spec.filesScope.length > 0
+    ? touchedFiles.filter((f) => !isFilePathAllowedByScope(f, spec.filesScope))
+    : [];
+
+  const checks = [];
+  checks.push({
+    name: 'filesScope 檔案邊界守衛',
+    passed: outOfScopeFiles.length === 0,
+    detail: outOfScopeFiles.length === 0
+      ? (touchedFiles.length > 0
+        ? `改動 ${touchedFiles.length} 個檔案均在核准範圍內（${spec.filesScope.join(', ') || '不限'}）`
+        : `核准範圍：${spec.filesScope.join(', ') || '不限'}`)
+      : `偵測到越界修改檔案：${outOfScopeFiles.join(', ')}（核准範圍僅限：${spec.filesScope.join(', ')}）`,
+  });
+
+  const ciFailed = ciPassed === false;
+  checks.push({
+    name: 'CI / 驗收指令預檢',
+    passed: !ciFailed,
+    detail: ciFailed
+      ? `驗收指令未通過（${ciCommand || spec.verifyCommand}），已於第 1 層自動攔截，不浪費人工審閱時間`
+      : (ciPassed === true
+        ? `驗收指令已通過（${ciCommand || spec.verifyCommand}）`
+        : `建議驗收指令：${spec.verifyCommand}`),
+  });
+
+  if (outOfScopeFiles.length > 0) {
+    return {
+      passed: false,
+      code: 'SCOPE_VIOLATION',
+      touchedFiles,
+      outOfScopeFiles,
+      ciStatus: ciFailed ? 'failed' : (ciPassed === true ? 'passed' : 'unreported'),
+      checks,
+      reason: `🚫 第 1 層契約守衛攔截：提交改動了核准範圍外的檔案（${outOfScopeFiles.join(', ')}），請嚴格遵守 filesScope（${spec.filesScope.join(', ')}）後重提！`,
+    };
+  }
+
+  if (ciFailed) {
+    return {
+      passed: false,
+      code: 'CI_CHECK_FAILED',
+      touchedFiles,
+      outOfScopeFiles: [],
+      ciStatus: 'failed',
+      checks,
+      reason: `🚫 第 1 層 CI 閘門攔截：驗收指令「${ciCommand || spec.verifyCommand}」回報失敗！請先在本機修到全綠再送審。`,
+    };
+  }
+
+  return {
+    passed: true,
+    code: null,
+    touchedFiles,
+    outOfScopeFiles: [],
+    ciStatus: ciPassed === true ? 'passed' : 'unreported',
+    checks,
+    reason: null,
+  };
+}
+
+export function buildReviewerBrief(task, aiReview = {}, preCheck = null) {
+  const spec = normalizeSpecContract(task?.specContract, task);
+  const touched = preCheck?.touchedFiles || [];
+  const line1 = touched.length > 0
+    ? `📂 檔案邊界：改動 ${touched.length} 個檔案（${touched.slice(0, 3).join(', ')}${touched.length > 3 ? '…' : ''}），全部符合核准範圍`
+    : `📂 檔案邊界：契約限定 ${spec.filesScope.length ? spec.filesScope.join(', ') : '模組邊界內'}（建議確認 PR Diff 檔案清單）`;
+
+  const ciTag = preCheck?.ciStatus === 'passed'
+    ? 'CI 預檢綠燈'
+    : `驗收指令 ${spec.verifyCommand}`;
+  const line2 = `🧪 體檢數據：Diff +${aiReview.diffLinesAdded ?? 0} / -${aiReview.diffLinesRemoved ?? 0} · 注水比 ${aiReview.bloatRatioPct ?? 0}% · ${ciTag}`;
+
+  const line3 = aiReview.riskLevel === 'high'
+    ? `🎯 審核焦點：高風險（${(aiReview.flags || []).slice(0, 2).join(', ') || '異常指標'}），建議直接駁回並沒收押金`
+    : (aiReview.riskLevel === 'medium'
+      ? `🎯 審核焦點：中度提示（${(aiReview.flags || []).slice(0, 2).join(', ') || '請抽檢邊界條件'}），預計 3 分鐘拍板`
+      : `🎯 審核焦點：低風險且結構精煉，僅需抽檢 ${spec.acceptanceCriteria[0] ? `「${spec.acceptanceCriteria[0].slice(0, 26)}」` : '核心邏輯'}，預計 2 分鐘拍板`);
+
+  return [line1, line2, line3];
+}

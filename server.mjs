@@ -39,9 +39,11 @@ import {
   REVIEWER_REWARD_POINTS,
   REVIEW_REJECT_REPUTATION_PENALTY,
   SLOP_STRIKE_LIMIT,
+  buildReviewerBrief,
   canUserReview,
   computeAntiDilutionMeritSplit,
   computeBucketStats,
+  detectFileScopeConflicts,
   ensureProjectBuckets,
   evaluateReviewerEligibility,
   getClaimLeaseMs,
@@ -49,7 +51,9 @@ import {
   getTaskBucket,
   getTaskMinReputation,
   getTaskStakeGold,
+  normalizeSpecContract,
   runAiBlindReview,
+  runLayer1PreCheckGate,
 } from './src/server/governance.mjs';
 import { verifySubmission, validateGitHubPrUrl } from './src/server/verifier.mjs';
 import {
@@ -387,6 +391,15 @@ function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
         '提供核心模組實作程式碼（含匯出函式與異常處理）或合法 GitHub PR 連結',
         `完整落地功能需求：${briefShort}`,
       ],
+      specContract: {
+        filesScope: [`src/features/${slug}-${suffix}/`],
+        acceptanceCriteria: [
+          '提供核心模組實作程式碼（含匯出函式與異常處理）或合法 GitHub PR 連結',
+          `完整落地功能需求：${briefShort}`,
+        ],
+        verifyCommand: 'npm test && npm run smoke',
+        contextDoc: `主理人拆單契約：僅於 src/features/${slug}-${suffix}/ 實作核心邏輯，避免改動無關檔案造成合併衝突。`,
+      },
       cashBountyUsd: 0,
       poolBucket: 'core',
       stakeGold: 25,
@@ -423,6 +436,15 @@ function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
         '包含標準 test() 與 assert 斷言程式碼',
         '覆蓋正常流程與異常邊界條件',
       ],
+      specContract: {
+        filesScope: [`tests/${slug}-${suffix}.test.mjs`],
+        acceptanceCriteria: [
+          '包含標準 test() 與 assert 斷言程式碼',
+          '覆蓋正常流程與異常邊界條件',
+        ],
+        verifyCommand: 'npm test',
+        contextDoc: `僅新增或修改 tests/${slug}-${suffix}.test.mjs，與核心模組任務完全不重疊，可安全並行。`,
+      },
       cashBountyUsd: 0,
       poolBucket: 'peripheral',
       stakeGold: 0,
@@ -464,6 +486,15 @@ function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
         '必須為合法 JSON 格式，包含至少 2 個語系鍵值',
         '文案自然準確且涵蓋功能操作提示',
       ],
+      specContract: {
+        filesScope: [`locales/${slug}-${suffix}.json`],
+        acceptanceCriteria: [
+          '必須為合法 JSON 格式，包含至少 2 個語系鍵值',
+          '文案自然準確且涵蓋功能操作提示',
+        ],
+        verifyCommand: 'npm run smoke',
+        contextDoc: `僅維護 locales/${slug}-${suffix}.json（英文鍵值禁止夾雜中文字），可與核心任務安全並行。`,
+      },
       cashBountyUsd: 0,
       poolBucket: 'peripheral',
       stakeGold: 0,
@@ -761,6 +792,15 @@ function projectClientState(state, userId) {
   projected.reviewHistory = Array.isArray(state.reviewHistory) ? state.reviewHistory : [];
   projected.antiSlopTreasuryGold = Number(state.antiSlopTreasuryGold || 0);
   projected.projectBuckets = buildProjectBucketsMap(state);
+  if (Array.isArray(projected.tasks)) {
+    projected.tasks = projected.tasks.map((t) => ({
+      ...t,
+      specContract: normalizeSpecContract(t.specContract, t),
+      scopeLock: t.status === 'open'
+        ? detectFileScopeConflicts(t, state.tasks)
+        : { locked: false, conflicts: [] },
+    }));
+  }
   projected.settings = {
     ...(projected.settings || {}),
     strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
@@ -3439,6 +3479,112 @@ export function createAppServer(options = {}) {
         });
       }
 
+      // Projects: POST /api/projects/:id/tasks (Maintainer-Only Scoped Task Publisher with Spec Contract)
+      const createTaskMatch = pathname.match(/^\/api\/projects\/([^/]+)\/tasks$/);
+      if (createTaskMatch && method === 'POST') {
+        const projectId = decodeURIComponent(createTaskMatch[1]);
+        const body = await parseJsonBody(req);
+        const title = sanitizeText(body.title, 120);
+        if (title.length < 3) {
+          throw new HttpError(400, '任務標題至少需 3 個字元');
+        }
+        const track = body.track === 'api_auto' ? 'api_auto' : 'guild_bounty';
+        const defaultCat = track === 'api_auto' ? 'unit_test' : 'feature_pr';
+        const allowedCats = new Set(['feature_pr', 'architecture', 'bugfix', 'i18n', 'docs', 'pixel_spec', 'unit_test', 'qa_audit']);
+        const category = allowedCats.has(String(body.category || '')) ? String(body.category) : defaultCat;
+        const cashBountyUsd = Math.max(0, Math.min(5000, round2(Number(body.cashBountyUsd) || 0)));
+
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+          const proj = s.projects.find((p) => p.id === projectId);
+          if (!proj) {
+            throw new HttpError(404, `找不到項目：${projectId}`);
+          }
+          const isOwner = proj.originatorId === user.id || proj.creatorId === user.id || isFounderAdmin(req, ctx);
+          if (!isOwner) {
+            throw new HttpError(403, '為避免多人各自亂拆單導致架構失控，僅限項目主理人或創始鎮長可發布帶規格契約的任務', {
+              code: 'MAINTAINER_ONLY',
+            });
+          }
+
+          const rawSpec = {
+            filesScope: body.filesScope ?? body.specContract?.filesScope,
+            acceptanceCriteria: body.acceptanceCriteria ?? body.specContract?.acceptanceCriteria,
+            verifyCommand: body.verifyCommand ?? body.specContract?.verifyCommand,
+            contextDoc: body.contextDoc ?? body.specContract?.contextDoc,
+          };
+          const specContract = normalizeSpecContract(rawSpec, { track, category });
+          if (specContract.filesScope.length === 0) {
+            throw new HttpError(400, '請至少填寫 1 個允許改動的檔案或目錄路徑（filesScope），避免多人改到同檔案衝突', {
+              code: 'MISSING_FILES_SCOPE',
+            });
+          }
+
+          const description = sanitizeText(body.description, 500, { multiline: true })
+            || `項目主理人發布之規格契約任務，僅限改動 ${specContract.filesScope.join(', ')}。`;
+          const isCore = track === 'guild_bounty';
+          const stakeGold = isCore ? (cashBountyUsd >= 25 ? 30 : 25) : 0;
+          const newTask = {
+            id: uid('task'),
+            projectId: proj.id,
+            track,
+            audience: category === 'docs' || category === 'qa_audit' ? 'beginner' : 'dev',
+            category,
+            source: 'maintainer_spec',
+            title,
+            description,
+            modelSuggestion: isCore ? 'Gemini CLI / Claude Code / Codex' : 'gemini-2.5-flash',
+            promptTemplate: `你是《${proj.name}》的協作開發者。請嚴格遵守主理人規格契約：\n- 允許改動範圍 (filesScope): ${specContract.filesScope.join(', ')}\n- 架構規範: ${specContract.contextDoc}\n- 驗收標準:\n${specContract.acceptanceCriteria.map((c) => `  * ${c}`).join('\n') || '  * 完成標題所述功能並維持現有測試全綠'}\n- 必跑驗收指令: ${specContract.verifyCommand}`,
+            sampleInput: `Project: ${proj.name}\nfilesScope: ${specContract.filesScope.join(', ')}\nverifyCommand: ${specContract.verifyCommand}`,
+            acceptanceCriteria: specContract.acceptanceCriteria.length > 0
+              ? specContract.acceptanceCriteria
+              : [`僅改動核准範圍（${specContract.filesScope.join(', ')}）並通過 ${specContract.verifyCommand}`],
+            specContract,
+            cashBountyUsd,
+            poolBucket: isCore ? 'core' : 'peripheral',
+            stakeGold,
+            stakedGold: 0,
+            stakedByUserId: null,
+            minReputation: isCore ? DEFAULT_MIN_REPUTATION : 0,
+            contributionPoints: isCore ? 65 : 25,
+            goldReward: isCore ? 260 : 115,
+            xpReward: isCore ? 85 : 35,
+            progressWeight: isCore ? 15 : 10,
+            tokenCostEst: isCore ? 18 : 18000,
+            staminaCost: isCore ? 20 : 12,
+            status: 'open',
+            assignedWorkerId: null,
+            claimedBy: null,
+            claimedAt: null,
+            claimExpiresAt: null,
+            submittedAt: null,
+            submission: null,
+            verification: null,
+          };
+
+          s.tasks.unshift(newTask);
+          pushActivity(s, {
+            type: 'auto_split',
+            icon: '📐',
+            message: `主理人 ${user.displayName} 為《${proj.shortName || proj.name}》發布規格契約任務《${newTask.title}》（鎖定範圍：${specContract.filesScope.join(', ')}）`,
+            projectId: proj.id,
+            taskId: newTask.id,
+          });
+          return { task: newTask, project: proj, userId: user.id };
+        });
+
+        store.appendAudit('scoped_task_created', `Created scoped task ${result.task.id} on ${result.project.id} (${result.task.specContract.filesScope.join(', ')})`);
+        sseHub.broadcast('tasks_imported', { source: 'maintainer_spec', project: result.project, tasks: [result.task] });
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        return sendJson(res, 201, {
+          ok: true,
+          task: result.task,
+          state: projectClientState(state, result.userId),
+        });
+      }
+
       // Projects: POST /api/projects/:id/simulate-revenue
       const simRevMatch = pathname.match(/^\/api\/projects\/([^/]+)\/simulate-revenue$/);
       if (simRevMatch && method === 'POST') {
@@ -3535,6 +3681,20 @@ export function createAppServer(options = {}) {
           }
           if (worker.status === 'working' && worker.currentTaskId !== task.id) {
             throw new HttpError(409, `小人【${worker.name}】正在執行其他任務`);
+          }
+
+          // Anti-Collision File-Scope Lock: prevent two active tasks in the same project from editing overlapping files
+          const scopeCheck = detectFileScopeConflicts(task, s.tasks);
+          if (scopeCheck.locked) {
+            const first = scopeCheck.conflicts[0];
+            throw new HttpError(
+              409,
+              `檔案範圍鎖定中！任務《${first.title}》正在改動重疊路徑（${first.overlappingScopes.join(', ')}），請等該任務合併或改接其他不衝突的任務，避免多人改爛同一份檔案。`,
+              {
+                code: 'FILE_SCOPE_LOCKED',
+                conflicts: scopeCheck.conflicts,
+              },
+            );
           }
 
           // Anti-slop Layer 4a: Worker cooldown check
@@ -3786,6 +3946,62 @@ export function createAppServer(options = {}) {
             }
           }
 
+          // Layer-1 Automated Pre-Check Gate (0 human reviewer cost):
+          // Hard-blocks out-of-scope file edits or failing CI checks BEFORE entering human review or rewarding.
+          const preCheck = runLayer1PreCheckGate({
+            task,
+            content: body.content,
+            changedFiles: body.changedFiles,
+            ciPassed: body.ciPassed,
+            ciCommand: body.ciCommand,
+          });
+          if (!preCheck.passed) {
+            const preCheckVerification = {
+              passed: false,
+              score: 0,
+              checks: preCheck.checks,
+              reason: preCheck.reason,
+              code: preCheck.code,
+            };
+            task.lastRejectedVerification = preCheckVerification;
+            task.lastRejectedAt = new Date().toISOString();
+            pushActivity(s, {
+              type: 'reject',
+              icon: '🚧',
+              message: `第 1 層契約預檢攔截：【${task.title}】${preCheck.code === 'SCOPE_VIOLATION' ? `越界修改 ${preCheck.outOfScopeFiles.join(', ')}` : 'CI 測試未通過'}（已退回修正，未消耗人工審閱資源）`,
+              workerId: worker?.id || null,
+              projectId: task.projectId,
+              taskId: task.id,
+            });
+            return {
+              passed: false,
+              pendingReview: false,
+              preCheckBlocked: true,
+              code: preCheck.code,
+              preCheck,
+              verification: preCheckVerification,
+              cooldownTriggered: false,
+              cooldownUntil: null,
+              slopStrikes: worker?.slopStrikes || 0,
+              rewards: {
+                gold: 0,
+                contributionPoints: 0,
+                xp: 0,
+                bountyGrossUsd: 0,
+                bountyNetUsd: 0,
+                platformFeeUsd: 0,
+                reputationDelta: 0,
+                forfeitedStakeGold: 0,
+                leveledUp: false,
+              },
+              task,
+              worker: worker || null,
+              project: s.projects.find((p) => p.id === task.projectId) || null,
+              unlockedAchievements: [],
+              user,
+            };
+          }
+
           const verification = verifySubmission(task, {
             content: body.content,
             prUrl: body.prUrl,
@@ -3886,6 +4102,7 @@ export function createAppServer(options = {}) {
 
           if (needsPeerReview) {
             const aiReview = runAiBlindReview(task, contentStr, cleanPrUrl || '');
+            aiReview.reviewerBrief = buildReviewerBrief(task, aiReview, preCheck);
             task.status = 'pending_review';
             task.submittedAt = now;
             task.assignedWorkerId = worker?.id || task.assignedWorkerId || null;
@@ -3936,7 +4153,8 @@ export function createAppServer(options = {}) {
               content: contentStr,
               notes: cleanNotes,
               executionMode,
-              ciStatus: 'passed',
+              ciStatus: preCheck.ciStatus || 'passed',
+              preCheck,
               verificationScore: verification.score,
               aiReview,
               submittedAt: now,
@@ -4181,6 +4399,9 @@ export function createAppServer(options = {}) {
           ok: result.passed,
           passed: result.passed,
           pendingReview: false,
+          preCheckBlocked: Boolean(result.preCheckBlocked),
+          code: result.code || null,
+          preCheck: result.preCheck || null,
           verification: result.verification,
           rewards: result.rewards,
           cooldownTriggered: Boolean(result.cooldownTriggered),

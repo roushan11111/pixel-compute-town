@@ -10,10 +10,12 @@ import {
   CORE_BUCKET_PCT,
   PERIPHERAL_BUCKET_PCT,
   DEFAULT_MIN_REPUTATION,
+  buildReviewerBrief,
   ensureProjectBuckets,
   getTaskBucket,
   getTaskMinReputation,
   getTaskStakeGold,
+  normalizeSpecContract,
 } from './governance.mjs';
 
 export const REVENUE_SPLIT = Object.freeze({
@@ -811,6 +813,17 @@ export function ensureStateSchema(state) {
       }
       if (!Number.isFinite(Number(t.stakedGold))) t.stakedGold = 0;
       if (t.stakedByUserId === undefined) t.stakedByUserId = null;
+      t.specContract = normalizeSpecContract(t.specContract, t);
+    }
+  }
+
+  if (Array.isArray(state.reviewQueue)) {
+    for (const item of state.reviewQueue) {
+      if (!item || typeof item !== 'object') continue;
+      if (item.aiReview && typeof item.aiReview === 'object' && !Array.isArray(item.aiReview.reviewerBrief)) {
+        const linkedTask = (state.tasks || []).find((t) => t.id === item.taskId) || { title: item.taskTitle };
+        item.aiReview.reviewerBrief = buildReviewerBrief(linkedTask, item.aiReview, item.preCheck || null);
+      }
     }
   }
 
