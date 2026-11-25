@@ -1,6 +1,10 @@
 /**
- * PixelCompute Town — Shareable Retro Pixel Work Certificate & Dividend Card
- * Exports renderWorkCertificate(state, locale) and downloadWorkCertificate(state, filename, locale).
+ * PixelCompute Town — Shareable Retro Pixel Work Certificate & Proof of First Spark Idea Certificate
+ * Exports:
+ *  - renderWorkCertificate(state, locale)
+ *  - downloadWorkCertificate(state, filename, locale)
+ *  - renderIdeaCertificate(project, chainInfo, locale)
+ *  - downloadIdeaCertificate(project, chainInfo, locale)
  * Supports zh-TW / zh-CN / en trilingual rendering aligned with public/js/i18n.js + built-in safe fallbacks.
  * Zero-dependency ES Module.
  */
@@ -10,6 +14,8 @@ import { drawHDWorker, drawObjectSprite } from './sprites.js';
 
 const CARD_W = 900;
 const CARD_H = 540;
+const IDEA_CARD_W = 900;
+const IDEA_CARD_H = 520;
 const PRIMARY_LANG_STORAGE_KEY = 'pct_locale';
 const LANG_STORAGE_KEY = 'pixel_compute_town_lang_v1';
 
@@ -73,7 +79,7 @@ const FALLBACK_CERT_I18N = Object.freeze({
     squadTitle: 'ACTIVE SQUAD · 旗下算力小人 ({count})',
     workerFallback: '算力小人',
     sealLine1: '防刷單鐵律 · 按驗收成果記功',
-    sealLine2: 'BYOK 零信任金鑰 · 30/60/10 透明分紅',
+    sealLine2: 'BYOK 零信任金鑰 · 5/85/10 多勞多得透明分紅',
     kpiRepLabel: '🛡️ 開發者信譽分 (REPUTATION)',
     kpiRepSub: '{stars} 優良信用',
     kpiTasksLabel: '✅ 驗收通過任務 (ACCEPTED)',
@@ -117,7 +123,7 @@ const FALLBACK_CERT_I18N = Object.freeze({
     squadTitle: 'ACTIVE SQUAD · 旗下算力小人 ({count})',
     workerFallback: '算力小人',
     sealLine1: '防刷单铁律 · 按验收成果记功',
-    sealLine2: 'BYOK 零信任密钥 · 30/60/10 透明分红',
+    sealLine2: 'BYOK 零信任密钥 · 5/85/10 多劳多得透明分红',
     kpiRepLabel: '🛡️ 开发者信誉分 (REPUTATION)',
     kpiRepSub: '{stars} 优良信用',
     kpiTasksLabel: '✅ 验收通过任务 (ACCEPTED)',
@@ -161,7 +167,7 @@ const FALLBACK_CERT_I18N = Object.freeze({
     squadTitle: 'ACTIVE SQUAD · PIXEL WORKERS ({count})',
     workerFallback: 'Worker',
     sealLine1: 'Anti-Cheat Proof of Accepted Work',
-    sealLine2: 'Zero-Trust BYOK · 30/60/10 Revenue Split',
+    sealLine2: 'Zero-Trust BYOK · 5/85/10 Merit Revenue Split',
     kpiRepLabel: '🛡️ BUILDER REPUTATION',
     kpiRepSub: '{stars} Trusted Standing',
     kpiTasksLabel: '✅ ACCEPTED TASKS',
@@ -461,12 +467,14 @@ function extractCertData(input, locale, tCert) {
         Number(p.totalContributionPoints ?? 0),
         mapTotalPts
       );
-      const sharePct =
-        totalPts > 0
-          ? Math.min(60, (myPts / totalPts) * 60)
-          : p.creatorId === player.id || p.isFounderProject
-            ? 30
-            : 0;
+      const sparkPct = Number(p.sparkRoyaltyPct ?? 5);
+      const meritPct = Number(p.meritPoolPct ?? 85);
+      const isOriginator =
+        myUserIds.has(p.originatorId) ||
+        myUserIds.has(p.creatorId) ||
+        Boolean(p.isFounderProject);
+      const meritShare = totalPts > 0 ? Math.min(meritPct, (myPts / totalPts) * meritPct) : 0;
+      const sharePct = Math.min(sparkPct + meritPct, meritShare + (isOriginator ? sparkPct : 0));
       const earnedUsd = Math.max(
         projDividends.get(p.id) || 0,
         Number(p.playerDividendUsd ?? 0)
@@ -949,6 +957,423 @@ export function downloadWorkCertificate(state, filenameOrLocale = 'pixelcompute-
 
   const activeLocale = resolveLocale(locale, state);
   const canvas = renderWorkCertificate(state, activeLocale);
+  const dataUrl = canvas.toDataURL('image/png');
+
+  if (typeof document !== 'undefined') {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  return { canvas, dataUrl, filename, locale: activeLocale };
+}
+
+// ============================================================================
+// Proof of First Spark — Idea Provenance Certificate PNG (900x520)
+// ============================================================================
+
+const IDEA_CERT_I18N = Object.freeze({
+  'zh-TW': {
+    headerTitle: '★ PIXELCOMPUTE TOWN · 創意首發溯源證書',
+    headerSub: '《PROOF OF FIRST SPARK · 創意是第一生產力公證憑證》  SHA-256 PROVENANCE CHAIN',
+    stampLine1: '✅ PROOF OF FIRST SPARK',
+    stampLine2: 'BLOCK #{idx} · 已鏈上公證',
+    projectLabel: '原創孵化項目 (ORIGINAL IDEA)',
+    originatorLabel: '首發創意人 (FIRST SPARK ORIGINATOR)',
+    timestampLabel: '精確公證時間戳 (UTC TIMESTAMP)',
+    coBuildersLabel: '共建開發者 (CO-BUILDERS)',
+    coBuildersVal: '{count} 位實幹共建者',
+    statusLabel: '孵化狀態 (STATUS)',
+    statusVoting: '🗳️ 投票立項中',
+    statusBuilding: '🏗️ 雙軌建設中',
+    statusLaunched: '🚀 已上線分紅',
+    hashSectionTitle: '🔐 SHA-256 不可竄改創意溯源哈希鏈 (CRYPTOGRAPHIC FINGERPRINT)',
+    ideaHashLabel: 'IDEA HASH (SHA-256):',
+    prevHashLabel: 'PREV CHAIN HASH:',
+    chainValidText: '✅ 哈希鏈完整驗證通過（全鏈 {len} 筆原創公證）',
+    chainFallbackText: '✅ SHA-256 溯源指紋已鑄造',
+    splitTitle: '⚖️ 尊重創意 × 多勞多得透明分紅協議 (TRANSPARENT MERIT SPLIT)',
+    segSpark: '5% 首發創意版稅',
+    segMerit: '85% 實幹建設多勞多得池（誰出力最多誰拿大頭）',
+    segPlatform: '10% 平臺',
+    footerSlogan: '反對抄襲複製蒸餾 · 尊重第一步火花，更尊重每一行實幹代碼',
+    defaultOriginator: '創始鎮長',
+    defaultTagline: '由像素算力鎮社群共建的開源孵化創意',
+  },
+  'zh-CN': {
+    headerTitle: '★ PIXELCOMPUTE TOWN · 创意首发溯源证书',
+    headerSub: '《PROOF OF FIRST SPARK · 创意是第一生产力公证凭证》  SHA-256 PROVENANCE CHAIN',
+    stampLine1: '✅ PROOF OF FIRST SPARK',
+    stampLine2: 'BLOCK #{idx} · 已链上公证',
+    projectLabel: '原创孵化项目 (ORIGINAL IDEA)',
+    originatorLabel: '首发创意人 (FIRST SPARK ORIGINATOR)',
+    timestampLabel: '精确公证时间戳 (UTC TIMESTAMP)',
+    coBuildersLabel: '共建开发者 (CO-BUILDERS)',
+    coBuildersVal: '{count} 位实干共建者',
+    statusLabel: '孵化状态 (STATUS)',
+    statusVoting: '🗳️ 投票立项中',
+    statusBuilding: '🏗️ 双轨建设中',
+    statusLaunched: '🚀 已上线分红',
+    hashSectionTitle: '🔐 SHA-256 不可篡改创意溯源哈希链 (CRYPTOGRAPHIC FINGERPRINT)',
+    ideaHashLabel: 'IDEA HASH (SHA-256):',
+    prevHashLabel: 'PREV CHAIN HASH:',
+    chainValidText: '✅ 哈希链完整验证通过（全链 {len} 笔原创公证）',
+    chainFallbackText: '✅ SHA-256 溯源指纹已铸造',
+    splitTitle: '⚖️ 尊重创意 × 多劳多得透明分红协议 (TRANSPARENT MERIT SPLIT)',
+    segSpark: '5% 首发创意版税',
+    segMerit: '85% 实干建设多劳多得池（谁出力最多谁拿大头）',
+    segPlatform: '10% 平台',
+    footerSlogan: '反对抄袭复制蒸馏 · 尊重第一步火花，更尊重每一行实干代码',
+    defaultOriginator: '创始镇长',
+    defaultTagline: '由像素算力镇社区共建的开源孵化创意',
+  },
+  en: {
+    headerTitle: '★ PIXELCOMPUTE TOWN · FIRST SPARK CERT',
+    headerSub: 'PROOF OF FIRST SPARK · ORIGINAL IDEA PROVENANCE & MERIT PROTOCOL',
+    stampLine1: '✅ PROOF OF FIRST SPARK',
+    stampLine2: 'BLOCK #{idx} · NOTARIZED',
+    projectLabel: 'ORIGINAL INCUBATOR IDEA',
+    originatorLabel: 'FIRST-SPARK ORIGINATOR',
+    timestampLabel: 'EXACT UTC TIMESTAMP',
+    coBuildersLabel: 'CO-BUILDERS',
+    coBuildersVal: '{count} Co-Builders',
+    statusLabel: 'STATUS',
+    statusVoting: '🗳️ Voting',
+    statusBuilding: '🏗️ Building',
+    statusLaunched: '🚀 Launched',
+    hashSectionTitle: '🔐 IMMUTABLE SHA-256 PROVENANCE HASH CHAIN',
+    ideaHashLabel: 'IDEA HASH (SHA-256):',
+    prevHashLabel: 'PREV CHAIN HASH:',
+    chainValidText: '✅ SHA-256 Chain Verified ({len} Original Ideas Notarized)',
+    chainFallbackText: '✅ SHA-256 Provenance Fingerprint Minted',
+    splitTitle: '⚖️ MERITOCRATIC REVENUE SPLIT PROTOCOL (5% / 85% / 10%)',
+    segSpark: '5% Spark',
+    segMerit: '85% Merit Builders Pool (Builders Earn the Lion’s Share)',
+    segPlatform: '10% Platform',
+    footerSlogan: 'Zero Copycats · Honor the First Spark, Reward Those Who Ship Most',
+    defaultOriginator: 'Founding Mayor',
+    defaultTagline: 'Community co-built open-source incubator project on PixelCompute Town',
+  },
+});
+
+function formatUtcIso(iso) {
+  try {
+    const d = iso ? new Date(iso) : new Date();
+    if (Number.isNaN(d.getTime())) return String(iso || new Date().toISOString());
+    return `${d.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+  } catch {
+    return String(iso || '');
+  }
+}
+
+/**
+ * Render a 900x520 retro cyber pixel Proof of First Spark Idea Certificate PNG onto a Canvas.
+ * @param {object} project
+ * @param {object} [chainInfo]
+ * @param {'zh-TW' | 'zh-CN' | 'en'} [locale]
+ * @returns {HTMLCanvasElement}
+ */
+export function renderIdeaCertificate(project = {}, chainInfo = null, locale = null) {
+  const activeLocale = resolveLocale(locale, null);
+  const isEn = activeLocale === 'en';
+  const ti = IDEA_CERT_I18N[activeLocale] || IDEA_CERT_I18N['zh-TW'];
+
+  let locProj = null;
+  try {
+    if (typeof I18N.localizeProject === 'function') {
+      locProj = I18N.localizeProject(project, activeLocale);
+    }
+  } catch {
+    locProj = null;
+  }
+
+  const projectName = locProj?.name || localizeProjectName(project, activeLocale) || project?.name || 'Untitled Idea';
+  const projectTagline = locProj?.tagline || project?.tagline || ti.defaultTagline;
+
+  let originatorName = project?.originatorName || locProj?.creatorName || project?.creatorName || ti.defaultOriginator;
+  try {
+    if (typeof I18N.localizeUser === 'function') {
+      const lu = I18N.localizeUser(
+        { id: project?.originatorId || project?.creatorId, displayName: originatorName },
+        activeLocale
+      );
+      if (lu?.displayName) originatorName = lu.displayName;
+    }
+  } catch {
+    // keep originatorName
+  }
+
+  const originatedAt = formatUtcIso(project?.originatedAt || project?.createdAt);
+  const ideaHash = String(
+    project?.ideaHash ||
+      chainInfo?.record?.ideaHash ||
+      `${hashSerial(projectName + originatorName)}${hashSerial(originatedAt)}`.toLowerCase().padEnd(64, '0')
+  );
+  const prevHash = String(
+    project?.prevIdeaHash || chainInfo?.record?.prevIdeaHash || '0000000000000000000000000000000000000000000000000000000000000000'
+  );
+  const blockIdx = Number(project?.provenanceIndex ?? chainInfo?.record?.provenanceIndex ?? 1);
+  const coBuildersCount = Array.isArray(project?.coBuilders) ? Math.max(1, project.coBuilders.length) : 1;
+  const sparkPct = Number(project?.sparkRoyaltyPct ?? 5);
+  const meritPct = Number(project?.meritPoolPct ?? 85);
+  const platformPct = Number(project?.platformSharePct ?? 10);
+  const chainLen = Number(chainInfo?.chainLength ?? chainInfo?.records?.length ?? 0);
+  const chainValid = chainInfo?.valid !== false;
+
+  const statusText =
+    project?.status === 'launched'
+      ? ti.statusLaunched
+      : project?.status === 'voting'
+        ? ti.statusVoting
+        : ti.statusBuilding;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = IDEA_CARD_W;
+  canvas.height = IDEA_CARD_H;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // 1. Cyber-gold & midnight gradient backdrop
+  const bg = ctx.createLinearGradient(0, 0, IDEA_CARD_W, IDEA_CARD_H);
+  bg.addColorStop(0, '#0a0d22');
+  bg.addColorStop(0.5, '#131838');
+  bg.addColorStop(1, '#1f1233');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, IDEA_CARD_W, IDEA_CARD_H);
+
+  // Subtle retro grid + scanlines
+  ctx.fillStyle = 'rgba(255, 217, 90, 0.045)';
+  for (let gx = 0; gx < IDEA_CARD_W; gx += 20) ctx.fillRect(gx, 0, 1, IDEA_CARD_H);
+  for (let gy = 0; gy < IDEA_CARD_H; gy += 20) ctx.fillRect(0, gy, IDEA_CARD_W, 1);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.14)';
+  for (let sy = 0; sy < IDEA_CARD_H; sy += 4) ctx.fillRect(0, sy, IDEA_CARD_W, 1);
+
+  // Ambient glow blocks
+  ctx.fillStyle = 'rgba(255, 217, 90, 0.10)';
+  ctx.fillRect(0, 0, 290, 108);
+  ctx.fillStyle = 'rgba(77, 238, 234, 0.09)';
+  ctx.fillRect(IDEA_CARD_W - 280, IDEA_CARD_H - 110, 280, 110);
+
+  // 2. Double retro pixel outer frame
+  drawPixelBox(ctx, 12, 12, IDEA_CARD_W - 24, IDEA_CARD_H - 24, 'rgba(9, 13, 26, 0.55)', '#475569', '#fde047');
+  drawPixelBox(ctx, 20, 20, IDEA_CARD_W - 40, IDEA_CARD_H - 40, 'rgba(15, 23, 42, 0.48)', '#fde047', '#4deeea');
+
+  // 3. Header Banner
+  ctx.fillStyle = '#0d1329';
+  ctx.fillRect(28, 28, IDEA_CARD_W - 56, 68);
+  ctx.fillStyle = '#fde047';
+  ctx.fillRect(28, 94, IDEA_CARD_W - 56, 2);
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = 'bold 22px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText(ti.headerTitle, 44, 36, 560);
+
+  ctx.font = 'bold 11px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#67e8f9';
+  ctx.fillText(ti.headerSub, 44, 68, 560);
+
+  // Prominent "PROOF OF FIRST SPARK" Pixel Stamp
+  drawPixelBox(ctx, IDEA_CARD_W - 260, 35, 218, 50, '#132a24', '#4ade80', '#fde047');
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#4ade80';
+  ctx.fillText(ti.stampLine1, IDEA_CARD_W - 151, 44, 206);
+  ctx.font = 'bold 11px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText(fmtTpl(ti.stampLine2, { idx: blockIdx }), IDEA_CARD_W - 151, 64, 206);
+
+  // 4. Idea Hero Panel
+  const heroX = 34;
+  const heroY = 108;
+  const heroW = IDEA_CARD_W - 68;
+  const heroH = 128;
+  drawPixelBox(ctx, heroX, heroY, heroW, heroH, '#0d1428', '#38bdf8', '#fde047');
+
+  // Left: Project Name & Tagline + Sprite accent
+  drawObjectSprite(ctx, 'coin', heroX + 18, heroY + 18, 3, 0);
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 10px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#67e8f9';
+  ctx.fillText(ti.projectLabel, heroX + 54, heroY + 12);
+
+  ctx.font = 'bold 21px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(truncate(projectName, isEn ? 46 : 28), heroX + 54, heroY + 28, heroW - 76);
+
+  ctx.font = '12px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillText(truncate(projectTagline, isEn ? 86 : 48), heroX + 54, heroY + 56, heroW - 76);
+
+  // 4 Metadata Boxes inside Hero Panel
+  const metaY = heroY + 80;
+  const metaGap = 10;
+  const metaW = Math.floor((heroW - 32 - metaGap * 3) / 4);
+  const metaItems = [
+    { label: ti.originatorLabel, val: truncate(originatorName, isEn ? 20 : 12), color: '#fef08a', border: '#fde047' },
+    { label: ti.timestampLabel, val: originatedAt, color: '#67e8f9', border: '#38bdf8' },
+    {
+      label: ti.coBuildersLabel,
+      val: fmtTpl(ti.coBuildersVal, { count: coBuildersCount }),
+      color: '#4ade80',
+      border: '#22c55e',
+    },
+    { label: ti.statusLabel, val: statusText, color: '#f472b6', border: '#a855f7' },
+  ];
+
+  metaItems.forEach((m, i) => {
+    const mx = heroX + 16 + i * (metaW + metaGap);
+    drawPixelBox(ctx, mx, metaY, metaW, 38, '#131d38', m.border);
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 9px "Courier New", "Microsoft JhengHei", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(m.label, mx + 8, metaY + 5, metaW - 14);
+    ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
+    ctx.fillStyle = m.color;
+    ctx.fillText(m.val, mx + 8, metaY + 20, metaW - 14);
+  });
+
+  // 5. Cryptographic SHA-256 Provenance Chain Box
+  const hashY = 248;
+  const hashH = 108;
+  drawPixelBox(ctx, heroX, hashY, heroW, hashH, '#090f20', '#4ade80', '#fde047');
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#4ade80';
+  ctx.fillText(ti.hashSectionTitle, heroX + 14, hashY + 10, heroW - 260);
+
+  // Chain verification pill on right
+  const verifyLabel = chainLen > 0 && chainValid ? fmtTpl(ti.chainValidText, { len: chainLen }) : ti.chainFallbackText;
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 11px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#86efac';
+  ctx.fillText(verifyLabel, heroX + heroW - 14, hashY + 10, 340);
+
+  // Full 64-char SHA-256 Fingerprint Box
+  drawPixelBox(ctx, heroX + 14, hashY + 32, heroW - 28, 30, '#050814', '#22d3ee');
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText(ti.ideaHashLabel, heroX + 24, hashY + 41);
+  ctx.font = 'bold 13px "Courier New", monospace';
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText(ideaHash, heroX + 186, hashY + 40, heroW - 210);
+
+  // Previous Hash Chain Link Row
+  drawPixelBox(ctx, heroX + 14, hashY + 68, heroW - 28, 28, '#050814', '#475569');
+  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText(ti.prevHashLabel, heroX + 24, hashY + 76);
+  ctx.font = '12px "Courier New", monospace';
+  ctx.fillStyle = '#67e8f9';
+  ctx.fillText(prevHash, heroX + 186, hashY + 76, heroW - 210);
+
+  // 6. 5% / 85% / 10% Transparent Merit Split Bar Box
+  const splitY = 368;
+  const splitH = 82;
+  drawPixelBox(ctx, heroX, splitY, heroW, splitH, '#0d1428', '#fde047', '#f472b6');
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText(ti.splitTitle, heroX + 14, splitY + 10, heroW - 28);
+
+  // 3-segment bar
+  const barX = heroX + 14;
+  const barY = splitY + 32;
+  const barW = heroW - 28;
+  const barH = 34;
+
+  // Give the 5% & 10% segments readable minimum widths while keeping visual hierarchy crisp
+  const wSpark = Math.max(122, Math.round(barW * 0.16));
+  const wPlat = Math.max(106, Math.round(barW * 0.13));
+  const wMerit = barW - wSpark - wPlat;
+
+  // Spark 5%
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillRect(barX, barY, wSpark, barH);
+  // Merit 85%
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(barX + wSpark + 2, barY, wMerit - 4, barH);
+  // Platform 10%
+  ctx.fillStyle = '#8b5cf6';
+  ctx.fillRect(barX + wSpark + wMerit, barY, wPlat, barH);
+
+  // Pixel border around split bar
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(barX, barY, barW, barH);
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 12px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#090d21';
+  ctx.fillText(ti.segSpark.replace('5%', `${sparkPct}%`), barX + wSpark / 2, barY + 11, wSpark - 8);
+  ctx.fillText(ti.segMerit.replace('85%', `${meritPct}%`), barX + wSpark + wMerit / 2, barY + 11, wMerit - 16);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(ti.segPlatform.replace('10%', `${platformPct}%`), barX + wSpark + wMerit + wPlat / 2, barY + 11, wPlat - 8);
+
+  // 7. Footer Serial + Manifesto Slogan + Hash Barcode
+  const footY = 462;
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(28, footY, IDEA_CARD_W - 56, 2);
+
+  const shortId = ideaHash.slice(0, 12).toUpperCase();
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.fillStyle = '#fde047';
+  ctx.fillText(`SPARK #${shortId}`, 38, footY + 12);
+
+  ctx.font = '11px "Courier New", "Microsoft JhengHei", monospace';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillText(ti.footerSlogan, 194, footY + 12, 540);
+
+  // Crisp pixel barcode on bottom right derived from ideaHash
+  const bcX = IDEA_CARD_W - 144;
+  const bcY = footY + 8;
+  for (let i = 0; i < 28; i++) {
+    const bit = ((ideaHash.charCodeAt(i % ideaHash.length) + i * 5) % 3) !== 0;
+    if (bit) {
+      ctx.fillStyle = i % 4 === 0 ? '#fde047' : i % 3 === 0 ? '#4deeea' : '#e2e8f0';
+      ctx.fillRect(bcX + i * 4, bcY, i % 5 === 0 ? 3 : 2, 18);
+    }
+  }
+
+  return canvas;
+}
+
+/**
+ * Render and trigger browser PNG download of the Proof of First Spark Idea Certificate.
+ * Supports downloadIdeaCertificate(project, chainInfo, locale) AND (project, chainInfo, filename, locale).
+ * @param {object} project
+ * @param {object} [chainInfo]
+ * @param {string} [localeOrFilename]
+ * @param {'zh-TW' | 'zh-CN' | 'en'} [maybeLocale]
+ * @returns {{ canvas: HTMLCanvasElement, dataUrl: string, filename: string, locale: string }}
+ */
+export function downloadIdeaCertificate(project = {}, chainInfo = null, localeOrFilename = null, maybeLocale = null) {
+  const slug = String(project?.id || project?.shortName || project?.name || 'idea')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || 'idea';
+
+  let filename = `pixelcompute-first-spark-${slug}.png`;
+  let locale = maybeLocale;
+
+  if (localeOrFilename === 'zh-TW' || localeOrFilename === 'zh-CN' || localeOrFilename === 'en') {
+    locale = localeOrFilename;
+  } else if (typeof localeOrFilename === 'string' && localeOrFilename.trim()) {
+    filename = localeOrFilename.trim();
+  }
+
+  const activeLocale = resolveLocale(locale, null);
+  const canvas = renderIdeaCertificate(project, chainInfo, activeLocale);
   const dataUrl = canvas.toDataURL('image/png');
 
   if (typeof document !== 'undefined') {

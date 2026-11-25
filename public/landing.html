@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>像素算力鎮 PixelCompute Town — 把閒置 AI 算力變成像素小人，雙軌打工共享 60% 分紅</title>
+  <title>像素算力鎮 PixelCompute Town — 創意是第一生產力 · 創意溯源 × 85% 多勞多得算力孵化平臺</title>
   <meta
     name="description"
-    content="把閒置 API 與月/週 AI 訂閱額度變成 32×32 HD 像素小人，雙軌協作孵化開源產品並共享 60% 永久分紅池。支援一鍵本機安裝與 USDC/USDT 穩定幣提領。"
+    content="把閒置 API 與月/週 AI 訂閱額度變成 32×32 HD 像素小人，以 SHA-256 哈希鏈公證原創首發創意，按 5% 首發創意版稅 / 85% 實幹多勞多得池 / 10% 平臺透明分紅，並支援 USDC/USDT 穩定幣提領。"
   />
   <link rel="stylesheet" href="/landing.css" />
 </head>
@@ -29,6 +29,7 @@
       </a>
 
       <nav class="site-nav" aria-label="Primary Navigation">
+        <a href="#manifesto" data-i18n="nav.manifesto">創意宣言</a>
         <a href="#tracks" data-i18n="nav.howItWorks">雙軌玩法</a>
         <a href="#install" data-i18n="nav.install">一鍵安裝</a>
         <a href="#rooms" data-i18n="nav.rooms">HD 場景</a>
@@ -63,7 +64,7 @@
           </h1>
 
           <p class="hero-desc" data-i18n="hero.desc">
-            不必讓每月底歸零的 Gemini / Claude / Codex 額度白白浪費。在 PixelCompute Town，你的算力化身 32×32 HD 像素小人進駐超算工坊與懸賞工會，合力孵化開源產品，共享 60% 永久分紅池與 90% 現金懸賞！
+            不必讓每月底歸零的 Gemini / Claude / Codex 額度白白浪費。在 PixelCompute Town，每個原創首發創意都有 SHA-256 哈希鏈溯源公證，你的算力化身 32×32 HD 像素小人進駐超算工坊與懸賞工會，合力孵化開源產品，共享 5% 首發創意版稅、85% 實幹多勞多得池與 90% 現金懸賞！
           </p>
 
           <div class="hero-cta-row">
@@ -160,6 +161,134 @@
           </div>
         </div>
         <div class="featured-ticker" id="featured-projects-strip" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- 3.5 💡 創意是第一生產力 · 創意溯源 × 多勞多得宣言 (Proof of First Spark) -->
+    <section class="section manifesto-section" id="manifesto">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-tag gold" data-i18n="manifesto.tag">PROOF OF FIRST SPARK · MERITOCRATIC PROTOCOL</span>
+          <h2 class="section-title" data-i18n="manifesto.title">💡 創意是第一生產力 · 創意溯源 × 多勞多得宣言</h2>
+          <p class="section-desc" data-i18n="manifesto.desc">
+            我們堅決反對抄襲、複製與低質蒸餾。在像素算力鎮，第一個把好點子帶到世界的人，上牆即刻鑄造不可竄改的 SHA-256 哈希鏈溯源憑證；同時我們尊重創意、絕不獨佔——誰真正把產品做出來，誰就拿走最大頭！
+          </p>
+        </div>
+
+        <!-- 即時 SHA-256 創意溯源哈希鏈狀態橫幅 -->
+        <div class="chain-status-bar" id="manifesto-chain-bar">
+          <div class="chain-status-left">
+            <span class="chain-shield" aria-hidden="true">🛡️</span>
+            <div>
+              <div class="chain-status-label" data-i18n="manifesto.chainTitle">創意溯源哈希鏈狀態（SHA-256 Provenance Chain）</div>
+              <div class="chain-status-live" id="manifesto-chain-status" data-i18n="manifesto.chainLoading">
+                ⏳ 正在向小鎮節點驗證原創創意哈希鏈...
+              </div>
+            </div>
+          </div>
+          <div class="chain-status-right">
+            <span class="chain-hash-chip" id="manifesto-chain-head">HEAD: #--------</span>
+            <a class="btn btn-amber btn-sm" href="/app" data-i18n="manifesto.chainCta">📜 查看證書與共建 →</a>
+          </div>
+        </div>
+
+        <!-- 三大宣言鐵律卡 -->
+        <div class="manifesto-pillars">
+          <article class="pillar-card">
+            <div class="pillar-icon">🚫</div>
+            <h3 data-i18n="manifesto.p1Title">反對抄襲複製與蒸餾</h3>
+            <p data-i18n="manifesto.p1Desc">
+              提案送出前即時執行中英雙語相似度偵測，攔截高度雷同的山寨提案，引導開發者尊重原創、直接加入首發創意一起把蛋糕做大。
+            </p>
+          </article>
+          <article class="pillar-card">
+            <div class="pillar-icon">🔗</div>
+            <h3 data-i18n="manifesto.p2Title">SHA-256 哈希鏈首發公證</h3>
+            <p data-i18n="manifesto.p2Desc">
+              每個創意一上牆即串聯前序雜湊生成唯一 SHA-256 指紋與精確 UTC 時間戳，並可免費匯出《創意首發溯源證書 PNG》作為第一步鐵證。
+            </p>
+          </article>
+          <article class="pillar-card">
+            <div class="pillar-icon">⚖️</div>
+            <h3 data-i18n="manifesto.p3Title">尊重創意但不獨佔，多勞多得</h3>
+            <p data-i18n="manifesto.p3Desc">
+              只提想法不該拿走實幹者的心血，但第一個踏出第一步的人值得永久被銘記。5% 永久尊重版稅 + 85% 實幹池讓夢想家與工程師真正共贏！
+            </p>
+          </article>
+        </div>
+
+        <!-- 5% / 85% / 10% 三段式透明分紅視覺條 -->
+        <div class="split-showcase-card">
+          <div class="split-showcase-head">
+            <h3 data-i18n="manifesto.splitTitle">📊 透明分紅鐵律：5% 首發創意永久版稅 ＋ 85% 實幹建設多勞多得池 ＋ 10% 平臺公證運營</h3>
+            <span class="split-formula-pill">5% SPARK · 85% MERIT · 10% PLATFORM</span>
+          </div>
+
+          <div class="split-visual-bar" role="img" aria-label="5% First Spark Royalty, 85% Merit Builders Pool, 10% Platform Operations">
+            <div class="split-seg spark" style="width: 10%;">
+              <span class="seg-pct">5%</span>
+            </div>
+            <div class="split-seg merit" style="width: 78%;">
+              <span class="seg-pct" data-i18n="manifesto.segMeritBar">85% 實幹建設多勞多得池（誰出力最多誰拿大頭）</span>
+            </div>
+            <div class="split-seg platform" style="width: 12%;">
+              <span class="seg-pct">10%</span>
+            </div>
+          </div>
+
+          <div class="split-legend-grid">
+            <div class="split-legend-item spark">
+              <span class="legend-swatch spark"></span>
+              <div>
+                <strong data-i18n="manifesto.leg1Title">5% 首發創意永久版稅（First Spark Royalty）</strong>
+                <span data-i18n="manifesto.leg1Desc">永久歸屬 SHA-256 鏈上第一位提出該創意的發起人，致敬踏出從 0 到 1 第一步的火花。</span>
+              </div>
+            </div>
+            <div class="split-legend-item merit">
+              <span class="legend-swatch merit"></span>
+              <div>
+                <strong data-i18n="manifesto.leg2Title">85% 實幹建設多勞多得池（Merit Builders Pool）</strong>
+                <span data-i18n="manifesto.leg2Desc">嚴格按 PoAW 驗收通過的貢獻點數比例實時分配；發起人自己動手幹活也能疊加領取！</span>
+              </div>
+            </div>
+            <div class="split-legend-item platform">
+              <span class="legend-swatch platform"></span>
+              <div>
+                <strong data-i18n="manifesto.leg3Title">10% 平臺公證運營（Platform Notary &amp; Infra）</strong>
+                <span data-i18n="manifesto.leg3Desc">用於維持 SHA-256 哈希鏈公證、防抄襲與防刷單驗收引擎及穩定幣透明結算基礎設施。</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 兩張直覺對比卡 -->
+          <div class="compare-grid">
+            <article class="compare-card idea-only">
+              <div class="compare-badge amber" data-i18n="manifesto.cmp1Tag">情境 A · 靈感點火者</div>
+              <h4 data-i18n="manifesto.cmp1Title">只提創意沒動手 → 穩拿 5% 尊重金，實幹者分 85%</h4>
+              <p data-i18n="manifesto.cmp1Desc">
+                你靈光一閃提出絕妙開源點子，就算之後一行程式都沒寫，SHA-256 鏈仍永久保障你領走 5% 創意版稅；而真正把產品敲出來的實幹開發者們爽快瓜分整整 85%！
+              </p>
+              <div class="compare-math">
+                <span class="math-pill spark" data-i18n="manifesto.cmp1Math1">發起人實得：5%</span>
+                <span class="math-pill merit" data-i18n="manifesto.cmp1Math2">實幹共建者：85%</span>
+                <span class="math-pill platform" data-i18n="manifesto.cmp1Math3">平臺公證：10%</span>
+              </div>
+            </article>
+
+            <article class="compare-card builder-originator">
+              <div class="compare-badge green" data-i18n="manifesto.cmp2Tag">情境 B · 創意 × 實幹雙修</div>
+              <h4 data-i18n="manifesto.cmp2Title">提創意＋自己幹了 40% → 拿 5% + 34% = 39%</h4>
+              <p data-i18n="manifesto.cmp2Desc">
+                你不只提出原創點子，還親自派算力小人扛下全項目 40% 的 PoAW 驗收工作量：你的 5% 首發版稅會與 85% × 40% = 34% 的實幹收益直接疊加，合計拿走 39%！
+              </p>
+              <div class="compare-math">
+                <span class="math-pill spark" data-i18n="manifesto.cmp2Math1">首發版稅 5%</span>
+                <span class="math-pill merit" data-i18n="manifesto.cmp2Math2">實幹分紅 34%</span>
+                <span class="math-pill total" data-i18n="manifesto.cmp2Math3">合計實得：39%</span>
+              </div>
+            </article>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -312,7 +441,7 @@
             <ul class="feature-list">
               <li data-i18n="tracks.guildPoint1">🛡️ 100% 遵守各大 AI 服務條款：僅在本機跑官方 CLI，不反代、不共享帳號</li>
               <li data-i18n="tracks.guildPoint2">📡 搭配 <code>pixel-worker</code> 心跳同步，小鎮畫布即時直播你的小人敲碼進度</li>
-              <li data-i18n="tracks.guildPoint3">💵 項目上線後按貢獻點數佔比共享 60% 永久分紅池（30% 發起人 / 60% 貢獻者 / 10% 平臺）</li>
+              <li data-i18n="tracks.guildPoint3">💵 項目上線後按多勞多得協議透明分紅（5% 首發創意版稅 / 85% 實幹多勞多得池 / 10% 平臺）</li>
             </ul>
           </article>
         </div>
@@ -440,7 +569,7 @@
             <ul class="price-list">
               <li data-i18n="pricing.p1F1">✓ 免費入駐初始雙軌像素小人</li>
               <li data-i18n="pricing.p1F2">✓ 完整 BYOK 自動工坊 + 本機 CLI 工會</li>
-              <li data-i18n="pricing.p1F3">✓ 參與項目投票、貢獻點數與 60% 分紅</li>
+              <li data-i18n="pricing.p1F3">✓ 參與創意溯源投票、貢獻點數與 85% 多勞多得分紅池</li>
               <li data-i18n="pricing.p1F4">✓ 免費下載高清《算力打工證 PNG》</li>
             </ul>
             <a class="btn btn-ghost btn-block" href="/app" data-i18n="pricing.p1Cta">免費進入小鎮</a>
@@ -482,7 +611,7 @@
             <ul class="price-list">
               <li data-i18n="pricing.p4F1">✓ 霓虹廣告位 $29/週：全鎮置頂霓虹曝光</li>
               <li data-i18n="pricing.p4F2">✓ 現金懸賞託管：僅收 10% 驗收抽成（90% 歸貢獻者）</li>
-              <li data-i18n="pricing.p4F3">✓ 項目孵化分紅：30% 發起人 / 60% 貢獻者 / 10% 平臺</li>
+              <li data-i18n="pricing.p4F3">✓ 項目孵化分紅：5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺</li>
               <li data-i18n="pricing.p4F4">✓ 支援直連 GitHub Issues 一鍵匯入派工</li>
             </ul>
             <a class="btn btn-ghost btn-block" href="/app" data-i18n="pricing.p4Cta">前往孵化廣場提案</a>
@@ -548,7 +677,7 @@
           <details class="faq-item">
             <summary data-i18n="faq.q3">💎 賺到的現金懸賞與穩定幣分紅要怎麼領？</summary>
             <p data-i18n="faq.a3">
-              當你完成的現金懸賞通過 PoAW 驗收（實得 90%），或你參與孵化的開源項目上線產生營收（依貢獻點數佔比分享 60% 分紅池），美金餘額會即時記入你的帳號。只需在「創作者收益」分頁綁定你的 Base / Polygon / Arbitrum / Solana 錢包地址，餘額滿 $5 即可一鍵申請提領 USDC / USDT 並獲得鏈上 TxHash 憑證。
+              當你完成的現金懸賞通過 PoAW 驗收（實得 90%），或你參與孵化的開源項目上線產生營收（5% 首發創意永久版稅 + 85% 實幹建設多勞多得池按貢獻點數佔比分配），美金餘額會即時記入你的帳號。只需在「創作者收益」分頁綁定你的 Base / Polygon / Arbitrum / Solana 錢包地址，餘額滿 $5 即可一鍵申請提領 USDC / USDT 並獲得鏈上 TxHash 憑證。
             </p>
           </details>
 

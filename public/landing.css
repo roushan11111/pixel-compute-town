@@ -614,6 +614,7 @@ code {
 .section-tag.amber { border-color: var(--accent-amber); color: var(--accent-amber); }
 .section-tag.green { border-color: var(--accent-green); color: var(--accent-green); }
 .section-tag.purple { border-color: var(--accent-purple); color: var(--accent-purple); }
+.section-tag.gold { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(255, 217, 90, 0.1); }
 
 .section-title {
   margin: 0 0 12px;
@@ -627,6 +628,315 @@ code {
   font-size: 15px;
   color: var(--text-sub);
 }
+
+/* ==========================================================================
+   Proof of First Spark Manifesto (#manifesto)
+   ========================================================================== */
+.manifesto-section {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 217, 90, 0.10), transparent 40%),
+    radial-gradient(circle at 82% 80%, rgba(82, 229, 154, 0.10), transparent 42%),
+    linear-gradient(180deg, rgba(18, 14, 38, 0.6), rgba(26, 20, 52, 0.85), rgba(18, 14, 38, 0.6));
+  border-top: 2px solid var(--accent-gold);
+  border-bottom: 2px solid var(--border-pixel);
+}
+
+.chain-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(16, 28, 44, 0.92), rgba(24, 19, 48, 0.95));
+  border: 2px solid var(--accent-green);
+  box-shadow: var(--shadow-pixel), 0 0 22px rgba(82, 229, 154, 0.16);
+  margin-bottom: 24px;
+}
+
+.chain-status-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.chain-shield {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  background: rgba(82, 229, 154, 0.12);
+  border: 2px solid var(--accent-green);
+  box-shadow: var(--shadow-pixel-sm);
+  flex-shrink: 0;
+}
+
+.chain-status-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent-cyan);
+  letter-spacing: 0.4px;
+}
+
+.chain-status-live {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--accent-green);
+  margin-top: 2px;
+}
+
+.chain-status-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chain-hash-chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 11px;
+  background: var(--bg-code);
+  border: 2px solid var(--border-bright);
+  color: var(--accent-gold);
+}
+
+.manifesto-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.pillar-card {
+  background: var(--bg-panel);
+  border: 2px solid var(--border-pixel);
+  border-top: 4px solid var(--accent-gold);
+  box-shadow: var(--shadow-pixel);
+  padding: 20px;
+}
+
+.pillar-icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+
+.pillar-card h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.pillar-card p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+.split-showcase-card {
+  background: var(--bg-panel);
+  border: 3px solid var(--accent-gold);
+  box-shadow: var(--shadow-pixel), 0 0 30px rgba(255, 217, 90, 0.14);
+  padding: 24px;
+}
+
+.split-showcase-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.split-showcase-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.split-formula-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  background: rgba(255, 217, 90, 0.14);
+  border: 2px solid var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+.split-visual-bar {
+  display: flex;
+  width: 100%;
+  height: 44px;
+  border: 3px solid var(--border-bright);
+  box-shadow: var(--shadow-pixel-sm);
+  overflow: hidden;
+  margin-bottom: 18px;
+  background: var(--bg-code);
+}
+
+.split-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.split-seg.spark {
+  background: linear-gradient(135deg, #ffd95a, #f59e0b);
+  color: #1c1002;
+  border-right: 2px solid #060410;
+}
+
+.split-seg.merit {
+  background: linear-gradient(135deg, #27c77f, #4deeea);
+  color: #051618;
+  border-right: 2px solid #060410;
+}
+
+.split-seg.platform {
+  background: linear-gradient(135deg, #9d68f7, #675cb0);
+  color: #ffffff;
+}
+
+.split-legend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.split-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-pixel);
+}
+
+.split-legend-item.spark { border-left: 4px solid var(--accent-gold); }
+.split-legend-item.merit { border-left: 4px solid var(--accent-green); }
+.split-legend-item.platform { border-left: 4px solid var(--accent-purple); }
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  margin-top: 5px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.legend-swatch.spark { background: var(--accent-gold); }
+.legend-swatch.merit { background: var(--accent-green); }
+.legend-swatch.platform { background: var(--accent-purple); }
+
+.split-legend-item strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--text-main);
+}
+
+.split-legend-item span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.compare-card {
+  padding: 18px 20px;
+  background: rgba(14, 11, 30, 0.78);
+  border: 2px solid var(--border-pixel);
+  box-shadow: var(--shadow-pixel-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compare-card.idea-only {
+  border-color: rgba(255, 183, 77, 0.65);
+}
+
+.compare-card.builder-originator {
+  border-color: rgba(82, 229, 154, 0.75);
+  background: linear-gradient(135deg, rgba(16, 32, 36, 0.85), rgba(16, 13, 36, 0.88));
+}
+
+.compare-badge {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border: 1px solid;
+}
+
+.compare-badge.amber {
+  color: var(--accent-gold);
+  border-color: var(--accent-gold);
+  background: rgba(255, 217, 90, 0.12);
+}
+
+.compare-badge.green {
+  color: var(--accent-green);
+  border-color: var(--accent-green);
+  background: rgba(82, 229, 154, 0.12);
+}
+
+.compare-card h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.compare-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-sub);
+  flex: 1;
+}
+
+.compare-math {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.math-pill {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 9px;
+  border: 1px solid var(--border-pixel);
+  background: var(--bg-code);
+}
+
+.math-pill.spark { border-color: var(--accent-gold); color: var(--accent-gold); }
+.math-pill.merit { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+.math-pill.platform { border-color: var(--accent-purple); color: var(--accent-purple); }
+.math-pill.total { border-color: var(--accent-green); color: var(--accent-green); background: rgba(82, 229, 154, 0.15); }
 
 /* ==========================================================================
    Install Hub (#install)
@@ -1302,8 +1612,17 @@ code {
   .pricing-grid,
   .security-grid,
   .rails-grid,
-  .stage-legend {
+  .stage-legend,
+  .manifesto-pillars,
+  .split-legend-grid,
+  .compare-grid {
     grid-template-columns: 1fr;
+  }
+  .split-visual-bar {
+    height: 36px;
+  }
+  .split-seg {
+    font-size: 11px;
   }
   .install-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));

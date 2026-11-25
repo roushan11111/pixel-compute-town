@@ -164,41 +164,89 @@ async function main() {
         importChecks += 1;
       }
     }
-    return `${importChecks} ESM imports verified across ${jsFiles.length} modules`;
+
+    // Explicitly verify certCard.js exposes both Work & Proof-of-First-Spark Idea Certificate exports
+    const certCardPath = path.resolve(jsDir, 'certCard.js');
+    const certExports = exportMap.get(certCardPath);
+    assert.ok(certExports, 'public/js/certCard.js must exist');
+    for (const sym of [
+      'renderWorkCertificate',
+      'downloadWorkCertificate',
+      'renderIdeaCertificate',
+      'downloadIdeaCertificate',
+    ]) {
+      assert.ok(certExports.has(sym), `public/js/certCard.js must export ${sym}()`);
+    }
+
+    return `${importChecks} ESM imports verified across ${jsFiles.length} modules (+ certCard Idea/Work certificate exports)`;
   });
 
   // 3. DOM ID consistency across index.html, landing.html, and onboard.html
-  await runCheck('3. HTML DOM IDs (index/landing/onboard) have zero duplicates & match app.js queries', async () => {
+  await runCheck('3. HTML DOM IDs (index/landing/onboard) have zero duplicates & zero missing queries', async () => {
     const htmlIdRx = /\bid\s*=\s*["']([^"']+)["']/g;
+    const idQueryPatterns = [
+      /(?:^|[^\w$.])\$\(\s*['"]([A-Za-z0-9_-]+)['"]\s*\)/g,
+      /document\.getElementById\(\s*['"]([A-Za-z0-9_-]+)['"]\s*\)/g,
+      /\b(?:openModal|closeModal)\(\s*['"]([A-Za-z0-9_-]+)['"]\s*\)/g,
+    ];
 
-    // Check landing.html & onboard.html for duplicate IDs
-    for (const extraHtml of ['landing.html', 'onboard.html']) {
-      const content = await fs.readFile(path.join(ROOT_DIR, 'public', extraHtml), 'utf8');
-      const seen = new Set();
+    function collectHtmlIds(htmlText, label) {
+      const ids = new Set();
       const dups = [];
       let m;
-      while ((m = htmlIdRx.exec(content)) !== null) {
-        if (seen.has(m[1])) dups.push(m[1]);
-        seen.add(m[1]);
+      while ((m = htmlIdRx.exec(htmlText)) !== null) {
+        if (ids.has(m[1])) dups.push(m[1]);
+        ids.add(m[1]);
       }
-      assert.deepEqual(dups, [], `Duplicate IDs found in public/${extraHtml}: ${dups.join(', ')}`);
+      assert.deepEqual(dups, [], `Duplicate IDs found in public/${label}: ${dups.join(', ')}`);
+      return ids;
     }
 
+    function verifyJsQueriesAgainstHtml(jsText, htmlIds, jsLabel, htmlLabel) {
+      const queried = new Set();
+      for (const rx of idQueryPatterns) {
+        rx.lastIndex = 0;
+        let m;
+        while ((m = rx.exec(jsText)) !== null) {
+          queried.add(m[1]);
+        }
+      }
+      const dynamicIds = new Set();
+      let dm;
+      while ((dm = htmlIdRx.exec(jsText)) !== null) {
+        dynamicIds.add(dm[1]);
+      }
+      const missing = [];
+      for (const id of queried) {
+        if (!htmlIds.has(id) && !dynamicIds.has(id)) {
+          missing.push(id);
+        }
+      }
+      assert.deepEqual(
+        missing,
+        [],
+        `${jsLabel} queries IDs that do not exist in public/${htmlLabel}: ${missing.join(', ')}`,
+      );
+      return queried.size;
+    }
+
+    // Check onboard.html for duplicate IDs
+    const onboardHtml = await fs.readFile(path.join(ROOT_DIR, 'public', 'onboard.html'), 'utf8');
+    collectHtmlIds(onboardHtml, 'onboard.html');
+
+    // Check landing.html + landing.js (0 duplicates & 0 missing)
+    const landingHtml = await fs.readFile(path.join(ROOT_DIR, 'public', 'landing.html'), 'utf8');
+    const landingJs = await fs.readFile(path.join(ROOT_DIR, 'public', 'js', 'landing.js'), 'utf8');
+    const landingIds = collectHtmlIds(landingHtml, 'landing.html');
+    const landingQueriedCount = verifyJsQueriesAgainstHtml(landingJs, landingIds, 'landing.js', 'landing.html');
+
+    // Check index.html + app.js (0 duplicates & 0 missing)
     const htmlPath = path.join(ROOT_DIR, 'public', 'index.html');
     const appPath = path.join(ROOT_DIR, 'public', 'js', 'app.js');
     const html = await fs.readFile(htmlPath, 'utf8');
     const appSrc = await fs.readFile(appPath, 'utf8');
 
-    const htmlIds = new Set();
-    const duplicateIds = [];
-    let hm;
-    while ((hm = htmlIdRx.exec(html)) !== null) {
-      if (htmlIds.has(hm[1])) {
-        duplicateIds.push(hm[1]);
-      }
-      htmlIds.add(hm[1]);
-    }
-    assert.deepEqual(duplicateIds, [], `Duplicate IDs found in public/index.html: ${duplicateIds.join(', ')}`);
+    const htmlIds = collectHtmlIds(html, 'index.html');
 
     // Collect data-close-modal targets in HTML
     const closeModalTargets = [];
@@ -211,40 +259,9 @@ async function main() {
       assert.ok(htmlIds.has(mid), `data-close-modal="${mid}" has no matching modal element ID in index.html`);
     }
 
-    // Collect all queried IDs in app.js
-    const queriedIds = new Set();
-    const appIdPatterns = [
-      /(?:^|[^\w$.])\$\(\s*['"]([A-Za-z0-9_-]+)['"]\s*\)/g,
-      /document\.getElementById\(\s*['"]([A-Za-z0-9_-]+)['"]\s*\)/g,
-      /\b(?:openModal|closeModal)\(\s*['"]([A-Za-z0-9_-]+)['"]\s*\)/g,
-    ];
-    for (const rx of appIdPatterns) {
-      let am;
-      while ((am = rx.exec(appSrc)) !== null) {
-        queriedIds.add(am[1]);
-      }
-    }
+    const appQueriedCount = verifyJsQueriesAgainstHtml(appSrc, htmlIds, 'app.js', 'index.html');
 
-    const dynamicIds = new Set();
-    let dm;
-    while ((dm = htmlIdRx.exec(appSrc)) !== null) {
-      dynamicIds.add(dm[1]);
-    }
-
-    const missing = [];
-    for (const id of queriedIds) {
-      if (!htmlIds.has(id) && !dynamicIds.has(id)) {
-        missing.push(id);
-      }
-    }
-
-    assert.deepEqual(
-      missing,
-      [],
-      `app.js queries IDs that do not exist in public/index.html: ${missing.join(', ')}`,
-    );
-
-    return `${htmlIds.size} index.html IDs (0 dups), ${queriedIds.size} queried IDs in app.js (0 missing) + landing/onboard clean`;
+    return `index.html (${htmlIds.size} IDs / ${appQueriedCount} queries), landing.html (${landingIds.size} IDs / ${landingQueriedCount} queries) & onboard.html — 0 dups, 0 missing`;
   });
 
   // Start isolated temporary server for static MIME, install script & CLI E2E checks
@@ -406,6 +423,8 @@ async function main() {
         'localizeLeaderboardEntry',
         'localizeUser',
         'localizeFeedMessage',
+        'localizeRedeemNote',
+        'localizeServerMessage',
         'getCanvasI18n',
       ];
       for (const fnName of requiredLocalizers) {
@@ -488,6 +507,9 @@ async function main() {
         collectCjkViolations(i18nMod.localizeLeaderboardEntry(row, 'en'), `lb(${row.userId || row.displayName})`, dynamicViolations);
       }
       collectCjkViolations(i18nMod.localizeUser(seed.player, 'en'), 'user(player)', dynamicViolations);
+      for (const codeItem of seed.redeemCodes || []) {
+        collectCjkViolations(i18nMod.localizeRedeemNote(codeItem, 'en'), `redeemNote(${codeItem.code})`, dynamicViolations);
+      }
       collectCjkViolations(i18nMod.getCanvasI18n('en'), 'canvasI18n(en)', dynamicViolations);
 
       assert.deepEqual(
@@ -496,7 +518,7 @@ async function main() {
         `Chinese leaked in EN dynamic localizers:\n  ${dynamicViolations.slice(0, 12).join('\n  ')}`,
       );
 
-      return `${baseKeys.length} keys × 3 locales, ${totalHtmlI18n} HTML bindings & all 9 dynamic localizers verified (0 CJK in EN)`;
+      return `${baseKeys.length} keys × 3 locales, ${totalHtmlI18n} HTML bindings & all ${requiredLocalizers.length} dynamic localizers verified (0 CJK in EN)`;
     });
 
     // 7. Deployment, CI workflow & v1.0 documentation assets check
@@ -533,13 +555,57 @@ async function main() {
       assert.match(readme, /install\.ps1/);
       assert.match(readme, /install\.sh/);
       assert.match(readme, /onboard/);
+      assert.match(readme, /Proof of First Spark/);
+      assert.match(readme, /5%.*85%.*10%/);
+
+      const prd = await fs.readFile(path.join(ROOT_DIR, 'docs', 'PRD.md'), 'utf8');
+      assert.match(prd, /Proof of First Spark/);
+      assert.match(prd, /5%.*85%.*10%/);
 
       const ciYaml = await fs.readFile(path.join(ROOT_DIR, '.github/workflows/ci.yml'), 'utf8');
       assert.match(ciYaml, /node-version:\s*["']?24["']?/);
       assert.match(ciYaml, /npm test/);
       assert.match(ciYaml, /npm run smoke/);
 
-      return `${requiredFiles.length} deployment, CI, .env.example & v1.0 docs verified`;
+      return `${requiredFiles.length} deployment, CI, .env.example & Proof-of-First-Spark docs verified`;
+    });
+
+    // 8. src/server/provenance.mjs exports, SHA-256 chain integrity & bilingual anti-copycat engine check
+    await runCheck('8. src/server/provenance.mjs exports, SHA-256 chain & bilingual similarity verified', async () => {
+      const prov = await import('../src/server/provenance.mjs');
+      for (const fnName of [
+        'computeIdeaHash',
+        'computeSimilarity',
+        'findSimilarIdeas',
+        'verifyProvenanceChain',
+        'ensureProjectsProvenance',
+      ]) {
+        assert.equal(typeof prov[fnName], 'function', `provenance.mjs must export function ${fnName}()`);
+      }
+      assert.equal(prov.GENESIS_HASH, '0'.repeat(64));
+      assert.equal(prov.COPYCAT_HIGH_THRESHOLD, 0.65);
+
+      const seed = createInitialState();
+      const chainReport = prov.verifyProvenanceChain(seed.projects);
+      assert.equal(chainReport.valid, true, 'Seeded projects provenance chain must be valid');
+      assert.ok(chainReport.chainLength >= 3);
+      assert.match(chainReport.headHash, /^[a-f0-9]{64}$/);
+
+      // Bilingual similarity sanity check
+      const zhSim = prov.computeSimilarity('像素算力鎮開源孵化平臺', '像素算力鎮開源孵化平臺');
+      assert.equal(zhSim, 1);
+      const enSim = prov.computeSimilarity('Pixel Compute Town Platform', 'pixel compute town platform');
+      assert.equal(enSim, 1);
+      const unrelated = prov.computeSimilarity('像素番茄鐘計時器', 'Deep Ocean Sonar Mapper');
+      assert.equal(unrelated, 0);
+
+      // Tamper detection sanity check
+      const tampered = seed.projects.map((p) => ({ ...p }));
+      tampered[0].name = 'Tampered Name';
+      const tamperedReport = prov.verifyProvenanceChain(tampered);
+      assert.equal(tamperedReport.valid, false, 'Tampered project must fail provenance verification');
+
+      return `${chainReport.chainLength} seeded records verified, tamper detection & zh/en similarity active`;
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));

@@ -7,7 +7,12 @@
 import { PixelTownEngine } from './pixelEngine.js';
 import { renderWorkerPortrait } from './sprites.js';
 import { soundFX } from './sound.js';
-import { renderWorkCertificate, downloadWorkCertificate } from './certCard.js';
+import {
+  renderWorkCertificate,
+  downloadWorkCertificate,
+  renderIdeaCertificate,
+  downloadIdeaCertificate,
+} from './certCard.js';
 import {
   applyI18n,
   getLocale,
@@ -15,8 +20,10 @@ import {
   localizeFeedMessage,
   localizeLeaderboardEntry,
   localizeProject,
+  localizeRedeemNote,
   localizeRevenueLabel,
   localizeRoleLabel,
+  localizeServerMessage,
   localizeShopItem,
   localizeSkinLabel,
   localizeStreamLabel,
@@ -151,6 +158,19 @@ const app = {
     activeStablecoinOrder: null,
     activeCardOrder: null,
   },
+  // Provenance modal runtime state
+  provModal: {
+    projectId: null,
+    chainInfo: null,
+    verifyData: null,
+  },
+  // Propose anti-copycat runtime state
+  proposeCheck: {
+    timer: null,
+    topMatch: null,
+    isHighRisk: false,
+    isWarning: false,
+  },
 };
 
 // ============================================================================
@@ -180,6 +200,17 @@ function fmtTime(iso) {
     return d.toLocaleTimeString(loc, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch {
     return '';
+  }
+}
+
+function fmtUtcShort(iso) {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return `${d.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+  } catch {
+    return String(iso);
   }
 }
 
@@ -233,7 +264,11 @@ async function apiFetch(path, options = {}) {
   const res = await fetch(path, opts);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error || `HTTP ${res.status}`);
+    const rawMsg = data?.error || `HTTP ${res.status}`;
+    const err = new Error(localizeServerMessage(rawMsg, getLocale()) || rawMsg);
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
   return data;
 }
@@ -1106,7 +1141,7 @@ function renderIncubatorTab() {
   const listEl = $('project-list');
   if (!listEl) return;
   const projects = app.state.projects || [];
-  const playerId = app.state.player?.id || 'founder-demo';
+  const playerId = app.state.player?.id || app.user?.id || 'founder-demo';
   const billboardPrice = app.config?.billboardPriceUsd ?? 29;
 
   const votingCnt = projects.filter((p) => p.status === 'voting').length;
@@ -1126,15 +1161,28 @@ function renderIncubatorTab() {
       const isLaunched = p.status === 'launched';
       const canLaunch = isBuilding && (p.progressPct || 0) >= 100;
 
+      const sparkPct = Number(p.sparkRoyaltyPct ?? 5);
+      const meritPct = Number(p.meritPoolPct ?? 85);
+      const platformPct = Number(p.platformSharePct ?? 10);
+
       const myPts = Number(p.contributions?.[playerId] || 0);
       const totalPts = Object.values(p.contributions || {}).reduce((s, v) => s + Number(v || 0), 0);
-      const mySharePct = totalPts > 0 ? ((myPts / totalPts) * 60).toFixed(1) : '0.0';
+      const isOriginator = p.originatorId === playerId || p.creatorId === playerId;
+      const myMeritSharePct = totalPts > 0 ? (myPts / totalPts) * meritPct : 0;
+      const myTotalSharePct = (myMeritSharePct + (isOriginator ? sparkPct : 0)).toFixed(1);
+
+      const coBuilders = Array.isArray(p.coBuilders) ? p.coBuilders : [];
+      const coBuildersCount = Math.max(1, coBuilders.length);
+      const hasJoined = isOriginator || coBuilders.some((b) => b.userId === playerId);
+
+      const ideaHashShort = p.ideaHash ? p.ideaHash.slice(0, 10) : 'GENESIS';
+      const originatedStr = fmtUtcShort(p.originatedAt || p.createdAt);
 
       const votePct = Math.min(100, Math.round(((p.votes || 0) / (p.votesRequired || 10)) * 100));
       const votesLeft = Math.max(0, (p.votesRequired || 10) - (p.votes || 0));
 
       return `
-        <article class="pixel-card ${p.sponsoredBillboard ? 'sponsored' : ''} ${isLaunched ? 'launched' : ''}">
+        <article class="pixel-card ${p.sponsoredBillboard ? 'sponsored' : ''} ${isLaunched ? 'launched' : ''}" data-project-card="${escapeHtml(p.id)}">
           <div class="card-head">
             <div>
               <h3 class="card-title">
@@ -1152,10 +1200,36 @@ function renderIncubatorTab() {
             }
           </div>
 
+          <!-- 🔖 創意溯源條 (Proof of First Spark + 5/85/10 透明分紅條) -->
+          <div class="provenance-strip">
+            <div class="prov-strip-top">
+              <div class="prov-strip-meta">
+                <span>${escapeHtml(t('incubator.originatorPrefix', { name: lp.originatorName || lp.creatorName }))}</span>
+                <span class="mono">🕒 ${escapeHtml(originatedStr)}</span>
+                <span class="badge green">${escapeHtml(t('incubator.coBuildersCount', { count: coBuildersCount }))}</span>
+              </div>
+              <button
+                type="button"
+                class="prov-hash-btn"
+                data-open-provenance="${escapeHtml(p.id)}"
+                title="${escapeHtml(t('incubator.hashVerifyTitle'))}"
+              >
+                🔐 #${escapeHtml(ideaHashShort)}
+              </button>
+            </div>
+            <div class="split-mini-bar" title="${escapeHtml(`${sparkPct}% / ${meritPct}% / ${platformPct}%`)}">
+              <div class="split-mini-seg spark" style="width: 19%;">${escapeHtml(t('incubator.splitSpark'))}</div>
+              <div class="split-mini-seg merit" style="width: 65%;">${escapeHtml(t('incubator.splitMerit'))}</div>
+              <div class="split-mini-seg platform" style="width: 16%;">${escapeHtml(t('incubator.splitPlatform'))}</div>
+            </div>
+          </div>
+
           <div class="badge-row">
-            <span class="badge">${escapeHtml(t('incubator.creatorPrefix', { name: lp.creatorName }))}</span>
-            <span class="badge pink">${escapeHtml(t('incubator.poolTag'))}</span>
-            <span class="badge cyan">${escapeHtml(t('incubator.myPoints', { pts: myPts, pct: mySharePct }))}</span>
+            <span class="badge cyan">${escapeHtml(
+              isOriginator
+                ? t('incubator.myPointsSpark', { pts: myPts, pct: myTotalSharePct })
+                : t('incubator.myPoints', { pts: myPts, pct: myMeritSharePct.toFixed(1) }),
+            )}</span>
             ${p.bountyPoolUsd > 0 ? `<span class="badge gold">${escapeHtml(t('incubator.bountyPool', { amount: p.bountyPoolUsd }))}</span>` : ''}
             ${p.totalRevenueUsd > 0 ? `<span class="badge green">${escapeHtml(t('incubator.totalRev', { amount: fmtUsd(p.totalRevenueUsd) }))}</span>` : ''}
           </div>
@@ -1184,6 +1258,17 @@ function renderIncubatorTab() {
 
           <div class="card-footer">
             <div class="toolbar-group">
+              <button
+                type="button"
+                class="btn btn-sm ${hasJoined ? '' : 'btn-primary'}"
+                data-join-project="${escapeHtml(p.id)}"
+                ${hasJoined ? 'disabled' : ''}
+              >
+                ${escapeHtml(hasJoined ? t('incubator.joinedBtn') : t('incubator.joinBtn'))}
+              </button>
+              <button type="button" class="btn btn-sm btn-amber" data-open-provenance="${escapeHtml(p.id)}">
+                ${escapeHtml(t('incubator.certBtn'))}
+              </button>
               ${
                 !p.sponsoredBillboard
                   ? `<button type="button" class="btn btn-sm" data-billboard-project="${escapeHtml(p.id)}">${escapeHtml(t('incubator.billboardBtn', { price: billboardPrice }))}</button>`
@@ -1585,7 +1670,8 @@ function renderMayorAdminSection() {
     }
   }
 
-  // Redeem codes list
+  // Redeem codes list (trilingual localized notes!)
+  const loc = getLocale();
   const codesEl = $('admin-codes-list');
   const codes = app.adminData?.redeemCodes || [];
   if (codesEl) {
@@ -1594,19 +1680,20 @@ function renderMayorAdminSection() {
     } else {
       codesEl.innerHTML = codes
         .slice(0, 12)
-        .map(
-          (c) => `
+        .map((c) => {
+          const localizedNote = localizeRedeemNote(c, loc);
+          return `
             <div class="ledger-row" style="flex-wrap: wrap;">
               <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                 <span class="badge ${c.used ? '' : 'green'}">${escapeHtml(c.used ? t('admin.codeUsed') : t('admin.codeUnused'))}</span>
                 <strong class="mono">${escapeHtml(c.code)}</strong>
                 <span class="badge pink">${escapeHtml(c.rewardType)}</span>
-                ${c.note ? `<span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(c.note)}</span>` : ''}
+                ${localizedNote ? `<span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(localizedNote)}</span>` : ''}
               </div>
               <button type="button" class="btn btn-sm" data-copy-redeem-code="${escapeHtml(c.code)}">${escapeHtml(t('admin.copyCodeBtn'))}</button>
             </div>
-          `,
-        )
+          `;
+        })
         .join('');
     }
   }
@@ -1714,7 +1801,7 @@ async function dispatchApiTask(taskId, explicitWorkerId = null) {
       );
     } else {
       soundFX.playReject();
-      showToast(t('toast.antiCheatFailed', { reason: submitRes.verification.reason }), 'error', 5000);
+      showToast(t('toast.antiCheatFailed', { reason: localizeServerMessage(submitRes.verification.reason, loc) }), 'error', 5000);
     }
   } catch (err) {
     if (claimed) {
@@ -1940,7 +2027,7 @@ async function submitGuildTask() {
       );
     } else {
       soundFX.playReject();
-      showToast(t('toast.guildIntercepted', { reason: res.verification.reason }), 'error', 5500);
+      showToast(t('toast.guildIntercepted', { reason: localizeServerMessage(res.verification.reason, getLocale()) }), 'error', 5500);
       openTaskReportModal(taskId);
     }
   } catch (err) {
@@ -1988,6 +2075,326 @@ function openTaskReportModal(taskId) {
   app.activeReportText = submission?.content || verification?.reason || t('modal.report.emptyContent');
   $('report-deliverable-code').textContent = app.activeReportText;
   openModal('modal-report');
+}
+
+// ============================================================================
+// Proof of First Spark: Provenance Modal, Co-Build Join & Anti-Copycat Checker
+// ============================================================================
+function renderProvenanceCalculator() {
+  const resultsEl = $('prov-calc-results');
+  const revInput = $('prov-calc-revenue');
+  const workSlider = $('prov-calc-work-pct');
+  const workValEl = $('prov-calc-work-val');
+  const origCheck = $('prov-calc-is-originator');
+  const origLabel = $('prov-calc-orig-label');
+  if (!resultsEl || !revInput || !workSlider || !origCheck) return;
+
+  const gross = Math.max(0, Number(revInput.value) || 0);
+  const workPct = Math.max(0, Math.min(100, Number(workSlider.value) || 0));
+  const isOrig = Boolean(origCheck.checked);
+  if (workValEl) workValEl.textContent = `${workPct}%`;
+  if (origLabel) origLabel.classList.toggle('active', isOrig);
+
+  const proj = (app.state?.projects || []).find((p) => p.id === app.provModal.projectId);
+  const sparkRate = Number(proj?.sparkRoyaltyPct ?? 5);
+  const meritRate = Number(proj?.meritPoolPct ?? 85);
+  const platformRate = Number(proj?.platformSharePct ?? 10);
+
+  const sparkUsd = (gross * sparkRate) / 100;
+  const meritPoolUsd = (gross * meritRate) / 100;
+  const platformUsd = (gross * platformRate) / 100;
+
+  const mySparkPct = isOrig ? sparkRate : 0;
+  const myMeritPct = (meritRate * workPct) / 100;
+  const myTotalPct = mySparkPct + myMeritPct;
+  const myTotalUsd = (gross * myTotalPct) / 100;
+
+  resultsEl.innerHTML = `
+    <div class="prov-calc-row">
+      <span>${escapeHtml(t('modal.provenance.calcRowSpark'))}</span>
+      <span class="prov-calc-val">${fmtUsd(sparkUsd)}</span>
+    </div>
+    <div class="prov-calc-row">
+      <span>${escapeHtml(t('modal.provenance.calcRowMerit'))}</span>
+      <span class="prov-calc-val">${fmtUsd(meritPoolUsd)}</span>
+    </div>
+    <div class="prov-calc-row">
+      <span>${escapeHtml(t('modal.provenance.calcRowPlatform'))}</span>
+      <span class="prov-calc-val">${fmtUsd(platformUsd)}</span>
+    </div>
+    <div class="prov-calc-row highlight">
+      <span><strong>${escapeHtml(t('modal.provenance.calcRowYou', { pct: myTotalPct.toFixed(1) }))}</strong></span>
+      <span class="prov-calc-val">${fmtUsd(myTotalUsd)}</span>
+    </div>
+  `;
+}
+
+function renderProvenanceModalContent(project) {
+  if (!project) return;
+  const loc = getLocale();
+  const lp = localizeProject(project, loc);
+  const playerId = app.state?.player?.id || app.user?.id || 'founder-demo';
+  const isPlayerOrig = project.originatorId === playerId || project.creatorId === playerId;
+
+  const origNameEl = $('prov-originator-name');
+  const origAtEl = $('prov-originated-at');
+  const coCountEl = $('prov-cobuilders-count');
+  const hashEl = $('prov-idea-hash');
+  const prevEl = $('prov-prev-hash');
+  const imgEl = $('prov-cert-preview-img');
+  const contribListEl = $('prov-contributors-list');
+
+  const coBuilders = Array.isArray(project.coBuilders) ? project.coBuilders : [];
+  if (origNameEl) origNameEl.textContent = lp.originatorName || lp.creatorName || '-';
+  if (origAtEl) origAtEl.textContent = fmtUtcShort(project.originatedAt || project.createdAt);
+  if (coCountEl) coCountEl.textContent = t('incubator.coBuildersCount', { count: Math.max(1, coBuilders.length) });
+  if (hashEl) hashEl.textContent = project.ideaHash || '-';
+  if (prevEl) prevEl.textContent = project.prevIdeaHash || '0000000000000000000000000000000000000000000000000000000000000000';
+
+  const origCheck = $('prov-calc-is-originator');
+  if (origCheck) origCheck.checked = isPlayerOrig;
+
+  // Render live contributors breakdown
+  const entries = Object.entries(project.contributions || {})
+    .filter(([, pts]) => Number(pts) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]));
+  const totalPts = entries.reduce((sum, [, pts]) => sum + Number(pts), 0);
+  const meritRate = Number(project.meritPoolPct ?? 85);
+  const sparkRate = Number(project.sparkRoyaltyPct ?? 5);
+
+  if (contribListEl) {
+    if (entries.length === 0) {
+      contribListEl.innerHTML = `<div class="empty-state">${escapeHtml(t('modal.provenance.calcNoContributors'))}</div>`;
+    } else {
+      contribListEl.innerHTML = entries
+        .map(([uid, pts]) => {
+          const rawName = project.contributorNames?.[uid] || uid;
+          const lu = localizeUser({ id: uid, displayName: rawName }, loc);
+          const isOrig = uid === project.originatorId || uid === project.creatorId;
+          const meritPct = totalPts > 0 ? (Number(pts) / totalPts) * meritRate : 0;
+          const totalPct = meritPct + (isOrig ? sparkRate : 0);
+          return `
+            <div class="ledger-row">
+              <div>
+                <strong>${escapeHtml(lu.displayName)}</strong>
+                ${isOrig ? '<span class="badge gold" style="margin-left: 6px;">💡 +5% Spark</span>' : ''}
+              </div>
+              <div class="mono" style="display: flex; gap: 8px; align-items: center;">
+                <span style="color: var(--accent-cyan);">${Number(pts)} pts</span>
+                <strong style="color: var(--accent-green);">${totalPct.toFixed(1)}%</strong>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+  }
+
+  renderProvenanceCalculator();
+
+  // Render 900x520 Idea Certificate PNG preview
+  if (imgEl) {
+    try {
+      const canvas = renderIdeaCertificate(project, app.provModal.chainInfo, loc);
+      imgEl.src = canvas.toDataURL('image/png');
+    } catch {
+      // ignore headless canvas errors
+    }
+  }
+}
+
+async function openProvenanceModal(projectId) {
+  const project = (app.state?.projects || []).find((p) => p.id === projectId);
+  if (!project) return;
+  app.provModal.projectId = projectId;
+  app.provModal.verifyData = null;
+
+  const bannerEl = $('prov-chain-banner');
+  if (bannerEl) {
+    bannerEl.className = 'prov-verify-banner';
+    bannerEl.textContent = t('modal.provenance.chainVerifying');
+  }
+
+  renderProvenanceModalContent(project);
+  openModal('provenance-modal');
+
+  try {
+    const hash = project.ideaHash;
+    let verifyRes = null;
+    if (hash) {
+      verifyRes = await apiFetch(`/api/provenance/verify/${encodeURIComponent(hash)}`);
+    } else {
+      verifyRes = await apiFetch('/api/provenance/chain');
+    }
+    if (app.provModal.projectId !== projectId) return;
+
+    const valid = Boolean(verifyRes?.verified ?? verifyRes?.valid ?? true);
+    const chainLen = Number(verifyRes?.chainLength ?? verifyRes?.records?.length ?? (app.state?.projects || []).length);
+    const blockIdx = Number(verifyRes?.record?.provenanceIndex ?? project.provenanceIndex ?? 1);
+    app.provModal.chainInfo = {
+      valid,
+      chainLength: chainLen,
+      record: verifyRes?.record || null,
+    };
+    app.provModal.verifyData = verifyRes;
+
+    if (bannerEl) {
+      bannerEl.className = `prov-verify-banner ${valid ? 'verified' : 'invalid'}`;
+      bannerEl.textContent = valid
+        ? t('modal.provenance.chainValid', { idx: blockIdx, len: chainLen })
+        : t('modal.provenance.chainInvalid');
+    }
+    renderProvenanceModalContent(verifyRes?.project || project);
+  } catch {
+    if (app.provModal.projectId !== projectId) return;
+    if (bannerEl) {
+      bannerEl.className = 'prov-verify-banner invalid';
+      bannerEl.textContent = t('modal.provenance.chainInvalid');
+    }
+  }
+}
+
+function triggerDownloadIdeaCert() {
+  const project = (app.state?.projects || []).find((p) => p.id === app.provModal.projectId);
+  if (!project) return;
+  const loc = getLocale();
+  const lp = localizeProject(project, loc);
+  downloadIdeaCertificate(project, app.provModal.chainInfo, loc);
+  soundFX.playCoin();
+  showToast(t('toast.ideaCertExported', { name: lp.shortName || lp.name }), 'success');
+}
+
+async function joinProject(projectId, { scrollToCard = false } = {}) {
+  const loc = getLocale();
+  try {
+    app.lastLocalMutationAt = Date.now();
+    const res = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/join`, {
+      method: 'POST',
+    });
+    if (res.state) applyNewState(res.state);
+    const lp = localizeProject(res.project, loc);
+    if (res.alreadyJoined) {
+      soundFX.playClick();
+      showToast(t('toast.alreadyJoined', { name: lp.shortName || lp.name }), 'info');
+    } else {
+      soundFX.playVerify();
+      showToast(
+        t('toast.joinedProject', {
+          name: lp.shortName || lp.name,
+          count: res.coBuildersCount ?? res.project?.coBuilders?.length ?? 1,
+        }),
+        'success',
+        4200,
+      );
+    }
+
+    if (scrollToCard) {
+      switchTab('incubator');
+      setTimeout(() => {
+        const card = document.querySelector(`[data-project-card="${CSS.escape(projectId)}"]`);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('highlight-flash');
+          setTimeout(() => card.classList.remove('highlight-flash'), 2400);
+        }
+      }, 120);
+    }
+    return true;
+  } catch (err) {
+    soundFX.playReject();
+    showToast(err.message, 'error');
+    return false;
+  }
+}
+
+function resetProposeCopycatUi() {
+  app.proposeCheck.topMatch = null;
+  app.proposeCheck.isHighRisk = false;
+  app.proposeCheck.isWarning = false;
+  if (app.proposeCheck.timer) {
+    clearTimeout(app.proposeCheck.timer);
+    app.proposeCheck.timer = null;
+  }
+  const alertBox = $('propose-copycat-alert');
+  const cleanBar = $('propose-copycat-clean');
+  const derivWrap = $('propose-derivative-wrap');
+  const derivAck = $('propose-derivative-ack');
+  if (alertBox) alertBox.style.display = 'none';
+  if (cleanBar) cleanBar.style.display = 'none';
+  if (derivWrap) derivWrap.style.display = 'none';
+  if (derivAck) derivAck.checked = false;
+}
+
+function renderCopycatMatchBox(match, { isHighRisk = false, isWarning = false } = {}) {
+  const alertBox = $('propose-copycat-alert');
+  const cleanBar = $('propose-copycat-clean');
+  const titleEl = $('propose-copycat-title');
+  const metaEl = $('propose-copycat-meta');
+  const derivWrap = $('propose-derivative-wrap');
+  if (!alertBox) return;
+
+  if (!match || (!isHighRisk && !isWarning)) {
+    alertBox.style.display = 'none';
+    if (derivWrap) derivWrap.style.display = 'none';
+    const hasText = ($('propose-name')?.value || '').trim().length >= 3;
+    if (cleanBar) cleanBar.style.display = hasText ? 'block' : 'none';
+    return;
+  }
+
+  app.proposeCheck.topMatch = match;
+  app.proposeCheck.isHighRisk = isHighRisk;
+  app.proposeCheck.isWarning = isWarning;
+
+  if (cleanBar) cleanBar.style.display = 'none';
+  alertBox.style.display = 'flex';
+  alertBox.classList.toggle('warn', !isHighRisk);
+
+  const pct = Math.round((Number(match.similarity) || 0) * 100);
+  const loc = getLocale();
+  const lu = localizeUser({ id: match.originatorId, displayName: match.originatorName }, loc);
+
+  if (titleEl) {
+    titleEl.textContent = isHighRisk
+      ? t('modal.propose.copycatHighTitle', { pct })
+      : t('modal.propose.copycatWarnTitle', { pct });
+  }
+  if (metaEl) {
+    metaEl.textContent = t('modal.propose.copycatMeta', {
+      originator: lu.displayName || match.originatorName || '-',
+      time: fmtUtcShort(match.originatedAt),
+      hash: String(match.ideaHash || '').slice(0, 14),
+    });
+  }
+  if (derivWrap) {
+    derivWrap.style.display = isHighRisk ? 'inline-flex' : 'none';
+  }
+}
+
+function scheduleProposeSimilarityCheck() {
+  if (app.proposeCheck.timer) {
+    clearTimeout(app.proposeCheck.timer);
+  }
+  const name = ($('propose-name')?.value || '').trim();
+  const desc = ($('propose-desc')?.value || '').trim();
+  if (name.length < 3 && desc.length < 6) {
+    resetProposeCopycatUi();
+    return;
+  }
+  app.proposeCheck.timer = setTimeout(async () => {
+    app.proposeCheck.timer = null;
+    try {
+      const res = await apiFetch('/api/projects/check-similarity', {
+        method: 'POST',
+        body: { name, tagline: desc, description: desc },
+      });
+      renderCopycatMatchBox(res.topMatch, {
+        isHighRisk: Boolean(res.isHighRisk),
+        isWarning: Boolean(res.isWarning),
+      });
+    } catch {
+      // Keep UX smooth if offline
+    }
+  }, 320);
 }
 
 // ============================================================================
@@ -2134,6 +2541,8 @@ function connectSse() {
     'payout_paid',
     'device_reviewed',
     'settings_updated',
+    'project_updated',
+    'project_proposed',
     'state_sync',
   ]) {
     sse.addEventListener(evtName, () => {
@@ -2509,7 +2918,8 @@ function bindEvents() {
       if (res.state) applyNewState(res.state);
       await refreshBootstrapNow();
       soundFX.playCoin();
-      showToast(t('toast.payRedeemOk', { detail: res.rewardSummary || res.code }), 'success', 4500);
+      const localizedSummary = localizeServerMessage(res.rewardSummary || res.code, getLocale());
+      showToast(t('toast.payRedeemOk', { detail: localizedSummary }), 'success', 4500);
       closeModal('payment-modal');
     } catch (err) {
       soundFX.playReject();
@@ -2713,8 +3123,23 @@ function bindEvents() {
     copyText(app.activeReportText, t('toast.reportCopied'));
   });
 
-  // Propose Project Modal & Form
-  $('btn-open-propose').addEventListener('click', () => openModal('modal-propose'));
+  // Propose Project Modal & Form (with Real-Time Anti-Copycat Detection)
+  $('btn-open-propose').addEventListener('click', () => {
+    resetProposeCopycatUi();
+    openModal('modal-propose');
+  });
+
+  $('propose-name').addEventListener('input', scheduleProposeSimilarityCheck);
+  $('propose-desc').addEventListener('input', scheduleProposeSimilarityCheck);
+
+  $('btn-copycat-join').addEventListener('click', async () => {
+    const match = app.proposeCheck.topMatch;
+    if (!match?.projectId) return;
+    closeModal('modal-propose');
+    resetProposeCopycatUi();
+    await joinProject(match.projectId, { scrollToCard: true });
+  });
+
   $('propose-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('propose-name').value.trim();
@@ -2722,6 +3147,8 @@ function bindEvents() {
     const category = $('propose-category').value;
     const bountyPoolUsd = Number($('propose-bounty').value) || 0;
     const repoUrl = $('propose-repo').value.trim();
+    const acknowledgeDerivative = Boolean($('propose-derivative-ack')?.checked);
+    const inspiredByHash = acknowledgeDerivative ? app.proposeCheck.topMatch?.ideaHash || undefined : undefined;
 
     try {
       const res = await apiFetch('/api/projects', {
@@ -2732,18 +3159,45 @@ function bindEvents() {
           description: `[${category}] ${desc}`,
           bountyPoolUsd,
           repoUrl,
+          ...(acknowledgeDerivative ? { acknowledgeDerivative: true, inspiredByHash } : {}),
         },
       });
       applyNewState(res.state);
       soundFX.playVerify();
       $('propose-form').reset();
+      resetProposeCopycatUi();
       closeModal('modal-propose');
       showToast(t('toast.proposed', { name: res.project.name }), 'success');
     } catch (err) {
       soundFX.playReject();
+      if (err.status === 409 && err.data?.code === 'POTENTIAL_COPYCAT' && err.data?.copycatMatch) {
+        const cm = err.data.copycatMatch;
+        renderCopycatMatchBox(cm, { isHighRisk: true, isWarning: true });
+        showToast(
+          t('toast.copycatBlocked', {
+            name: cm.shortName || cm.name || 'Original Idea',
+            pct: Math.round((Number(cm.similarity) || 0) * 100),
+          }),
+          'warn',
+          5600,
+        );
+        return;
+      }
       showToast(t('toast.proposeFailed', { err: err.message }), 'error');
     }
   });
+
+  // Provenance Modal (#provenance-modal) Controls
+  $('btn-prov-copy-hash').addEventListener('click', () => {
+    const hashText = $('prov-idea-hash')?.textContent?.trim();
+    if (hashText && hashText !== '-') {
+      copyText(hashText, t('toast.hashCopied'));
+    }
+  });
+  $('btn-prov-download-cert').addEventListener('click', triggerDownloadIdeaCert);
+  $('prov-calc-revenue').addEventListener('input', renderProvenanceCalculator);
+  $('prov-calc-work-pct').addEventListener('input', renderProvenanceCalculator);
+  $('prov-calc-is-originator').addEventListener('change', renderProvenanceCalculator);
 
   // Recruit Worker Form
   $('recruit-role').addEventListener('change', (e) => {
@@ -2792,6 +3246,10 @@ function bindEvents() {
       updateSceneHint(app.activeScene);
       updateSseLabel();
       renderAll();
+      if ($('provenance-modal')?.classList.contains('open') && app.provModal.projectId) {
+        const proj = (app.state?.projects || []).find((p) => p.id === app.provModal.projectId);
+        if (proj) renderProvenanceModalContent(proj);
+      }
       soundFX.playClick();
       showToast(t('toast.langSwitched'), 'info', 2200);
     });
@@ -2942,6 +3400,20 @@ function bindEvents() {
       return;
     }
 
+    const joinBtn = e.target.closest('[data-join-project]');
+    if (joinBtn) {
+      const pid = joinBtn.dataset.joinProject;
+      await joinProject(pid);
+      return;
+    }
+
+    const provBtn = e.target.closest('[data-open-provenance]');
+    if (provBtn) {
+      const pid = provBtn.dataset.openProvenance;
+      await openProvenanceModal(pid);
+      return;
+    }
+
     const voteBtn = e.target.closest('[data-vote-project]');
     if (voteBtn) {
       const pid = voteBtn.dataset.voteProject;
@@ -2997,7 +3469,7 @@ function bindEvents() {
           t('toast.launchOk', {
             name: lp.shortName,
             gross: res.dividend.grossRevenueUsd,
-            share: res.dividend.playerShareUsd,
+            share: res.dividend.playerTotalUsd ?? res.dividend.playerShareUsd,
             carry: res.dividend.platformCarryUsd,
           }),
           'success',
@@ -3025,7 +3497,7 @@ function bindEvents() {
           t('toast.simRevOk', {
             name: lp.shortName,
             gross: res.dividend.grossRevenueUsd,
-            share: res.dividend.playerShareUsd,
+            share: res.dividend.playerTotalUsd ?? res.dividend.playerShareUsd,
             carry: res.dividend.platformCarryUsd,
           }),
           'success',

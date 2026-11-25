@@ -3,17 +3,19 @@
 # 👾 PixelCompute Town（像素算力鎮）v1.0
 
 **將開發者閒置的 AI API 額度與月／週 CLI 訂閱額度（BYOT），轉化為賽博像素小鎮裡的 32×32 HD 算力小人**<br>
-**官網一鍵安裝 · 共同投票立項 · 雙軌接單打工 · 防作弊驗收上線 · 30/60/10 透明分紅與穩定幣提現**
+**創意溯源哈希鏈（Proof of First Spark） · 反抄襲共建 · 雙軌接單打工 · 5% / 85% / 10% 多勞多得動態分紅與穩定幣提現**
 
-*Turn idle AI API credits & monthly CLI quotas into HD pixel workers that vote, build, ship, and share revenue together.*
+*Turn idle AI API credits & monthly CLI quotas into HD pixel workers with SHA-256 idea provenance, anti-copycat protection, and 5% / 85% / 10% merit-based revenue sharing.*
 
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-34d399?style=for-the-badge)](./package.json)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B%20%2F%2024-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![CI](https://img.shields.io/badge/GitHub%20Actions-CI%20Ready-2563eb?style=for-the-badge&logo=githubactions&logoColor=white)](./.github/workflows/ci.yml)
+[![Proof of First Spark](https://img.shields.io/badge/Protocol-5%25%20Spark%20%7C%2085%25%20Merit%20%7C%2010%25%20Platform-f43f5e?style=for-the-badge)](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議)
 [![Zero-Trust BYOK](https://img.shields.io/badge/Security-Zero--Trust%20BYOK%20%2F%20BYOT-22d3ee?style=for-the-badge)](#零信任與合規安全架構)
 [![i18n](https://img.shields.io/badge/i18n-100%25%20繁中%20%7C%20简中%20%7C%20EN-f59e0b?style=for-the-badge)](#-核心特色一覽)
 [![Payments](https://img.shields.io/badge/Pay-USDC%20%7C%20Polar%20%7C%20Stripe%20%7C%20Redeem-a855f7?style=for-the-badge)](#-三合一收付與穩定幣分紅提領)
 
+[💡 創意溯源與 5/85/10 協議](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議) ·
 [🚀 3 秒快速啟動](#-3-秒快速啟動零依賴開箱即玩) ·
 [📦 一鍵安裝與 AI 對話安裝](#-一鍵安裝本機算力小人終端與-ai-對話) ·
 [💎 三合一支付與提現](#-三合一收付與穩定幣分紅提領) ·
@@ -31,7 +33,31 @@
 1. **用不完的免費／贈金 API 額度**（Gemini API、OpenRouter、本地 Ollama 等）
 2. **月底還沒刷完的官方 CLI 月／週訂閱額度**（Gemini CLI、Claude Code、Codex CLI 等）
 
-**PixelCompute Town v1.0** 把這些閒置算力變成一座 **6 大 HD 32×32 室內場景**的「賽博暖夜像素小鎮」：從官方首頁（`/`）一鍵安裝本機小人、透過自動彈出的註冊審核頁（`/onboard`）完成零信任綁定，進入小鎮工作臺（`/app`）招募算力小人、投票選出想孵化的開源與獨立小工具、雙軌派工並通過 **Proof of Accepted Work（成果驗收制）**，推到 100% 綻放全鎮像素煙火發布上線，並按 **30/60/10** 透明公式透過 **USDC/USDT 穩定幣**共享真實分紅！
+**PixelCompute Town v1.0** 把這些閒置算力變成一座 **6 大 HD 32×32 室內場景**的「賽博暖夜像素小鎮」：從官方首頁（`/`）一鍵安裝本機小人、透過自動彈出的註冊審核頁（`/onboard`）完成零信任綁定，進入小鎮工作臺（`/app`）招募算力小人、發起帶有 **SHA-256 不可竄改溯源鏈** 的原創提案、雙軌派工並通過 **Proof of Accepted Work（成果驗收制）**，推到 100% 綻放全鎮像素煙火發布上線，並按 **5% 首發創意永久版稅 / 85% 實幹建設多勞多得池 / 10% 平臺公證運營** 的透明協議透過 **USDC/USDT 穩定幣**共享真實分紅！
+
+---
+
+## 💡 創意是第一生產力：創意溯源 × 反抄襲 × 5%/85%/10% 多勞多得協議
+
+在 AI 時代，**「好創意是點燃一切的火種，實幹交付是決定價值的力量」**。PixelCompute Town 內建零依賴 **Proof of First Spark（首發創意溯源協議）**，用密碼學與透明帳本同時守護原創者與實幹者：
+
+1. **🔗 SHA-256 不可竄改創意溯源哈希鏈（`src/server/provenance.mjs`）**
+   - 每個新提案上牆瞬間即自動記錄首發者（`originatorId` / `originatorName`）、UTC 時間戳（`originatedAt`）與前序創意雜湊（`prevIdeaHash`），以 Node.js 原生 `node:crypto` 計算 64 碼 SHA-256 指紋（`ideaHash`）。
+   - 開放無門檻公證 API：`GET /api/provenance/chain`（逐筆重算驗證整條鏈 `valid === true`）與 `GET /api/provenance/verify/:hash`（支援完整 64 碼或前綴驗證），並可在孵化廣場一鍵下載像素風 **《創意首發溯源證書 PNG》**。
+2. **🛡️ 即時反抄襲偵測 × 一鍵尊重原創加入共建**
+   - 內建中英文雙語相似度引擎（中文 2-gram + 英文單詞正規化 Jaccard 相似度），前端提案視窗透過 `POST /api/projects/check-similarity` 即時預警。
+   - 若送出與既有原創高度相似的提案（相似度 `>= 0.65`），伺服器直接攔截並回傳 HTTP **`409 POTENTIAL_COPYCAT`**，清楚列出原創首發者與 SHA-256 指紋，引導開發者呼叫 `POST /api/projects/:id/join` 直接加入原創意共建，徹底終結低質抄襲複製！
+3. **⚖️ 尊重創意但不獨佔：5% / 85% / 10% 多勞多得動態分紅公式**
+
+| 分紅池 | 比例 | 分配規則與公平保障 |
+| :--- | :---: | :--- |
+| **💡 首發創意永久版稅** (`sparkRoyaltyPct`) | **5%** | 永久歸屬首發原創者（`originatorId`）。**即使發起人一行代碼都沒寫**，依然穩拿 5% 尊重版稅，致敬他踏出的第一步！ |
+| **🔥 實幹建設多勞多得池** (`meritPoolPct`) | **85%** | 嚴格依所有貢獻者通過驗收的實幹點數（`contributions`）佔比動態分配——**誰出力最多誰拿大頭**！ |
+| **🏛️ 平臺公證運營分成** (`platformSharePct`) | **10%** | 用於維護 SHA-256 溯源公證、驗收基礎設施、三合一收付與穩定幣分紅結算。 |
+
+> **兩種實戰場景試算（以項目總營收 `$100` 為例）：**
+> - **場景 A（發起人只出點子、未動手實作）**：發起人穩拿 **`$5`（5%）** 創意版稅；真正把產品做出來的實幹貢獻者們獨拿 **`$85`（85%）**，平臺拿 `$10`（10%）。
+> - **場景 B（發起人提出創意＋自己也完成 40% 實幹貢獻）**：發起人拿 **`$5`（5% 版稅）+ `$34`（85% × 40%）= `$39`（39%）**；其餘實幹共建者分 `$51`（85% × 60%），平臺拿 `$10`（10%）。
 
 ---
 
@@ -89,9 +115,10 @@ curl -fsSL http://localhost:3456/install.sh | bash
 
 | 模組 | v1.0 商業上線完全體亮點 |
 | :--- | :--- |
-| **🏠 高顏值像素官網與 `/onboard` 審核頁** | `/` 具備即時動畫 HD 像素微舞台、實時數據條（`/api/public/stats`）、6 大平臺複製即裝中心與透明定價；`/onboard` 提供三步零信任裝置核准、32×32 小人預覽挑選與鎮長嚴格審核模式 |
+| **💡 創意溯源鏈 × 反抄襲 × 5/85/10 分紅** | 每筆創意上牆即刻生成不可竄改 **SHA-256 哈希鏈（Proof of First Spark）** 與可下載《創意首發溯源證書 PNG》；即時反抄襲查重攔截重複提案（HTTP `409`）並引導加入共建；上線依 **5% 創意版稅 / 85% 實幹多勞多得 / 10% 平臺** 精準分紅 |
+| **🏠 高顏值像素官網與 `/onboard` 審核頁** | `/` 具備即時動畫 HD 像素微舞台、實時數據條（`/api/public/stats`）、創意溯源實時哈希鏈公證宣言、6 大平臺複製即裝中心與透明定價；`/onboard` 提供三步零信任裝置核准、32×32 小人預覽挑選與鎮長嚴格審核模式 |
 | **🏙️ 6 大 HD 32×32 室內場景畫布** | 自動工坊、懸賞工會、孵化中心、算力宿舍、創作者金庫、小鎮總覽 6 場景無縫切換＋自動跟隨分頁；全站注入銳利 HD 像素頭像、日夜霓虹切換、商店裝潢實景、上線煙火與 8-bit 音效 |
-| **🌐 100% 全站三語即時切換（繁中／简中／EN）** | 不僅翻譯按鈕，連項目名、任務卡、小人、商店、成就、排行榜、動態日誌、Canvas 室內看板與《算力打工證 PNG》全部 100% 即時三語化，切到 EN 零中文殘留 |
+| **🌐 100% 全站三語即時切換（繁中／简中／EN）** | 不僅翻譯按鈕，連項目名、任務卡、小人、商店、成就、排行榜、動態日誌、Canvas 室內看板、《算力打工證 PNG》與《創意首發溯源證書 PNG》全部 100% 即時三語化，切到 EN 零中文殘留 |
 | **🔐 多用戶帳號系統（隔離帳本）** | 內建 `scrypt` 加密信箱＋密碼註冊登入、GitHub OAuth、Google OAuth 與遊客 Demo 模式；各用戶金幣、小人、成就與提領餘額完全隔離，同時共享項目池、任務市場與排行榜 |
 | **⚡ 雙軌任務市場 & GitHub Issue 匯入** | **自動工坊（`api_auto`）** 支援瀏覽器端零信任 Gemini / OpenRouter / Ollama BYOK；**懸賞工會（`guild_bounty`）** 支援 Context Pack、PR 連結驗證、GitHub 公開倉庫 Issue 一鍵匯入與本機 CLI 即時直播 |
 | **💎 三合一收付與穩定幣分紅提領** | 支援 **USDC / USDT（Base / Polygon / Arbitrum / Solana）** 鏈上付款與滿 `$5` 分紅提現、**Polar.sh / Stripe** 信用卡結帳＋Webhook 驗簽、以及 **愛發電 / Ko-fi 卡密兌換碼** 零門檻收款 |
@@ -207,14 +234,14 @@ docker run -d --name pixel-compute-town -p 3456:3456 -v $(pwd)/data:/app/data --
 pixel-compute-town/
 ├── .github/workflows/ci.yml    # GitHub Actions 自動化 CI（Node 24 零依賴自動執行 test + smoke）
 ├── server.mjs                  # 零依賴 HTTP 伺服器、靜態路由（/、/app、/onboard）、REST API 與 SSE
-├── src/server/                 # 後端核心模組（多用戶 auth、三合一 payments、deviceFlow、seed、store、verifier、sse）
+├── src/server/                 # 後端核心模組（provenance 創意溯源與反抄襲、多用戶 auth、三合一 payments、deviceFlow、seed、store、verifier、sse）
 ├── public/
-│   ├── landing.{html,css}      # 官方首頁（/）＋多平臺複製即裝中心＋即時 HD 像素微舞台
+│   ├── landing.{html,css}      # 官方首頁（/）＋創意溯源宣言＋多平臺複製即裝中心＋即時 HD 像素微舞台
 │   ├── onboard.{html,css}      # 裝置註冊與權限審核頁（/onboard）
 │   ├── index.html & styles.css # 像素算力鎮主應用（/app）
-│   └── js/                     # 100% 三語 i18n、32×32 HD 精靈與 6 場景像素引擎、打工證、8-bit 音效、BYOK
+│   └── js/                     # 100% 三語 i18n、32×32 HD 精靈與 6 場景像素引擎、打工證與創意溯源證書、8-bit 音效、BYOK
 ├── bin/pixel-worker.mjs        # 本機 BYOT CLI v0.4（onboard / --demo / --watch / --cmd）
-├── tests/                      # Node.js 原生 node:test API 全鏈路測試與靜態/三語/CLI 煙霧測試
+├── tests/                      # Node.js 原生 node:test API 全鏈路測試（含創意溯源鏈、反抄襲、5/85/10 分紅）與靜態/三語/CLI 煙霧測試
 ├── docs/
 │   ├── PRD.md                  # 產品規格書與經濟模型設計
 │   └── DEPLOY_AND_PROMOTE.md   # 48 小時極速上線指南＋多平臺 AI 安裝與三語推廣文案包
@@ -227,10 +254,10 @@ pixel-compute-town/
 ## 🧪 執行測試與自動化 CI
 
 ```bash
-# 執行全鏈路 API 測試（多用戶隔離、穩定幣收付與提領、法幣沙盒、兌換碼、Device Flow、分紅帳本與安全加固）
+# 執行全鏈路 API 測試（5/85/10 動態分紅、SHA-256 創意溯源鏈、反抄襲 409 與共建、多用戶隔離、穩定幣收付與提領、法幣沙盒、兌換碼、Device Flow 與安全加固）
 npm test
 
-# 執行靜態路由、ESM 模組契約、100% 三語動態本地化零中文殘留、與 pixel-worker onboard --demo 煙霧測試
+# 執行靜態路由、provenance 模組與證書匯出契約、100% 三語動態本地化零中文殘留、與 pixel-worker onboard --demo 煙霧測試
 npm run smoke
 ```
 

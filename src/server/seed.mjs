@@ -1,10 +1,15 @@
 // PixelCompute Town — Initial World Seed, Shop Items & Dynamic Task Generator
 
 import crypto from 'node:crypto';
+import {
+  GENESIS_HASH,
+  computeIdeaHash,
+  ensureProjectsProvenance,
+} from './provenance.mjs';
 
 export const REVENUE_SPLIT = Object.freeze({
-  creatorPct: 30,
-  contributorsPct: 60,
+  originatorSparkPct: 5,
+  meritPoolPct: 85,
   platformPct: 10,
 });
 
@@ -45,7 +50,7 @@ export const ACHIEVEMENT_CATALOG = Object.freeze([
     name: '首批分紅股東',
     icon: '💸',
     rewardGold: 100,
-    description: '從已上線項目的 30/60/10 透明分紅池中領取到真實美金分紅。',
+    description: '從已上線項目的 5/85/10 創意溯源與多勞多得透明分紅池中領取到真實美金分紅。',
   },
   {
     id: 'cli_pioneer',
@@ -569,6 +574,10 @@ export function ensureStateSchema(state) {
   state.workers = founder.workers;
   state.achievements = founder.achievements;
 
+  if (Array.isArray(state.projects)) {
+    ensureProjectsProvenance(state.projects, state.users);
+  }
+
   return state;
 }
 
@@ -576,28 +585,47 @@ export function createInitialState() {
   const now = new Date().toISOString();
   const tMinus = (mins) => new Date(Date.now() - mins * 60_000).toISOString();
 
-  const projects = [
+  const metaOriginatedAt = tMinus(1440);
+  const i18nOriginatedAt = tMinus(960);
+  const pomoOriginatedAt = tMinus(360);
+
+  const rawProjects = [
     {
       id: 'proj-meta',
       name: '像素算力鎮 v1.0（創世 Meta 項目）',
       shortName: '像素算力鎮 v1.0',
-      tagline: '用社群閒置算力一起把像素算力鎮推向公開上線，共享創世 30/60/10 分紅池！',
-      description: '這就是你正在體驗的創世 Meta 項目！零現金懸賞純靠熱血與分紅池驅動，完成 2~3 張雙軌任務即可衝到 100% 發布上線並即時分紅。',
+      tagline: '用社群閒置算力一起把像素算力鎮推向公開上線，共享 5% 創意版稅 / 85% 實幹多勞多得 / 10% 平臺透明分紅池！',
+      description: '這就是你正在體驗的創世 Meta 項目！零現金懸賞純靠熱血與多勞多得分紅池驅動，完成 2~3 張雙軌任務即可衝到 100% 發布上線並即時分紅。',
       status: 'building',
       votes: 18,
       votesRequired: 10,
       progressPct: 60,
       creatorId: 'founder-demo',
       creatorName: '創始鎮長 (Demo)',
+      originatorId: 'founder-demo',
+      originatorName: '創始鎮長 (Demo)',
+      originatedAt: metaOriginatedAt,
       repoUrl: 'https://github.com/pixel-compute-town/pixel-compute-town',
       bountyPoolUsd: 0,
+      sparkRoyaltyPct: 5,
+      meritPoolPct: 85,
+      platformSharePct: 10,
+      creatorSharePct: 5,
+      contributorsSharePct: 85,
+      inspiredByHash: null,
       revenueSplit: { ...REVENUE_SPLIT },
       totalRevenueUsd: 0,
       distributedRevenueUsd: 0,
       sponsoredBillboard: false,
       billboardText: '',
       launchedAt: null,
-      createdAt: tMinus(1440),
+      createdAt: metaOriginatedAt,
+      coBuilders: [
+        { userId: 'founder-demo', username: 'founder-dev', displayName: '創始鎮長 (Demo)', joinedAt: metaOriginatedAt },
+        { userId: 'npc-momo', username: 'momo-pixel', displayName: '像素貓 Momo', joinedAt: tMinus(1260) },
+        { userId: 'npc-kuro', username: 'kuro-dev', displayName: '算力武士 Kuro', joinedAt: tMinus(1140) },
+        { userId: 'npc-yuna', username: 'yuna-ai', displayName: '星雲織女 Yuna', joinedAt: tMinus(1020) },
+      ],
       contributions: {
         'founder-demo': 80,
         'npc-momo': 55,
@@ -616,22 +644,36 @@ export function createInitialState() {
       name: 'i18n-PixelBot（開源多語系插件）',
       shortName: 'i18n-PixelBot',
       tagline: '自動掃描 Repo 並以 Gemini Flash 開出精準多語系 PR 的開源插件，含真實現金懸賞！',
-      description: '專為獨立開發者與開源維護者打造的多語系自動化工具。內含社群企業贊助的 $40 / $25 / $10 現金懸賞任務，加上 30/60/10 商業授權收益分紅池。',
+      description: '專為獨立開發者與開源維護者打造的多語系自動化工具。內含社群企業贊助的 $40 / $25 / $10 現金懸賞任務，加上 5/85/10 多勞多得商業授權收益分紅池。',
       status: 'building',
       votes: 14,
       votesRequired: 10,
       progressPct: 35,
       creatorId: 'npc-kuro',
       creatorName: '算力武士 Kuro',
+      originatorId: 'npc-kuro',
+      originatorName: '算力武士 Kuro',
+      originatedAt: i18nOriginatedAt,
       repoUrl: 'https://github.com/pixel-compute-town/i18n-pixelbot',
       bountyPoolUsd: 75,
+      sparkRoyaltyPct: 5,
+      meritPoolPct: 85,
+      platformSharePct: 10,
+      creatorSharePct: 5,
+      contributorsSharePct: 85,
+      inspiredByHash: null,
       revenueSplit: { ...REVENUE_SPLIT },
       totalRevenueUsd: 0,
       distributedRevenueUsd: 0,
       sponsoredBillboard: true,
       billboardText: '🔥 i18n-PixelBot $40/$25 現金懸賞徵求高手！',
       launchedAt: null,
-      createdAt: tMinus(960),
+      createdAt: i18nOriginatedAt,
+      coBuilders: [
+        { userId: 'npc-kuro', username: 'kuro-dev', displayName: '算力武士 Kuro', joinedAt: i18nOriginatedAt },
+        { userId: 'founder-demo', username: 'founder-dev', displayName: '創始鎮長 (Demo)', joinedAt: tMinus(840) },
+        { userId: 'npc-rin', username: 'rin-cli', displayName: '架構師 Rin', joinedAt: tMinus(780) },
+      ],
       contributions: {
         'founder-demo': 40,
         'npc-kuro': 70,
@@ -655,15 +697,27 @@ export function createInitialState() {
       progressPct: 0,
       creatorId: 'npc-yuna',
       creatorName: '星雲織女 Yuna',
+      originatorId: 'npc-yuna',
+      originatorName: '星雲織女 Yuna',
+      originatedAt: pomoOriginatedAt,
       repoUrl: 'https://github.com/pixel-compute-town/pixel-pomo',
       bountyPoolUsd: 0,
+      sparkRoyaltyPct: 5,
+      meritPoolPct: 85,
+      platformSharePct: 10,
+      creatorSharePct: 5,
+      contributorsSharePct: 85,
+      inspiredByHash: null,
       revenueSplit: { ...REVENUE_SPLIT },
       totalRevenueUsd: 0,
       distributedRevenueUsd: 0,
       sponsoredBillboard: false,
       billboardText: '',
       launchedAt: null,
-      createdAt: tMinus(360),
+      createdAt: pomoOriginatedAt,
+      coBuilders: [
+        { userId: 'npc-yuna', username: 'yuna-ai', displayName: '星雲織女 Yuna', joinedAt: pomoOriginatedAt },
+      ],
       contributions: {
         'npc-yuna': 20,
       },
@@ -672,6 +726,27 @@ export function createInitialState() {
       },
     },
   ];
+
+  // Build real SHA-256 Proof-of-First-Spark provenance chain across seeded projects
+  let prevIdeaHash = GENESIS_HASH;
+  const projects = rawProjects.map((proj, provenanceIndex) => {
+    const ideaHash = computeIdeaHash({
+      name: proj.name,
+      tagline: proj.tagline,
+      description: proj.description,
+      originatorId: proj.originatorId,
+      originatedAt: proj.originatedAt,
+      prevIdeaHash,
+    });
+    const chained = {
+      ...proj,
+      provenanceIndex,
+      prevIdeaHash,
+      ideaHash,
+    };
+    prevIdeaHash = ideaHash;
+    return chained;
+  });
 
   const workers = [
     {

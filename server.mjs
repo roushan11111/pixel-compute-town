@@ -17,6 +17,15 @@ import {
   round2,
 } from './src/server/seed.mjs';
 import { createStore } from './src/server/store.mjs';
+import {
+  COPYCAT_HIGH_THRESHOLD,
+  COPYCAT_WARN_THRESHOLD,
+  GENESIS_HASH,
+  computeIdeaHash,
+  ensureProjectsProvenance,
+  findSimilarIdeas,
+  verifyProvenanceChain,
+} from './src/server/provenance.mjs';
 import { verifySubmission, validateGitHubPrUrl } from './src/server/verifier.mjs';
 import {
   FOUNDER_USER_ID,
@@ -364,89 +373,182 @@ function creditUserOrNpcUsd(state, userId, amountUsd) {
   }
 }
 
-function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, label) {
-  const gross = round2(grossRevenueUsd);
-  const creatorShareUsd = round2(gross * (REVENUE_SPLIT.creatorPct / 100));
-  const platformCarryUsd = round2(gross * (REVENUE_SPLIT.platformPct / 100));
-  const contributorsPoolUsd = round2(gross - creatorShareUsd - platformCarryUsd);
+function buildChainedProject(state, user, fields) {
+  ensureProjectsProvenance(state.projects, state.users);
+  const ordered = [...(state.projects || [])].sort(
+    (a, b) => (Number.isInteger(a.provenanceIndex) ? a.provenanceIndex : 0) - (Number.isInteger(b.provenanceIndex) ? b.provenanceIndex : 0),
+  );
+  const lastProj = ordered.length > 0 ? ordered[ordered.length - 1] : null;
+  const provenanceIndex = lastProj && Number.isInteger(lastProj.provenanceIndex)
+    ? lastProj.provenanceIndex + 1
+    : ordered.length;
+  const prevIdeaHash = lastProj?.ideaHash || GENESIS_HASH;
+  const originatedAt = new Date().toISOString();
 
-  const payouts = [];
-  let playerShareUsd = 0;
-
-  // 1) Creator 30%
-  payouts.push({
-    userId: project.creatorId,
-    userName: project.creatorName,
-    role: 'creator',
-    sharePct: REVENUE_SPLIT.creatorPct,
-    amountUsd: creatorShareUsd,
+  const ideaHash = computeIdeaHash({
+    name: fields.name,
+    tagline: fields.tagline,
+    description: fields.description,
+    originatorId: user.id,
+    originatedAt,
+    prevIdeaHash,
   });
 
-  creditUserOrNpcUsd(state, project.creatorId, creatorShareUsd);
-  if (project.creatorId === activeUser.id) {
-    playerShareUsd = round2(playerShareUsd + creatorShareUsd);
-  }
+  return {
+    ...fields,
+    creatorId: user.id,
+    creatorName: user.displayName,
+    originatorId: user.id,
+    originatorName: user.displayName,
+    originatedAt,
+    provenanceIndex,
+    prevIdeaHash,
+    ideaHash,
+    coBuilders: [
+      {
+        userId: user.id,
+        username: user.username || user.id,
+        displayName: user.displayName,
+        joinedAt: originatedAt,
+      },
+    ],
+    sparkRoyaltyPct: REVENUE_SPLIT.originatorSparkPct,
+    meritPoolPct: REVENUE_SPLIT.meritPoolPct,
+    platformSharePct: REVENUE_SPLIT.platformPct,
+    creatorSharePct: REVENUE_SPLIT.originatorSparkPct,
+    contributorsSharePct: REVENUE_SPLIT.meritPoolPct,
+    inspiredByHash: fields.inspiredByHash || null,
+    revenueSplit: { ...REVENUE_SPLIT },
+    createdAt: originatedAt,
+    contributions: fields.contributions || {},
+    contributorNames: fields.contributorNames || {},
+  };
+}
 
-  // 2) Contributors 60% proportional to contribution points
+function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, label) {
+  const gross = round2(grossRevenueUsd);
+  const sparkPct = Number.isFinite(Number(project.sparkRoyaltyPct))
+    ? Number(project.sparkRoyaltyPct)
+    : REVENUE_SPLIT.originatorSparkPct;
+  const platformPct = Number.isFinite(Number(project.platformSharePct))
+    ? Number(project.platformSharePct)
+    : REVENUE_SPLIT.platformPct;
+  const meritPct = Number.isFinite(Number(project.meritPoolPct))
+    ? Number(project.meritPoolPct)
+    : REVENUE_SPLIT.meritPoolPct;
+
+  const sparkRoyaltyUsd = round2(gross * (sparkPct / 100));
+  const platformCarryUsd = round2(gross * (platformPct / 100));
+  const meritPoolUsd = round2(gross - sparkRoyaltyUsd - platformCarryUsd);
+
+  const originatorId = project.originatorId || project.creatorId;
+  const originatorName = project.originatorName || project.creatorName || originatorId;
+
+  const payouts = [];
+  const payoutsByUser = {};
+
+  const ensureUserBucket = (userId, userName) => {
+    if (!payoutsByUser[userId]) {
+      payoutsByUser[userId] = {
+        userId,
+        userName: userName || userId,
+        sparkUsd: 0,
+        meritUsd: 0,
+        totalUsd: 0,
+        points: 0,
+        meritRatioPct: 0,
+        totalSharePct: 0,
+        isOriginator: userId === originatorId,
+      };
+    }
+    return payoutsByUser[userId];
+  };
+
+  // 1) 5% Proof of First Spark permanent royalty to originator
+  payouts.push({
+    userId: originatorId,
+    userName: originatorName,
+    role: 'originator_spark',
+    sharePct: sparkPct,
+    amountUsd: sparkRoyaltyUsd,
+  });
+  const origBucket = ensureUserBucket(originatorId, originatorName);
+  origBucket.sparkUsd = round2(origBucket.sparkUsd + sparkRoyaltyUsd);
+
+  // 2) 85% Merit Pool strictly proportional to accepted contribution points
   const entries = Object.entries(project.contributions || {})
     .filter(([, pts]) => Number(pts) > 0)
-    .sort((a, b) => b[1] - a[1]);
+    .sort((a, b) => Number(b[1]) - Number(a[1]));
 
   const totalPoints = entries.reduce((sum, [, pts]) => sum + Number(pts), 0);
 
   if (totalPoints > 0 && entries.length > 0) {
     let allocated = 0;
     const contribPayouts = entries.map(([userId, pts]) => {
-      const ratio = Number(pts) / totalPoints;
-      const amt = round2(contributorsPoolUsd * ratio);
+      const numericPts = Number(pts);
+      const ratio = numericPts / totalPoints;
+      const amt = round2(meritPoolUsd * ratio);
       allocated = round2(allocated + amt);
+      const userName = (project.contributorNames && project.contributorNames[userId])
+        || state.users?.[userId]?.displayName
+        || userId;
       return {
         userId,
-        userName: (project.contributorNames && project.contributorNames[userId]) || userId,
+        userName,
         role: 'contributor',
-        points: Number(pts),
-        sharePct: round2(ratio * REVENUE_SPLIT.contributorsPct),
+        points: numericPts,
+        meritRatioPct: round2(ratio * 100),
+        sharePct: round2(ratio * meritPct),
         amountUsd: amt,
       };
     });
 
-    // Fix any 0.01 rounding remainder on top contributor so total equals contributorsPoolUsd exactly
-    const diff = round2(contributorsPoolUsd - allocated);
+    // Fix any 0.01 rounding remainder on top contributor so total equals meritPoolUsd exactly
+    const diff = round2(meritPoolUsd - allocated);
     if (diff !== 0 && contribPayouts.length > 0) {
       contribPayouts[0].amountUsd = round2(contribPayouts[0].amountUsd + diff);
     }
 
     for (const cp of contribPayouts) {
       payouts.push(cp);
-      creditUserOrNpcUsd(state, cp.userId, cp.amountUsd);
-      if (cp.userId === activeUser.id) {
-        playerShareUsd = round2(playerShareUsd + cp.amountUsd);
-      }
+      const bucket = ensureUserBucket(cp.userId, cp.userName);
+      bucket.meritUsd = round2(bucket.meritUsd + cp.amountUsd);
+      bucket.points = cp.points;
+      bucket.meritRatioPct = cp.meritRatioPct;
     }
   } else {
-    // Fallback if zero contributions recorded: goes to creator
-    payouts[0].amountUsd = round2(payouts[0].amountUsd + contributorsPoolUsd);
-    creditUserOrNpcUsd(state, project.creatorId, contributorsPoolUsd);
-    if (project.creatorId === activeUser.id) {
-      playerShareUsd = round2(playerShareUsd + contributorsPoolUsd);
-    }
+    // Fallback if zero contributions recorded anywhere: goes to originator so total equals gross
+    payouts[0].amountUsd = round2(payouts[0].amountUsd + meritPoolUsd);
+    origBucket.meritUsd = round2(origBucket.meritUsd + meritPoolUsd);
   }
 
-  // 3) Platform 10% incubation carry
+  for (const bucket of Object.values(payoutsByUser)) {
+    bucket.totalUsd = round2(bucket.sparkUsd + bucket.meritUsd);
+    bucket.totalSharePct = gross > 0 ? round2((bucket.totalUsd / gross) * 100) : 0;
+    creditUserOrNpcUsd(state, bucket.userId, bucket.totalUsd);
+  }
+
+  // 3) 10% Platform Carry
   payouts.push({
     userId: 'platform',
     userName: '像素算力鎮平臺 (Carry)',
     role: 'platform',
-    sharePct: REVENUE_SPLIT.platformPct,
+    sharePct: platformPct,
     amountUsd: platformCarryUsd,
   });
+
+  const originatorTotalUsd = round2(payoutsByUser[originatorId]?.totalUsd || 0);
+  const playerBucket = payoutsByUser[activeUser.id] || { sparkUsd: 0, meritUsd: 0, totalUsd: 0 };
+  const playerSparkUsd = round2(playerBucket.sparkUsd);
+  const playerMeritUsd = round2(playerBucket.meritUsd);
+  const playerTotalUsd = round2(playerBucket.totalUsd);
 
   project.totalRevenueUsd = round2((project.totalRevenueUsd || 0) + gross);
   project.distributedRevenueUsd = round2((project.distributedRevenueUsd || 0) + gross);
 
   addFounderRevenueEntry(state, {
     stream: 'incubation_carry',
-    label: `《${project.shortName || project.name}》${label} 10% 平臺分成`,
+    label: `《${project.shortName || project.name}》${label} ${platformPct}% 平臺分成`,
     amountUsd: platformCarryUsd,
     projectId: project.id,
   });
@@ -456,12 +558,22 @@ function distributeProjectRevenue(state, activeUser, project, grossRevenueUsd, l
     timestamp: new Date().toISOString(),
     projectId: project.id,
     projectName: project.name,
+    originatorId,
+    originatorName,
     label,
     grossRevenueUsd: gross,
-    creatorShareUsd,
-    contributorsPoolUsd,
+    sparkRoyaltyUsd,
+    meritPoolUsd,
     platformCarryUsd,
-    playerShareUsd,
+    originatorTotalUsd,
+    playerSparkUsd,
+    playerMeritUsd,
+    playerTotalUsd,
+    payoutsByUser,
+    // Legacy compatibility aliases
+    creatorShareUsd: sparkRoyaltyUsd,
+    contributorsPoolUsd: meritPoolUsd,
+    playerShareUsd: playerTotalUsd,
     payouts,
   };
 
@@ -627,6 +739,7 @@ export function createAppServer(options = {}) {
           (sum, u) => sum + (Array.isArray(u.workers) ? u.workers.length : 0),
           0,
         );
+        const provenance = verifyProvenanceChain(projects);
         const featuredProjects = projects.slice(0, 6).map((p) => ({
           id: p.id,
           name: p.name,
@@ -640,6 +753,10 @@ export function createAppServer(options = {}) {
           totalRevenueUsd: p.totalRevenueUsd,
           sponsoredBillboard: Boolean(p.sponsoredBillboard),
           billboardText: p.billboardText || '',
+          originatorName: p.originatorName || p.creatorName || '',
+          originatedAt: p.originatedAt || p.createdAt || '',
+          ideaHash: p.ideaHash || '',
+          coBuildersCount: Array.isArray(p.coBuilders) ? p.coBuilders.length : 1,
         }));
 
         return sendJson(res, 200, {
@@ -654,7 +771,56 @@ export function createAppServer(options = {}) {
           totalRevenueUsd,
           totalUsersCount,
           totalWorkersCount,
+          provenanceValid: provenance.valid,
+          provenanceChainLength: provenance.chainLength,
           featuredProjects,
+        });
+      }
+
+      // Proof of First Spark: GET /api/provenance/chain
+      if (pathname === '/api/provenance/chain' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        const report = verifyProvenanceChain(state.projects);
+        return sendJson(res, 200, {
+          ok: true,
+          ...report,
+        });
+      }
+
+      // Proof of First Spark: GET /api/provenance/verify/:hash (supports full 64-char or 8+ char prefix)
+      const verifyHashMatch = pathname.match(/^\/api\/provenance\/verify\/([^/]+)$/);
+      if (verifyHashMatch && method === 'GET') {
+        const rawHash = decodeURIComponent(verifyHashMatch[1]).trim().toLowerCase();
+        if (!/^[a-f0-9]{8,64}$/.test(rawHash)) {
+          return sendJson(res, 404, {
+            ok: false,
+            verified: false,
+            error: '無效或查無此創意溯源指紋（需提供至少 8 碼十六進位 SHA-256 指紋）',
+          });
+        }
+        const state = await store.load();
+        ensureStateSchema(state);
+        const chain = verifyProvenanceChain(state.projects);
+        const exact = chain.records.find((r) => r.ideaHash === rawHash);
+        const matched = exact || chain.records.find((r) => r.ideaHash && r.ideaHash.startsWith(rawHash));
+        if (!matched || !matched.verified) {
+          return sendJson(res, 404, {
+            ok: false,
+            verified: false,
+            error: matched
+              ? '該創意溯源紀錄驗證失敗（資料可能已遭竄改）'
+              : '找不到對應此溯源指紋的原創創意紀錄',
+          });
+        }
+        const project = (state.projects || []).find((p) => p.id === matched.projectId) || null;
+        return sendJson(res, 200, {
+          ok: true,
+          verified: true,
+          chainValid: chain.valid,
+          chainLength: chain.chainLength,
+          record: matched,
+          project,
         });
       }
 
@@ -969,11 +1135,41 @@ export function createAppServer(options = {}) {
         });
       }
 
-      // Projects: POST /api/projects (propose new project)
+      // Projects: POST /api/projects/check-similarity (Real-time anti-copycat similarity check)
+      if (pathname === '/api/projects/check-similarity' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        const candidate = {
+          name: sanitizeText(body.name, 120),
+          tagline: sanitizeText(body.tagline, 200),
+          description: sanitizeText(body.description, 600, { multiline: true }),
+        };
+        const state = await store.load();
+        ensureStateSchema(state);
+        const matches = findSimilarIdeas(candidate, state.projects);
+        const topMatch = matches[0] || null;
+        const topSim = topMatch ? topMatch.similarity : 0;
+        const isHighRisk = topSim >= COPYCAT_HIGH_THRESHOLD;
+        const isWarning = topSim >= COPYCAT_WARN_THRESHOLD;
+
+        return sendJson(res, 200, {
+          ok: true,
+          isHighRisk,
+          isWarning,
+          thresholds: {
+            warning: COPYCAT_WARN_THRESHOLD,
+            highRisk: COPYCAT_HIGH_THRESHOLD,
+          },
+          topMatch,
+          matches,
+        });
+      }
+
+      // Projects: POST /api/projects (propose new project with anti-copycat check & SHA-256 hash chain)
       if (pathname === '/api/projects' && method === 'POST') {
         const body = await parseJsonBody(req);
         const name = sanitizeText(body.name, 64);
         const tagline = sanitizeText(body.tagline, 140);
+        const rawDescription = sanitizeText(body.description, 500, { multiline: true });
         if (name.length < 2) {
           throw new HttpError(400, '請輸入至少 2 個字的項目名稱');
         }
@@ -981,48 +1177,68 @@ export function createAppServer(options = {}) {
         const { state, result } = await store.mutate((s) => {
           const ctx = getActiveUserContext(req, s);
           const user = ctx.user;
+
+          // Anti-copycat similarity check against existing ideas
+          const matches = findSimilarIdeas(
+            { name, tagline, description: rawDescription },
+            s.projects,
+          );
+          const copycatMatch = matches[0] || null;
+          if (
+            copycatMatch
+            && copycatMatch.similarity >= COPYCAT_HIGH_THRESHOLD
+            && body.acknowledgeDerivative !== true
+          ) {
+            throw new HttpError(
+              409,
+              '偵測到與既有原創創意高度相似，平臺反對抄襲複製，建議直接加入原創意共建！',
+              {
+                code: 'POTENTIAL_COPYCAT',
+                copycatMatch,
+                matches,
+              },
+            );
+          }
+
           const votesRequired = Number(body.votesRequired) >= 2 && Number(body.votesRequired) <= 100
             ? Math.round(Number(body.votesRequired))
             : 10;
           const bountyPoolUsd = Math.max(0, round2(Number(body.bountyPoolUsd) || 0));
           const shortName = name.length > 22 ? `${name.slice(0, 22)}` : name;
+          const finalTagline = tagline || '社群共創獨立開源產品，共享 5% 創意版稅 / 85% 實幹多勞多得 / 10% 平臺分紅！';
+          const finalDescription = rawDescription
+            || tagline
+            || '由鎮民發起的孵化提案，投票達標後將自動生成雙軌算力任務。';
+          const inspiredByHash = sanitizeText(body.inspiredByHash, 64)
+            || (body.acknowledgeDerivative === true && copycatMatch?.ideaHash ? copycatMatch.ideaHash : null);
 
-          const newProj = {
+          const newProj = buildChainedProject(s, user, {
             id: uid('proj'),
             name,
             shortName,
-            tagline: tagline || '社群共創獨立開源產品，共享 30/60/10 透明收益分紅！',
-            description: sanitizeText(body.description, 500, { multiline: true })
-              || tagline
-              || '由鎮民發起的孵化提案，投票達標後將自動生成雙軌算力任務。',
+            tagline: finalTagline,
+            description: finalDescription,
             status: 'voting',
             votes: 1,
             votesRequired,
             progressPct: 0,
-            creatorId: user.id,
-            creatorName: user.displayName,
             repoUrl: sanitizeText(body.repoUrl, 200),
             bountyPoolUsd,
-            revenueSplit: { ...REVENUE_SPLIT },
+            inspiredByHash,
             totalRevenueUsd: 0,
             distributedRevenueUsd: 0,
             sponsoredBillboard: false,
             billboardText: '',
             launchedAt: null,
-            createdAt: new Date().toISOString(),
-            contributions: {
-              [user.id]: 15,
-            },
-            contributorNames: {
-              [user.id]: user.displayName,
-            },
-          };
+            contributions: {},
+            contributorNames: {},
+          });
 
           s.projects.push(newProj);
           pushActivity(s, {
             type: 'proposal',
             icon: '💡',
-            message: `${user.displayName} 發起新項目提案《${newProj.name}》（1/${newProj.votesRequired} 票）`,
+            message: `${user.displayName} 首發原創創意提案《${newProj.name}》（#${newProj.ideaHash.slice(0, 8)} ｜ 1/${newProj.votesRequired} 票）`,
             projectId: newProj.id,
           });
           return { project: newProj, userId: user.id };
@@ -1032,6 +1248,66 @@ export function createAppServer(options = {}) {
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 201, {
           ok: true,
+          project: result.project,
+          state: projectStateForUser(state, result.userId),
+        });
+      }
+
+      // Projects: POST /api/projects/:id/join (One-click join as co-builder, idempotent)
+      const joinMatch = pathname.match(/^\/api\/projects\/([^/]+)\/join$/);
+      if (joinMatch && method === 'POST') {
+        const projectId = decodeURIComponent(joinMatch[1]);
+
+        const { state, result } = await store.mutate((s) => {
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+          const proj = s.projects.find((p) => p.id === projectId);
+          if (!proj) {
+            throw new HttpError(404, `找不到項目：${projectId}`);
+          }
+          if (!Array.isArray(proj.coBuilders)) {
+            proj.coBuilders = [];
+          }
+
+          const existing = proj.coBuilders.find((b) => b.userId === user.id);
+          let alreadyJoined = false;
+          if (existing) {
+            alreadyJoined = true;
+          } else {
+            proj.coBuilders.push({
+              userId: user.id,
+              username: user.username || user.id,
+              displayName: user.displayName,
+              joinedAt: new Date().toISOString(),
+            });
+            pushActivity(s, {
+              type: 'co_build_join',
+              icon: '🤝',
+              message: `${user.displayName} 加入原創項目《${proj.shortName || proj.name}》成為共建者！（共 ${proj.coBuilders.length} 位共建者，按 85% 實幹池多勞多得）`,
+              projectId: proj.id,
+            });
+          }
+
+          return {
+            project: proj,
+            alreadyJoined,
+            coBuildersCount: proj.coBuilders.length,
+            userId: user.id,
+          };
+        });
+
+        if (!result.alreadyJoined) {
+          sseHub.broadcast('project_updated', {
+            action: 'co_builder_joined',
+            project: result.project,
+            userId: result.userId,
+          });
+          sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        }
+        return sendJson(res, 200, {
+          ok: true,
+          alreadyJoined: result.alreadyJoined,
+          coBuildersCount: result.coBuildersCount,
           project: result.project,
           state: projectStateForUser(state, result.userId),
         });
@@ -1186,12 +1462,12 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'launch',
             icon: '🚀',
-            message: `🎆 《${proj.name}》正式發布上線！首筆營收 $${dividend.grossRevenueUsd} 已按 30/60/10 結算分紅（你實得 $${dividend.playerShareUsd}，平臺 Carry $${dividend.platformCarryUsd}）`,
+            message: `🎆 《${proj.name}》正式發布上線！首筆營收 $${dividend.grossRevenueUsd} 已按 5/85/10 結算分紅（首發創意 $${dividend.sparkRoyaltyUsd}、實幹池 $${dividend.meritPoolUsd}、你實得 $${dividend.playerTotalUsd}、平臺 $${dividend.platformCarryUsd}）`,
             projectId: proj.id,
           });
 
           const achIds = ['launch_founder'];
-          if (dividend.playerShareUsd > 0) achIds.push('dividend_earner');
+          if (dividend.playerTotalUsd > 0) achIds.push('dividend_earner');
           const unlockedAchievements = unlockAchievements(s, user, achIds);
 
           return { project: proj, dividend, unlockedAchievements, user };
@@ -1236,11 +1512,11 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'dividend',
             icon: '💸',
-            message: `《${proj.shortName}》新增產品營收 $${dividend.grossRevenueUsd}！已即時分紅：你實得 +$${dividend.playerShareUsd}，平臺 Carry +$${dividend.platformCarryUsd}`,
+            message: `《${proj.shortName}》新增產品營收 $${dividend.grossRevenueUsd}！已按 5/85/10 即時分紅：你實得 +$${dividend.playerTotalUsd}（創意 $${dividend.playerSparkUsd} + 實幹 $${dividend.playerMeritUsd}），平臺 +$${dividend.platformCarryUsd}`,
             projectId: proj.id,
           });
 
-          const unlockedAchievements = dividend.playerShareUsd > 0
+          const unlockedAchievements = dividend.playerTotalUsd > 0
             ? unlockAchievements(s, user, ['dividend_earner'])
             : [];
 
@@ -1581,13 +1857,24 @@ export function createAppServer(options = {}) {
               : `驗收通過（${verification.score}分）！獲得 +${gold}G！`;
           }
 
-          // Update project progress & contributions
+          // Update project progress, contributions & coBuilders
           if (proj) {
             proj.progressPct = Math.min(100, (proj.progressPct || 0) + (task.progressWeight || 15));
             proj.contributions = proj.contributions || {};
             proj.contributorNames = proj.contributorNames || {};
             proj.contributions[user.id] = (proj.contributions[user.id] || 0) + contributionPoints;
             proj.contributorNames[user.id] = user.displayName;
+            if (!Array.isArray(proj.coBuilders)) {
+              proj.coBuilders = [];
+            }
+            if (!proj.coBuilders.some((b) => b.userId === user.id)) {
+              proj.coBuilders.push({
+                userId: user.id,
+                username: user.username || user.id,
+                displayName: user.displayName,
+                joinedAt: now,
+              });
+            }
           }
 
           // Contribution ledger
@@ -1922,34 +2209,26 @@ export function createAppServer(options = {}) {
             if (!project) {
               createdProject = true;
               const shortName = parsedRepo.repo.slice(0, 22);
-              project = {
+              project = buildChainedProject(s, user, {
                 id: uid('proj-gh'),
                 name: `${parsedRepo.fullName}（GitHub 匯入）`.slice(0, 64),
                 shortName,
-                tagline: `自 GitHub 倉庫 ${parsedRepo.fullName} 匯入的開源協作項目，共享 30/60/10 分紅池！`,
+                tagline: `自 GitHub 倉庫 ${parsedRepo.fullName} 匯入的開源協作項目，共享 5/85/10 創意溯源與多勞多得分紅池！`,
                 description: `已連結公開倉庫 ${parsedRepo.url}，社群算力小人可直接領取匯入的 Issue 任務開工！`,
                 status: 'building',
                 votes: 10,
                 votesRequired: 10,
                 progressPct: 10,
-                creatorId: user.id,
-                creatorName: user.displayName,
                 repoUrl: parsedRepo.url,
                 bountyPoolUsd: 0,
-                revenueSplit: { ...REVENUE_SPLIT },
                 totalRevenueUsd: 0,
                 distributedRevenueUsd: 0,
                 sponsoredBillboard: false,
                 billboardText: '',
                 launchedAt: null,
-                createdAt: new Date().toISOString(),
-                contributions: {
-                  [user.id]: 15,
-                },
-                contributorNames: {
-                  [user.id]: user.displayName,
-                },
-              };
+                contributions: {},
+                contributorNames: {},
+              });
               s.projects.push(project);
             }
           }

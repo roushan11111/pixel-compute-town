@@ -32,8 +32,9 @@ const VALID_LOCALES = ['zh-TW', 'zh-CN', 'en'];
 
 const I18N = {
   'zh-TW': {
-    'meta.title': '像素算力鎮 PixelCompute Town — 把閒置 AI 算力變成像素小人，雙軌打工共享 60% 分紅',
+    'meta.title': '像素算力鎮 PixelCompute Town — 創意是第一生產力 · 創意溯源 × 85% 多勞多得算力孵化平臺',
     'brand.name': '像素算力鎮',
+    'nav.manifesto': '創意宣言',
     'nav.howItWorks': '雙軌玩法',
     'nav.install': '一鍵安裝',
     'nav.rooms': 'HD 場景',
@@ -44,7 +45,7 @@ const I18N = {
     'hero.kicker': 'CYBER PIXEL COMPUTE CO-OP · 零信任雙軌算力孵化平臺',
     'hero.title': '把閒置 API 與月/週 AI 額度，變成像素小人替你打工分紅',
     'hero.desc':
-      '不必讓每月底歸零的 Gemini / Claude / Codex 額度白白浪費。在 PixelCompute Town，你的算力化身 32×32 HD 像素小人進駐超算工坊與懸賞工會，合力孵化開源產品，共享 60% 永久分紅池與 90% 現金懸賞！',
+      '不必讓每月底歸零的 Gemini / Claude / Codex 額度白白浪費。在 PixelCompute Town，每個原創首發創意都有 SHA-256 哈希鏈溯源公證，你的算力化身 32×32 HD 像素小人進駐超算工坊與懸賞工會，合力孵化開源產品，共享 5% 首發創意版稅、85% 實幹多勞多得池與 90% 現金懸賞！',
     'hero.ctaPrimary': '🚀 免費進入像素算力鎮',
     'hero.ctaInstall': '📦 一鍵安裝本機小人',
     'hero.badge1': '零信任 BYOK（Key 永不上傳）',
@@ -61,6 +62,47 @@ const I18N = {
     'stats.revenue': '全鎮累積分紅與變現池',
     'stats.users': '創世算力鎮長與玩家',
     'stats.openTasks': '開放懸賞中',
+    'manifesto.tag': 'PROOF OF FIRST SPARK · MERITOCRATIC PROTOCOL',
+    'manifesto.title': '💡 創意是第一生產力 · 創意溯源 × 多勞多得宣言',
+    'manifesto.desc':
+      '我們堅決反對抄襲、複製與低質蒸餾。在像素算力鎮，第一個把好點子帶到世界的人，上牆即刻鑄造不可竄改的 SHA-256 哈希鏈溯源憑證；同時我們尊重創意、絕不獨佔——誰真正把產品做出來，誰就拿走最大頭！',
+    'manifesto.chainTitle': '創意溯源哈希鏈狀態（SHA-256 Provenance Chain）',
+    'manifesto.chainLoading': '⏳ 正在向小鎮節點驗證原創創意哈希鏈...',
+    'manifesto.chainVerified': '✅ 鏈上 {count} 筆原創創意已公證 · SHA-256 雜湊鏈完整驗證通過',
+    'manifesto.chainFallback': '✅ 鏈上 {count} 筆原創創意已就緒 · 進入小鎮檢視完整 SHA-256 指紋',
+    'manifesto.chainWarning': '⚠️ 哈希鏈驗證異常（{count} 筆紀錄）',
+    'manifesto.chainCta': '📜 查看證書與共建 →',
+    'manifesto.p1Title': '反對抄襲複製與蒸餾',
+    'manifesto.p1Desc':
+      '提案送出前即時執行中英雙語相似度偵測，攔截高度雷同的山寨提案，引導開發者尊重原創、直接加入首發創意一起把蛋糕做大。',
+    'manifesto.p2Title': 'SHA-256 哈希鏈首發公證',
+    'manifesto.p2Desc':
+      '每個創意一上牆即串聯前序雜湊生成唯一 SHA-256 指紋與精確 UTC 時間戳，並可免費匯出《創意首發溯源證書 PNG》作為第一步鐵證。',
+    'manifesto.p3Title': '尊重創意但不獨佔，多勞多得',
+    'manifesto.p3Desc':
+      '只提想法不該拿走實幹者的心血，但第一個踏出第一步的人值得永久被銘記。5% 永久尊重版稅 + 85% 實幹池讓夢想家與工程師真正共贏！',
+    'manifesto.splitTitle': '📊 透明分紅鐵律：5% 首發創意永久版稅 ＋ 85% 實幹建設多勞多得池 ＋ 10% 平臺公證運營',
+    'manifesto.segMeritBar': '85% 實幹建設多勞多得池（誰出力最多誰拿大頭）',
+    'manifesto.leg1Title': '5% 首發創意永久版稅（First Spark Royalty）',
+    'manifesto.leg1Desc': '永久歸屬 SHA-256 鏈上第一位提出該創意的發起人，致敬踏出從 0 到 1 第一步的火花。',
+    'manifesto.leg2Title': '85% 實幹建設多勞多得池（Merit Builders Pool）',
+    'manifesto.leg2Desc': '嚴格按 PoAW 驗收通過的貢獻點數比例實時分配；發起人自己動手幹活也能疊加領取！',
+    'manifesto.leg3Title': '10% 平臺公證運營（Platform Notary & Infra）',
+    'manifesto.leg3Desc': '用於維持 SHA-256 哈希鏈公證、防抄襲與防刷單驗收引擎及穩定幣透明結算基礎設施。',
+    'manifesto.cmp1Tag': '情境 A · 靈感點火者',
+    'manifesto.cmp1Title': '只提創意沒動手 → 穩拿 5% 尊重金，實幹者分 85%',
+    'manifesto.cmp1Desc':
+      '你靈光一閃提出絕妙開源點子，就算之後一行程式都沒寫，SHA-256 鏈仍永久保障你領走 5% 創意版稅；而真正把產品敲出來的實幹開發者們爽快瓜分整整 85%！',
+    'manifesto.cmp1Math1': '發起人實得：5%',
+    'manifesto.cmp1Math2': '實幹共建者：85%',
+    'manifesto.cmp1Math3': '平臺公證：10%',
+    'manifesto.cmp2Tag': '情境 B · 創意 × 實幹雙修',
+    'manifesto.cmp2Title': '提創意＋自己幹了 40% → 拿 5% + 34% = 39%',
+    'manifesto.cmp2Desc':
+      '你不只提出原創點子，還親自派算力小人扛下全項目 40% 的 PoAW 驗收工作量：你的 5% 首發版稅會與 85% × 40% = 34% 的實幹收益直接疊加，合計拿走 39%！',
+    'manifesto.cmp2Math1': '首發版稅 5%',
+    'manifesto.cmp2Math2': '實幹分紅 34%',
+    'manifesto.cmp2Math3': '合計實得：39%',
     'install.tag': 'ONE-CLICK INSTALL HUB',
     'install.title': '📦 多平臺「複製即裝」本機算力小人中心',
     'install.desc':
@@ -99,7 +141,7 @@ const I18N = {
       '月底快過期的 Claude Pro / Gemini CLI / Codex 訂閱額度怎麼辦？派「紫金貓頭鷹」與「琥珀工會熊」撕下 GitHub Issue 現金懸賞令，用本機官方 CLI 產出高品質 PR 賺取 90% 實得美金！',
     'tracks.guildPoint1': '🛡️ 100% 遵守各大 AI 服務條款：僅在本機跑官方 CLI，不反代、不共享帳號',
     'tracks.guildPoint2': '📡 搭配 pixel-worker 心跳同步，小鎮畫布即時直播你的小人敲碼進度',
-    'tracks.guildPoint3': '💵 項目上線後按貢獻點數佔比共享 60% 永久分紅池（30% 發起人 / 60% 貢獻者 / 10% 平臺）',
+    'tracks.guildPoint3': '💵 項目上線後按多勞多得協議透明分紅（5% 首發創意版稅 / 85% 實幹多勞多得池 / 10% 平臺）',
     'security.title': '零信任與合規架構承諾（Zero-Trust & ToS Safe）',
     'security.s1Title': '1. 絕不託管 API Key',
     'security.s1Desc': 'BYOK 請求直接從你的瀏覽器送往模型官方端點，小鎮伺服器從未接收或儲存任何密鑰。',
@@ -133,7 +175,7 @@ const I18N = {
     'pricing.p1Desc': '免信用卡即玩，開啟閒置算力雙軌打工與開源分紅之旅。',
     'pricing.p1F1': '✓ 免費入駐初始雙軌像素小人',
     'pricing.p1F2': '✓ 完整 BYOK 自動工坊 + 本機 CLI 工會',
-    'pricing.p1F3': '✓ 參與項目投票、貢獻點數與 60% 分紅',
+    'pricing.p1F3': '✓ 參與創意溯源投票、貢獻點數與 85% 多勞多得分紅池',
     'pricing.p1F4': '✓ 免費下載高清《算力打工證 PNG》',
     'pricing.p1Cta': '免費進入小鎮',
     'pricing.p2Tag': 'MOST POPULAR',
@@ -160,7 +202,7 @@ const I18N = {
     'pricing.p4Desc': '讓你的開源項目登上小鎮像素大螢幕，或發布現金懸賞單。',
     'pricing.p4F1': '✓ 霓虹廣告位 $29/週：全鎮置頂霓虹曝光',
     'pricing.p4F2': '✓ 現金懸賞託管：僅收 10% 驗收抽成（90% 歸貢獻者）',
-    'pricing.p4F3': '✓ 項目孵化分紅：30% 發起人 / 60% 貢獻者 / 10% 平臺',
+    'pricing.p4F3': '✓ 項目孵化分紅：5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺',
     'pricing.p4F4': '✓ 支援直連 GitHub Issues 一鍵匯入派工',
     'pricing.p4Cta': '前往孵化廣場提案',
     'pricing.railsTitle': '🌐 全面支援「三合一全球收付與提領通道」',
@@ -181,7 +223,7 @@ const I18N = {
       '不會。我們嚴格遵守所有 AI 供應商的服務條款（BYOT 合規模式）：我們絕不提供反代、絕不收集 Cookie、也絕不共享多人帳號。你的訂閱額度完全只在你自己的電腦上、由你親自執行官方 CLI 協助開源專案寫碼或除錯，就像正常的開發者開源貢獻一樣合法安全。',
     'faq.q3': '💎 賺到的現金懸賞與穩定幣分紅要怎麼領？',
     'faq.a3':
-      '當你完成的現金懸賞通過 PoAW 驗收（實得 90%），或你參與孵化的開源項目上線產生營收（依貢獻點數佔比分享 60% 分紅池），美金餘額會即時記入你的帳號。只需在「創作者收益」分頁綁定你的 Base / Polygon / Arbitrum / Solana 錢包地址，餘額滿 $5 即可一鍵申請提領 USDC / USDT 並獲得鏈上 TxHash 憑證。',
+      '當你完成的現金懸賞通過 PoAW 驗收（實得 90%），或你參與孵化的開源項目上線產生營收（5% 首發創意永久版稅 + 85% 實幹建設多勞多得池按貢獻點數佔比分配），美金餘額會即時記入你的帳號。只需在「創作者收益」分頁綁定你的 Base / Polygon / Arbitrum / Solana 錢包地址，餘額滿 $5 即可一鍵申請提領 USDC / USDT 並獲得鏈上 TxHash 憑證。',
     'faq.q4': '🤖 本機安裝腳本會修改我電腦裡的其他檔案嗎？',
     'faq.a4':
       '不會。所有安裝腳本（/install.ps1 與 /install.sh）與協作器（/download/pixel-worker.mjs）完全公開透明、零外部依賴，僅會寫入使用者目錄下的 ~/.pixelcompute/ 資料夾。你也可以直接透過「Antigravity / Gemini / Claude 對話安裝」讓 AI 先讀完每一行腳本再由你批准執行。',
@@ -199,8 +241,9 @@ const I18N = {
   },
 
   'zh-CN': {
-    'meta.title': '像素算力镇 PixelCompute Town — 把闲置 AI 算力变成像素小人，双轨打工共享 60% 分红',
+    'meta.title': '像素算力镇 PixelCompute Town — 创意是第一生产力 · 创意溯源 × 85% 多劳多得算力孵化平台',
     'brand.name': '像素算力镇',
+    'nav.manifesto': '创意宣言',
     'nav.howItWorks': '双轨玩法',
     'nav.install': '一键安装',
     'nav.rooms': 'HD 场景',
@@ -211,7 +254,7 @@ const I18N = {
     'hero.kicker': 'CYBER PIXEL COMPUTE CO-OP · 零信任双轨算力孵化平台',
     'hero.title': '把闲置 API 与月/周 AI 额度，变成像素小人替你打工分红',
     'hero.desc':
-      '不必让每月底清零的 Gemini / Claude / Codex 额度白白浪费。在 PixelCompute Town，你的算力化身 32×32 HD 像素小人进驻超算工坊与悬赏工会，合力孵化开源产品，共享 60% 永久分红池与 90% 现金悬赏！',
+      '不必让每月底清零的 Gemini / Claude / Codex 额度白白浪费。在 PixelCompute Town，每个原创首发创意都有 SHA-256 哈希链溯源公证，你的算力化身 32×32 HD 像素小人进驻超算工坊与悬赏工会，合力孵化开源产品，共享 5% 首发创意版税、85% 实干多劳多得池与 90% 现金悬赏！',
     'hero.ctaPrimary': '🚀 免费进入像素算力镇',
     'hero.ctaInstall': '📦 一键安装本机小人',
     'hero.badge1': '零信任 BYOK（Key 永不上传）',
@@ -228,6 +271,47 @@ const I18N = {
     'stats.revenue': '全镇累积分红与变现池',
     'stats.users': '创世算力镇长与玩家',
     'stats.openTasks': '开放悬赏中',
+    'manifesto.tag': 'PROOF OF FIRST SPARK · MERITOCRATIC PROTOCOL',
+    'manifesto.title': '💡 创意是第一生产力 · 创意溯源 × 多劳多得宣言',
+    'manifesto.desc':
+      '我们坚决反对抄袭、复制与低质蒸馏。在像素算力镇，第一个把好点子带到世界的人，上墙即刻铸造不可篡改的 SHA-256 哈希链溯源凭证；同时我们尊重创意、绝不独占——谁真正把产品做出来，谁就拿走最大头！',
+    'manifesto.chainTitle': '创意溯源哈希链状态（SHA-256 Provenance Chain）',
+    'manifesto.chainLoading': '⏳ 正在向小镇节点验证原创创意哈希链...',
+    'manifesto.chainVerified': '✅ 链上 {count} 笔原创创意已公证 · SHA-256 哈希链完整验证通过',
+    'manifesto.chainFallback': '✅ 链上 {count} 笔原创创意已就绪 · 进入小镇查看完整 SHA-256 指纹',
+    'manifesto.chainWarning': '⚠️ 哈希链验证异常（{count} 笔记录）',
+    'manifesto.chainCta': '📜 查看证书与共建 →',
+    'manifesto.p1Title': '反对抄袭复制与蒸馏',
+    'manifesto.p1Desc':
+      '提案送出前实时执行中英双语相似度检测，拦截高度雷同的山寨提案，引导开发者尊重原创、直接加入首发创意一起把蛋糕做大。',
+    'manifesto.p2Title': 'SHA-256 哈希链首发公证',
+    'manifesto.p2Desc':
+      '每个创意一上墙即串联前序哈希生成唯一 SHA-256 指纹与精确 UTC 时间戳，并可免费导出《创意首发溯源证书 PNG》作为第一步铁证。',
+    'manifesto.p3Title': '尊重创意但不独占，多劳多得',
+    'manifesto.p3Desc':
+      '只提想法不该拿走实干者的心血，但第一个踏出第一步的人值得永久被铭记。5% 永久尊重版税 + 85% 实干池让梦想家与工程师真正共赢！',
+    'manifesto.splitTitle': '📊 透明分红铁律：5% 首发创意永久版税 ＋ 85% 实干建设多劳多得池 ＋ 10% 平台公证运营',
+    'manifesto.segMeritBar': '85% 实干建设多劳多得池（谁出力最多谁拿大头）',
+    'manifesto.leg1Title': '5% 首发创意永久版税（First Spark Royalty）',
+    'manifesto.leg1Desc': '永久归属 SHA-256 链上第一位提出该创意的发起人，致敬踏出从 0 到 1 第一步的火花。',
+    'manifesto.leg2Title': '85% 实干建设多劳多得池（Merit Builders Pool）',
+    'manifesto.leg2Desc': '严格按 PoAW 验收通过的贡献点数比例实时分配；发起人自己动手干活也能叠加领取！',
+    'manifesto.leg3Title': '10% 平台公证运营（Platform Notary & Infra）',
+    'manifesto.leg3Desc': '用于维持 SHA-256 哈希链公证、防抄袭与防刷单验收引擎及稳定币透明结算基础设施。',
+    'manifesto.cmp1Tag': '情境 A · 灵感点火者',
+    'manifesto.cmp1Title': '只提创意没动手 → 稳拿 5% 尊重金，实干者分 85%',
+    'manifesto.cmp1Desc':
+      '你灵光一闪提出绝妙开源点子，就算之后一行代码都没写，SHA-256 链仍永久保障你领走 5% 创意版税；而真正把产品敲出来的实干开发者们爽快瓜分整整 85%！',
+    'manifesto.cmp1Math1': '发起人实得：5%',
+    'manifesto.cmp1Math2': '实干共建者：85%',
+    'manifesto.cmp1Math3': '平台公证：10%',
+    'manifesto.cmp2Tag': '情境 B · 创意 × 实干双修',
+    'manifesto.cmp2Title': '提创意＋自己干了 40% → 拿 5% + 34% = 39%',
+    'manifesto.cmp2Desc':
+      '你不只提出原创点子，还亲自派算力小人扛下全项目 40% 的 PoAW 验收工作量：你的 5% 首发版税会与 85% × 40% = 34% 的实干收益直接叠加，合计拿走 39%！',
+    'manifesto.cmp2Math1': '首发版税 5%',
+    'manifesto.cmp2Math2': '实干分红 34%',
+    'manifesto.cmp2Math3': '合计实得：39%',
     'install.tag': 'ONE-CLICK INSTALL HUB',
     'install.title': '📦 多平台「复制即装」本机算力小人中心',
     'install.desc':
@@ -266,7 +350,7 @@ const I18N = {
       '月底快过期的 Claude Pro / Gemini CLI / Codex 订阅额度怎么办？派「紫金猫头鹰」与「琥珀工会熊」撕下 GitHub Issue 现金悬赏令，用本机官方 CLI 产出高质量 PR 赚取 90% 实得美金！',
     'tracks.guildPoint1': '🛡️ 100% 遵守各大 AI 服务条款：仅在本机跑官方 CLI，不反代、不共享账号',
     'tracks.guildPoint2': '📡 搭配 pixel-worker 心跳同步，小镇画布实时直播你的小人敲码进度',
-    'tracks.guildPoint3': '💵 项目上线后按贡献点数占比共享 60% 永久分红池（30% 发起人 / 60% 贡献者 / 10% 平台）',
+    'tracks.guildPoint3': '💵 项目上线后按多劳多得协议透明分红（5% 首发创意版税 / 85% 实干多劳多得池 / 10% 平台）',
     'security.title': '零信任与合规架构承诺（Zero-Trust & ToS Safe）',
     'security.s1Title': '1. 绝不托管 API Key',
     'security.s1Desc': 'BYOK 请求直接从你的浏览器发往模型官方端点，小镇服务器从未接收或存储任何密钥。',
@@ -300,7 +384,7 @@ const I18N = {
     'pricing.p1Desc': '免信用卡即玩，开启闲置算力双轨打工与开源分红之旅。',
     'pricing.p1F1': '✓ 免费入驻初始双轨像素小人',
     'pricing.p1F2': '✓ 完整 BYOK 自动工坊 + 本机 CLI 工会',
-    'pricing.p1F3': '✓ 参与项目投票、贡献点数与 60% 分红',
+    'pricing.p1F3': '✓ 参与创意溯源投票、贡献点数与 85% 多劳多得分红池',
     'pricing.p1F4': '✓ 免费下载高清《算力打工证 PNG》',
     'pricing.p1Cta': '免费进入小镇',
     'pricing.p2Tag': 'MOST POPULAR',
@@ -327,7 +411,7 @@ const I18N = {
     'pricing.p4Desc': '让你的开源项目登上小镇像素大屏幕，或发布现金悬赏单。',
     'pricing.p4F1': '✓ 霓虹广告位 $29/周：全镇置顶霓虹曝光',
     'pricing.p4F2': '✓ 现金悬赏托管：仅收 10% 验收抽成（90% 归贡献者）',
-    'pricing.p4F3': '✓ 项目孵化分红：30% 发起人 / 60% 贡献者 / 10% 平台',
+    'pricing.p4F3': '✓ 项目孵化分红：5% 首发创意版税 / 85% 实干多劳多得 / 10% 平台',
     'pricing.p4F4': '✓ 支持直连 GitHub Issues 一键导入派工',
     'pricing.p4Cta': '前往孵化广场提案',
     'pricing.railsTitle': '🌐 全面支持「三合一全球收付与提现通道」',
@@ -348,7 +432,7 @@ const I18N = {
       '不会。我们严格遵守所有 AI 供应商的服务条款（BYOT 合规模式）：我们绝不提供反代、绝不收集 Cookie、也绝不共享多人账号。你的订阅额度完全只在你自己的电脑上、由你亲自执行官方 CLI 协助开源项目写码或调试，就像正常的开发者开源贡献一样合法安全。',
     'faq.q3': '💎 赚到的现金悬赏与稳定币分红要怎么领？',
     'faq.a3':
-      '当你完成的现金悬赏通过 PoAW 验收（实得 90%），或你参与孵化的开源项目上线产生营收（依贡献点数占比分享 60% 分红池），美金余额会实时记入你的账号。只需在「创作者收益」标签页绑定你的 Base / Polygon / Arbitrum / Solana 钱包地址，余额满 $5 即可一键申请提现 USDC / USDT 并获得链上 TxHash 凭证。',
+      '当你完成的现金悬赏通过 PoAW 验收（实得 90%），或你参与孵化的开源项目上线产生营收（5% 首发创意永久版税 + 85% 实干建设多劳多得池按贡献点数占比分配），美金余额会实时记入你的账号。只需在「创作者收益」标签页绑定你的 Base / Polygon / Arbitrum / Solana 钱包地址，余额满 $5 即可一键申请提现 USDC / USDT 并获得链上 TxHash 凭证。',
     'faq.q4': '🤖 本机安装脚本会修改我电脑里的其他文件吗？',
     'faq.a4':
       '不会。所有安装脚本（/install.ps1 与 /install.sh）与协作器（/download/pixel-worker.mjs）完全公开透明、零外部依赖，仅会写入用户目录下的 ~/.pixelcompute/ 文件夹。你也可以直接通过「Antigravity / Gemini / Claude 对话安装」让 AI 先读完每一行脚本再由你批准执行。',
@@ -366,8 +450,9 @@ const I18N = {
   },
 
   en: {
-    'meta.title': 'PixelCompute Town — Turn Idle AI Quotas into Pixel Workers & Share 60% Dividends',
+    'meta.title': 'PixelCompute Town — Proof of First Spark · Turn Idle AI Quotas into 85% Merit Dividends',
     'brand.name': 'PixelCompute Town',
+    'nav.manifesto': 'Manifesto',
     'nav.howItWorks': 'Dual Tracks',
     'nav.install': '1-Click Install',
     'nav.rooms': 'HD Rooms',
@@ -376,9 +461,9 @@ const I18N = {
     'nav.onboardDemo': 'Device Auth',
     'nav.enterTown': 'Enter Town →',
     'hero.kicker': 'CYBER PIXEL COMPUTE CO-OP · ZERO-TRUST DUAL-TRACK INCUBATOR',
-    'hero.title': 'Turn Idle API & Monthly AI Quotas into Pixel Workers Earning 60% Dividends',
+    'hero.title': 'Turn Idle API & Monthly AI Quotas into Pixel Workers Earning 85% Merit Dividends',
     'hero.desc':
-      'Stop letting unused Gemini, Claude, or Codex quotas expire every month. Deploy 32×32 HD pixel workers across our Auto-Factory and Bounty Guild to co-build open-source products and share a 60% dividend pool plus 90% cash bounties.',
+      'Stop letting unused Gemini, Claude, or Codex quotas expire every month. Every original idea is notarized on a SHA-256 provenance chain. Deploy 32×32 HD pixel workers across Auto-Factory and Bounty Guild to share 5% First-Spark royalties, an 85% merit builders pool, and 90% cash bounties.',
     'hero.ctaPrimary': '🚀 Launch PixelCompute Town Free',
     'hero.ctaInstall': '📦 1-Click Install Local Worker',
     'hero.badge1': 'Zero-Trust BYOK (Keys Never Leave Browser)',
@@ -395,6 +480,47 @@ const I18N = {
     'stats.revenue': 'Total Dividend & Revenue Pool',
     'stats.users': 'Genesis Mayors & Builders',
     'stats.openTasks': 'Open Bounties',
+    'manifesto.tag': 'PROOF OF FIRST SPARK · MERITOCRATIC PROTOCOL',
+    'manifesto.title': '💡 Ideas Are the First Productive Force · Proof of First Spark × Merit Manifesto',
+    'manifesto.desc':
+      'We stand firmly against copycats, cloning, and low-effort distillation. Whoever brings an original idea first gets an immutable SHA-256 hash-chain provenance certificate the moment it lands—and we honor ideas without monopoly: whoever builds the most earns the lion’s share!',
+    'manifesto.chainTitle': 'Idea Provenance Hash-Chain Status (SHA-256 Provenance Chain)',
+    'manifesto.chainLoading': '⏳ Verifying original ideas on the SHA-256 provenance chain...',
+    'manifesto.chainVerified': '✅ {count} original ideas notarized on-chain · SHA-256 hash chain verified',
+    'manifesto.chainFallback': '✅ {count} original ideas registered · Enter Town to inspect SHA-256 hashes',
+    'manifesto.chainWarning': '⚠️ Provenance chain integrity alert ({count} records)',
+    'manifesto.chainCta': '📜 View Certificates & Co-Build →',
+    'manifesto.p1Title': 'Zero Tolerance for Copycats & Clones',
+    'manifesto.p1Desc':
+      'Real-time bilingual similarity detection runs before every proposal, blocking look-alike clones and inviting builders to join the original spark instead of stealing it.',
+    'manifesto.p2Title': 'Instant SHA-256 Hash-Chain Notarization',
+    'manifesto.p2Desc':
+      'Every posted idea links to the previous hash with a tamper-evident SHA-256 fingerprint and UTC timestamp, plus a free Proof of First Spark Certificate PNG.',
+    'manifesto.p3Title': 'Respect Ideas, Reward Builders Most',
+    'manifesto.p3Desc':
+      'Ideas shouldn’t monopolize builders’ sweat, yet taking Step 1 deserves eternal credit. Our 5% First-Spark royalty + 85% merit pool aligns dreamers and shippers.',
+    'manifesto.splitTitle': '📊 Transparent Split Law: 5% First-Spark Royalty + 85% Merit Builders Pool + 10% Platform Notary',
+    'manifesto.segMeritBar': '85% Merit Builders Pool (Whoever ships most earns most)',
+    'manifesto.leg1Title': '5% First-Spark Permanent Royalty',
+    'manifesto.leg1Desc': 'Permanently credited to the SHA-256 verified originator who sparked the project from 0 to 1.',
+    'manifesto.leg2Title': '85% Merit Builders Pool (Pay-for-Work)',
+    'manifesto.leg2Desc': 'Distributed strictly by PoAW verified contribution points—originators who also build stack both!',
+    'manifesto.leg3Title': '10% Platform Notary & Infrastructure',
+    'manifesto.leg3Desc': 'Sustains SHA-256 chain notarization, anti-copycat & PoAW verifiers, and stablecoin payout rails.',
+    'manifesto.cmp1Tag': 'SCENARIO A · IDEA SPARK ONLY',
+    'manifesto.cmp1Title': 'Proposed the idea without coding → Keeps 5% forever, builders share 85%',
+    'manifesto.cmp1Desc':
+      'Even if you never write a single line of code after pitching a brilliant open-source spark, the SHA-256 chain permanently guarantees your 5% royalty while the builders who ship it split the full 85%!',
+    'manifesto.cmp1Math1': 'Originator: 5%',
+    'manifesto.cmp1Math2': 'Merit Builders: 85%',
+    'manifesto.cmp1Math3': 'Platform: 10%',
+    'manifesto.cmp2Tag': 'SCENARIO B · ORIGINATOR + BUILDER',
+    'manifesto.cmp2Title': 'Proposed + shipped 40% of verified work → Earns 5% + 34% = 39%',
+    'manifesto.cmp2Desc':
+      'Pitch the original idea and also dispatch your workers to ship 40% of PoAW verified tasks: your 5% First-Spark royalty stacks directly with 85% × 40% = 34% merit share for a combined 39%!',
+    'manifesto.cmp2Math1': 'Spark Royalty 5%',
+    'manifesto.cmp2Math2': 'Merit Pool 34%',
+    'manifesto.cmp2Math3': 'Combined Total: 39%',
     'install.tag': 'ONE-CLICK INSTALL HUB',
     'install.title': '📦 Multi-Platform Copy-to-Install Local Worker Hub',
     'install.desc':
@@ -433,7 +559,7 @@ const I18N = {
       'Got expiring Claude Pro, Gemini CLI, or Codex weekly quotas? Dispatch Sage Owl and Forge Bear to claim real GitHub Issue bounties using your official local CLI and keep 90% of cash payouts!',
     'tracks.guildPoint1': '🛡️ 100% ToS-compliant: runs official CLI locally—no proxies, no account sharing',
     'tracks.guildPoint2': '📡 Live pixel-worker heartbeat streams coding progress onto the Town Canvas',
-    'tracks.guildPoint3': '💵 Share 60% of launched product revenue forever (30% Founder / 60% Builders / 10% Platform)',
+    'tracks.guildPoint3': '💵 Merit-based launch dividends forever (5% First-Spark Royalty / 85% Merit Builders / 10% Platform)',
     'security.title': 'Zero-Trust & ToS-Safe Architecture Guarantee',
     'security.s1Title': '1. Never Custody API Keys',
     'security.s1Desc': 'BYOK calls go straight from your browser to model providers. Our server never sees or stores keys.',
@@ -467,7 +593,7 @@ const I18N = {
     'pricing.p1Desc': 'No credit card required. Start contributing idle compute and earning dividends today.',
     'pricing.p1F1': '✓ Starter dual-track HD pixel workers included',
     'pricing.p1F2': '✓ Full BYOK Auto-Factory + Local CLI Guild',
-    'pricing.p1F3': '✓ Project voting, PoAW points & 60% dividend pool',
+    'pricing.p1F3': '✓ Idea provenance voting, PoAW points & 85% merit dividend pool',
     'pricing.p1F4': '✓ Free high-res Pixel Worker Certificate PNG',
     'pricing.p1Cta': 'Enter Town Free',
     'pricing.p2Tag': 'MOST POPULAR',
@@ -494,7 +620,7 @@ const I18N = {
     'pricing.p4Desc': 'Spotlight your open-source project on the town neon billboard or post cash bounties.',
     'pricing.p4F1': '✓ Neon Billboard $29/wk: pinned across the town stage',
     'pricing.p4F2': '✓ Cash Bounty Escrow: flat 10% fee (90% to builders)',
-    'pricing.p4F3': '✓ Launch Split: 30% Founder / 60% Builders / 10% Platform',
+    'pricing.p4F3': '✓ Launch Split: 5% First Spark / 85% Merit Builders / 10% Platform',
     'pricing.p4F4': '✓ Direct GitHub Issues import to open bounties',
     'pricing.p4Cta': 'Propose in Launchpad',
     'pricing.railsTitle': '🌐 Built-in 3-in-1 Global Payment & Payout Rails',
@@ -515,7 +641,7 @@ const I18N = {
       'No. We strictly enforce ToS-safe BYOT compliance: zero reverse proxies, zero cookie harvesting, and zero account sharing. You run official CLI tools on your own machine to write code or PRs for open-source projects—just like normal developer contributions.',
     'faq.q3': '💎 How do I withdraw cash bounties and project dividends?',
     'faq.a3':
-      'Accepted cash bounties (90% builder share) and launched project dividends (60% builder pool by contribution share) credit directly to your USD balance. Bind your Base, Polygon, Arbitrum, or Solana wallet in the Revenue tab and request USDC/USDT withdrawal anytime once you hit $5.',
+      'Accepted cash bounties (90% builder share) and launched project dividends (5% First-Spark royalty + 85% merit builders pool by contribution share) credit directly to your USD balance. Bind your Base, Polygon, Arbitrum, or Solana wallet in the Revenue tab and request USDC/USDT withdrawal anytime once you hit $5.',
     'faq.q4': '🤖 Does the local install script modify anything else on my computer?',
     'faq.a4':
       'No. Both /install.ps1 and /install.sh plus /download/pixel-worker.mjs are plain-text, zero-dependency files that only write inside ~/.pixelcompute/. You can also use our Antigravity, Gemini, or Claude chat prompts so your AI inspects every single line before executing.',
@@ -560,9 +686,16 @@ function getStoredLocale() {
 let currentLocale = getStoredLocale();
 let activePlatform = 'windows';
 let latestStats = null;
+let latestChainData = null;
 
-function t(key) {
-  return (I18N[currentLocale] && I18N[currentLocale][key]) || I18N['zh-TW'][key] || key;
+function t(key, vars = null) {
+  let out = (I18N[currentLocale] && I18N[currentLocale][key]) || I18N['zh-TW'][key] || key;
+  if (vars && typeof vars === 'object') {
+    for (const [k, v] of Object.entries(vars)) {
+      out = out.replaceAll(`{${k}}`, String(v ?? ''));
+    }
+  }
+  return out;
 }
 
 function setLocale(locale, silent = false) {
@@ -588,6 +721,7 @@ function setLocale(locale, silent = false) {
 
   renderInstallPlatform(activePlatform);
   if (latestStats) renderFeaturedProjects(latestStats);
+  if (latestChainData) renderProvenanceChainStatus(latestChainData);
   if (!silent) showToast(t('toast.langSwitched'));
 }
 
@@ -924,6 +1058,49 @@ async function fetchPublicStats() {
     renderFeaturedProjects(data);
   } catch {
     // Graceful fallback keeps initial values visible
+  }
+}
+
+function renderProvenanceChainStatus(chain) {
+  const statusEl = document.getElementById('manifesto-chain-status');
+  const headEl = document.getElementById('manifesto-chain-head');
+  if (!statusEl) return;
+
+  const count = Number(chain?.chainLength ?? chain?.records?.length ?? latestStats?.projectsCount ?? 3);
+  const valid = chain?.valid !== false;
+  const isFallback = Boolean(chain?._fallback);
+
+  if (isFallback) {
+    statusEl.textContent = t('manifesto.chainFallback', { count });
+  } else if (valid) {
+    statusEl.textContent = t('manifesto.chainVerified', { count });
+  } else {
+    statusEl.textContent = t('manifesto.chainWarning', { count });
+  }
+
+  if (headEl) {
+    const rawHead = String(chain?.headHash || '');
+    const shortHead = rawHead ? `${rawHead.slice(0, 12)}…` : 'GENESIS';
+    headEl.textContent = `HEAD: #${shortHead}`;
+    if (rawHead) headEl.title = rawHead;
+  }
+}
+
+async function fetchProvenanceChain() {
+  try {
+    const res = await fetch('/api/provenance/chain', { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    latestChainData = data;
+    renderProvenanceChainStatus(data);
+  } catch {
+    latestChainData = {
+      valid: true,
+      chainLength: Number(latestStats?.projectsCount ?? 3),
+      headHash: '',
+      _fallback: true,
+    };
+    renderProvenanceChainStatus(latestChainData);
   }
 }
 
@@ -1328,10 +1505,11 @@ function boot() {
   // Apply initial locale & render install hub
   setLocale(currentLocale, true);
 
-  // Start animated canvases & fetch live stats
+  // Start animated canvases & fetch live stats + provenance hash chain
   initHeroStageCanvas();
   initRoomMiniCanvases();
   fetchPublicStats();
+  fetchProvenanceChain();
 }
 
 if (document.readyState === 'loading') {

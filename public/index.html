@@ -253,7 +253,7 @@
       <div class="tab-pane" id="tab-incubator" data-pane="incubator">
         <div class="section-toolbar">
           <div class="mono" style="font-size: 12px; color: var(--text-sub);" id="incubator-summary" data-i18n="incubator.summaryDefault">
-            投票立項 → 雙軌共建 → 上線透明分紅（30% 發起人 / 60% 貢獻者 / 10% 平臺）
+            SHA-256 創意溯源 → 雙軌共建 → 透明多勞多得（5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺）
           </div>
           <div class="toolbar-group">
             <button type="button" class="btn btn-sm btn-primary" id="btn-incubator-jump-import" data-i18n="incubator.jumpImport">🔗 匯入 GitHub Issue</button>
@@ -621,17 +621,17 @@
     </div>
   </div>
 
-  <!-- Modal 3: 提案新項目 -->
+  <!-- Modal 3: 提案新項目（含即時反抄襲查重偵測） -->
   <div class="modal-backdrop" id="modal-propose" role="dialog" aria-modal="true" aria-labelledby="propose-modal-title">
-    <div class="modal-dialog" style="max-width: 540px;">
+    <div class="modal-dialog" style="max-width: 580px;">
       <div class="modal-header">
-        <h2 class="modal-title" id="propose-modal-title" data-i18n="modal.propose.title">🚀 提案新孵化項目</h2>
+        <h2 class="modal-title" id="propose-modal-title" data-i18n="modal.propose.title">🚀 提案新孵化項目（SHA-256 創意首發公證）</h2>
         <button type="button" class="btn btn-sm" data-close-modal="modal-propose" data-i18n="btn.close">✕ 關閉</button>
       </div>
       <form id="propose-form">
         <div class="modal-body">
           <div class="info-banner pink">
-            <span data-i18n-html="modal.propose.banner">提案上牆後由社群投票，達標後將<strong>自動破土動工並生成雙軌任務</strong>！上線後收益按 30% 發起人 / 60% 貢獻者 / 10% 平臺透明分紅。</span>
+            <span data-i18n-html="modal.propose.banner">提案上牆即刻生成 <strong>SHA-256 創意首發哈希鏈憑證</strong>！達標後自動破土生成雙軌任務，上線營收按 <strong>5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺</strong> 透明分紅。</span>
           </div>
           <div class="form-field">
             <label class="form-label" for="propose-name" data-i18n="modal.propose.nameLabel">項目名稱 *</label>
@@ -641,6 +641,28 @@
             <label class="form-label" for="propose-desc" data-i18n="modal.propose.descLabel">項目簡介與願景 *</label>
             <textarea class="textarea" id="propose-desc" required rows="3" data-i18n-placeholder="modal.propose.descPlaceholder" placeholder="用 1-2 句話說明這套產品要解決什麼痛點、目標用戶是誰..."></textarea>
           </div>
+
+          <!-- 🛡️ 即時反抄襲查重偵測警示盒 -->
+          <div class="copycat-clean-bar" id="propose-copycat-clean" style="display: none;" data-i18n="modal.propose.copycatClean">
+            ✅ 即時反抄襲查重通過：未發現高度雷同提案，送出即鑄造首發 SHA-256 證書！
+          </div>
+          <div class="copycat-alert-box" id="propose-copycat-alert" style="display: none;" role="alert">
+            <div class="copycat-alert-title" id="propose-copycat-title"></div>
+            <div class="copycat-alert-meta mono" id="propose-copycat-meta"></div>
+            <div class="copycat-alert-desc" id="propose-copycat-desc" data-i18n="modal.propose.copycatDesc">
+              像素算力鎮反對抄襲複製蒸餾——與其重複造輪子，不如直接加入原創意共建，靠實幹拿走 85% 多勞多得分紅池大頭！
+            </div>
+            <div class="copycat-alert-actions">
+              <button type="button" class="btn btn-sm btn-green" id="btn-copycat-join" data-i18n="modal.propose.copycatJoinBtn">
+                🤝 尊重原創：直接加入該創意共建
+              </button>
+              <label class="copycat-derivative-label" id="propose-derivative-wrap" style="display: none;">
+                <input type="checkbox" id="propose-derivative-ack" />
+                <span data-i18n="modal.propose.derivativeAck">我確認此為差異化延伸靈感，並願標記致敬來源指紋</span>
+              </label>
+            </div>
+          </div>
+
           <div class="form-grid">
             <div class="form-field">
               <label class="form-label" for="propose-category" data-i18n="modal.propose.catLabel">產品類型</label>
@@ -663,7 +685,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn" data-close-modal="modal-propose" data-i18n="btn.cancel">取消</button>
-          <button type="submit" class="btn btn-pink" data-i18n="modal.propose.submitBtn">🚀 送出提案上牆投票</button>
+          <button type="submit" class="btn btn-pink" id="btn-propose-submit" data-i18n="modal.propose.submitBtn">🚀 送出提案並鑄造首發指紋</button>
         </div>
       </form>
     </div>
@@ -855,6 +877,91 @@
         </div>
 
         <div class="code-box" id="pay-status-msg" style="display: none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 8: 📜 創意首發溯源憑證 & 多勞多得分紅試算 (#provenance-modal) -->
+  <div class="modal-backdrop" id="provenance-modal" role="dialog" aria-modal="true" aria-labelledby="provenance-modal-title">
+    <div class="modal-dialog" style="max-width: 720px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="provenance-modal-title" data-i18n="modal.provenance.title">📜 創意首發溯源憑證 &amp; 多勞多得分紅試算</h2>
+        <button type="button" class="btn btn-sm" data-close-modal="provenance-modal" data-i18n="btn.close">✕ 關閉</button>
+      </div>
+      <div class="modal-body">
+        <!-- 哈希鏈驗證綠燈條 -->
+        <div class="prov-verify-banner" id="prov-chain-banner" data-i18n="modal.provenance.chainVerifying">
+          ⏳ 正在向小鎮節點驗證 SHA-256 雜湊鏈...
+        </div>
+
+        <!-- 項目與首發基本資訊 -->
+        <div class="prov-meta-grid">
+          <div class="prov-meta-cell">
+            <span class="form-label" data-i18n="modal.provenance.originatorLabel">首發創意人</span>
+            <strong id="prov-originator-name">-</strong>
+          </div>
+          <div class="prov-meta-cell">
+            <span class="form-label" data-i18n="modal.provenance.timestampLabel">公證時間 (UTC)</span>
+            <strong class="mono" id="prov-originated-at">-</strong>
+          </div>
+          <div class="prov-meta-cell">
+            <span class="form-label" data-i18n="modal.provenance.coBuildersLabel">共建開發者</span>
+            <strong id="prov-cobuilders-count">1</strong>
+          </div>
+        </div>
+
+        <!-- SHA-256 溯源指紋與前序雜湊 -->
+        <div class="prov-hash-box">
+          <div class="pay-order-row">
+            <span class="form-label" data-i18n="modal.provenance.ideaHashLabel">SHA-256 創意首發指紋 (ideaHash)</span>
+            <button type="button" class="btn btn-sm" id="btn-prov-copy-hash" data-i18n="modal.provenance.copyHashBtn">📋 複製指紋</button>
+          </div>
+          <div class="code-box mono prov-hash-code" id="prov-idea-hash">-</div>
+          <span class="form-label" data-i18n="modal.provenance.prevHashLabel">前序鏈雜湊 (prevIdeaHash)</span>
+          <div class="code-box mono prov-prev-code" id="prov-prev-hash">-</div>
+        </div>
+
+        <!-- 實時多勞多得分紅試算表 -->
+        <div class="prov-calc-box">
+          <div class="subsection-title" style="margin-top: 0;">
+            <span data-i18n="modal.provenance.calcTitle">⚖️ 實時多勞多得分紅試算表（5% 首發版稅 / 85% 實幹池 / 10% 平臺）</span>
+          </div>
+          <div class="prov-calc-controls">
+            <div class="form-field">
+              <label class="form-label" for="prov-calc-revenue" data-i18n="modal.provenance.calcRevLabel">假設項目總營收（USD）：</label>
+              <input class="input mono" id="prov-calc-revenue" type="number" min="10" max="1000000" step="100" value="1000" />
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="prov-calc-work-pct">
+                <span data-i18n="modal.provenance.calcWorkLabel">假設你的實幹貢獻佔比：</span>
+                <strong class="mono" id="prov-calc-work-val" style="color: var(--accent-cyan);">40%</strong>
+              </label>
+              <input id="prov-calc-work-pct" type="range" min="0" max="100" step="5" value="40" />
+            </div>
+            <label class="autopilot-toggle" id="prov-calc-orig-label">
+              <input type="checkbox" id="prov-calc-is-originator" checked />
+              <span data-i18n="modal.provenance.calcOriginatorCheck">我是首發創意人（疊加 5% 永久版稅）</span>
+            </label>
+          </div>
+          <div class="prov-calc-table" id="prov-calc-results"></div>
+
+          <div class="subsection-title" style="font-size: 12px; margin-top: 8px;">
+            <span data-i18n="modal.provenance.calcContributorsTitle">👥 目前鏈上實幹貢獻者與預估權重</span>
+          </div>
+          <div class="ledger-list" id="prov-contributors-list"></div>
+        </div>
+
+        <!-- 像素風《創意首發溯源證書 PNG》即時預覽 -->
+        <div class="subsection-title">
+          <span data-i18n="modal.provenance.certPreviewTitle">🖼️ 《創意首發溯源證書 PNG》即時預覽（900×520）</span>
+        </div>
+        <div class="cert-preview-wrap">
+          <img id="prov-cert-preview-img" alt="Proof of First Spark Certificate PNG" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-close-modal="provenance-modal" data-i18n="btn.closeSimple">關閉</button>
+        <button type="button" class="btn btn-green" id="btn-prov-download-cert" data-i18n="modal.provenance.downloadCertBtn">⬇️ 下載創意首發證書 PNG</button>
       </div>
     </div>
   </div>

@@ -191,8 +191,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(boot.json.config.platformFeePct, 10);
     assert.equal(boot.json.config.billboardPriceUsd, 29);
     assert.deepEqual(boot.json.config.revenueSplit, {
-      creatorPct: 30,
-      contributorsPct: 60,
+      originatorSparkPct: 5,
+      meritPoolPct: 85,
       platformPct: 10,
     });
 
@@ -446,7 +446,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(submit25.json.state.founderRevenue.bountyFeesUsd, round2(feeBefore + 4 + 2.5));
   });
 
-  it('6. Project launch at 100% and exact 30%/60%/10% dividend math (initial $200 + simulated $100)', async () => {
+  it('6. Project launch at 100% & exact 5%/85%/10% Proof-of-First-Spark + Merit Split math (active & hands-off originator)', async () => {
+    // ── Scenario A: Originator ALSO contributes hands-on work (5% spark + proportional share of 85% merit pool) ──
     // proj-meta started at 60%, task-meta-i18n (+20%) pushed it to 80% -> launch must fail before 100%
     const earlyLaunch = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/launch', {});
     assert.equal(earlyLaunch.status, 400);
@@ -468,12 +469,14 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
 
     const preLaunch = await apiJson(baseUrl, 'GET', '/api/bootstrap');
     const projMeta = preLaunch.json.state.projects.find((p) => p.id === 'proj-meta');
+    const playerId = preLaunch.json.state.player.id;
     const usdBefore = preLaunch.json.state.player.usdBalance;
     const carryBefore = preLaunch.json.state.founderRevenue.incubationCarryUsd;
     const totalPoints = Object.values(projMeta.contributions).reduce((a, b) => a + b, 0);
-    const playerPoints = projMeta.contributions[preLaunch.json.state.player.id];
+    const playerPoints = projMeta.contributions[playerId];
+    assert.ok(playerPoints > 0, 'Originator must have hands-on contribution points in Scenario A');
 
-    // Launch with default $200 initial revenue
+    // Launch with $200 initial revenue -> 5% ($10) spark + 85% ($170) merit pool + 10% ($20) platform
     const launchRes = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/launch', {
       initialRevenueUsd: 200,
     });
@@ -482,35 +485,45 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
 
     const div = launchRes.json.dividend;
     assert.equal(div.grossRevenueUsd, 200);
-    assert.equal(div.creatorShareUsd, 60, 'Creator share must be 30% of $200 = $60');
-    assert.equal(div.contributorsPoolUsd, 120, 'Contributors pool must be 60% of $200 = $120');
+    assert.equal(div.sparkRoyaltyUsd, 10, 'Spark royalty must be 5% of $200 = $10');
+    assert.equal(div.meritPoolUsd, 170, 'Merit pool must be 85% of $200 = $170');
     assert.equal(div.platformCarryUsd, 20, 'Platform carry must be 10% of $200 = $20');
+    assert.equal(div.creatorShareUsd, 10, 'Legacy creatorShareUsd alias should match 5% = $10');
+    assert.equal(div.contributorsPoolUsd, 170, 'Legacy contributorsPoolUsd alias should match 85% = $170');
 
-    // Sum of all contributor payouts must equal contributorsPoolUsd exactly (no cent drift)
+    // Sum of all contributor payouts must equal meritPoolUsd ($170) exactly (no cent drift)
     const contribPayoutSum = round2(
       div.payouts.filter((p) => p.role === 'contributor').reduce((sum, p) => sum + p.amountUsd, 0),
     );
-    assert.equal(contribPayoutSum, 120);
+    assert.equal(contribPayoutSum, 170);
 
     const grandPayoutSum = round2(div.payouts.reduce((sum, p) => sum + p.amountUsd, 0));
     assert.equal(grandPayoutSum, 200);
 
-    // Check player's exact payout (creator $60 + proportional contributor share)
+    // Check active originator's exact stacked payout (5% spark $10 + proportional share of 85% merit pool)
     const playerContribPayout = div.payouts.find(
-      (p) => p.role === 'contributor' && p.userId === preLaunch.json.state.player.id,
+      (p) => p.role === 'contributor' && p.userId === playerId,
     );
     assert.ok(playerContribPayout);
-    const approxExpectedContrib = round2(120 * (playerPoints / totalPoints));
-    assert.ok(Math.abs(playerContribPayout.amountUsd - approxExpectedContrib) <= 0.02);
-    assert.equal(div.playerShareUsd, round2(60 + playerContribPayout.amountUsd));
-    assert.equal(launchRes.json.state.player.usdBalance, round2(usdBefore + div.playerShareUsd));
+    const approxExpectedMerit = round2(170 * (playerPoints / totalPoints));
+    assert.ok(Math.abs(playerContribPayout.amountUsd - approxExpectedMerit) <= 0.02);
+    assert.equal(div.playerSparkUsd, 10);
+    assert.equal(div.playerMeritUsd, playerContribPayout.amountUsd);
+    assert.equal(div.playerTotalUsd, round2(10 + playerContribPayout.amountUsd));
+    assert.equal(div.originatorTotalUsd, div.playerTotalUsd);
+    assert.equal(div.playerShareUsd, div.playerTotalUsd);
+    assert.equal(div.payoutsByUser[playerId].sparkUsd, 10);
+    assert.equal(div.payoutsByUser[playerId].meritUsd, playerContribPayout.amountUsd);
+    assert.equal(div.payoutsByUser[playerId].totalUsd, div.playerTotalUsd);
+    assert.equal(div.payoutsByUser[playerId].isOriginator, true);
+    assert.equal(launchRes.json.state.player.usdBalance, round2(usdBefore + div.playerTotalUsd));
     assert.equal(launchRes.json.founderRevenue.incubationCarryUsd, round2(carryBefore + 20));
 
     // Re-launching an already launched project must fail
     const reLaunch = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/launch', {});
     assert.equal(reLaunch.status, 400);
 
-    // Simulate subsequent $100 revenue -> 30 / 60 / 10
+    // Simulate subsequent $100 revenue -> 5 ($5) / 85 ($85) / 10 ($10)
     const usdBeforeSim = launchRes.json.state.player.usdBalance;
     const carryBeforeSim = launchRes.json.founderRevenue.incubationCarryUsd;
     const simRes = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/simulate-revenue', {
@@ -518,16 +531,195 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     });
     assert.equal(simRes.status, 200);
     assert.equal(simRes.json.dividend.grossRevenueUsd, 100);
-    assert.equal(simRes.json.dividend.creatorShareUsd, 30);
-    assert.equal(simRes.json.dividend.contributorsPoolUsd, 60);
+    assert.equal(simRes.json.dividend.sparkRoyaltyUsd, 5);
+    assert.equal(simRes.json.dividend.meritPoolUsd, 85);
     assert.equal(simRes.json.dividend.platformCarryUsd, 10);
     const simTotal = round2(simRes.json.dividend.payouts.reduce((s, p) => s + p.amountUsd, 0));
     assert.equal(simTotal, 100);
     assert.equal(simRes.json.founderRevenue.incubationCarryUsd, round2(carryBeforeSim + 10));
     assert.equal(
       simRes.json.state.player.usdBalance,
-      round2(usdBeforeSim + simRes.json.dividend.playerShareUsd),
+      round2(usdBeforeSim + simRes.json.dividend.playerTotalUsd),
     );
+
+    // ── Scenario B: Originator does ZERO hands-on work -> gets ONLY 5% spark royalty; hands-on builder gets 100% of 85% merit pool ──
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-merit-split-'));
+    const isoStarted = await startServer(isoDir);
+    const isoUrl = isoStarted.baseUrl;
+    try {
+      // Register Originator (idea spark only) & Builder (100% hands-on implementation)
+      const regOrig = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'spark-originator@pixelcompute.test',
+        password: 'originator-pass-123',
+        displayName: 'Idea Sparker',
+      });
+      assert.equal(regOrig.status, 201);
+      const origCookie = regOrig.cookie;
+      const origId = regOrig.json.user.id;
+
+      const regBuilder = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'merit-builder@pixelcompute.test',
+        password: 'builder-pass-123',
+        displayName: 'HandsOn Builder',
+      });
+      assert.equal(regBuilder.status, 201);
+      const builderCookie = regBuilder.cookie;
+      const builderId = regBuilder.json.user.id;
+
+      // Originator proposes a unique project (contributions starts empty {})
+      const propRes = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/projects',
+        {
+          name: 'QuantumLoom（量子編織排程器）',
+          tagline: '用極簡像素甘特圖編排離線批次算力管線',
+          votesRequired: 2,
+        },
+        origCookie,
+      );
+      assert.equal(propRes.status, 201);
+      const newProjId = propRes.json.project.id;
+      assert.deepEqual(propRes.json.project.contributions, {}, 'New proposal must NOT grant free contribution points');
+
+      // Builder votes to unlock project (1/2 -> 2/2 -> building + 5 tasks totaling 100% progressWeight)
+      const unlockRes = await apiJson(isoUrl, 'POST', `/api/projects/${newProjId}/vote`, {}, builderCookie);
+      assert.equal(unlockRes.status, 200);
+      assert.equal(unlockRes.json.unlocked, true);
+      const genTasks = unlockRes.json.generatedTasks;
+      assert.equal(genTasks.length, 5);
+
+      const builderBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, builderCookie);
+      const apiWorker = builderBoot.json.state.workers.find((w) => w.track === 'api');
+      const quotaWorker = builderBoot.json.state.workers.find((w) => w.track === 'quota');
+      assert.ok(apiWorker && quotaWorker);
+
+      // Builder completes all 5 tasks; Originator touches NOTHING
+      for (const task of genTasks) {
+        const w = task.track === 'api_auto' ? apiWorker : quotaWorker;
+        await apiJson(isoUrl, 'PATCH', `/api/workers/${w.id}`, { recoverStamina: true }, builderCookie);
+        const cRes = await apiJson(isoUrl, 'POST', `/api/tasks/${task.id}/claim`, { workerId: w.id }, builderCookie);
+        assert.equal(cRes.status, 200, `Builder should claim ${task.id}`);
+
+        let payload;
+        if (task.category === 'i18n') {
+          payload = {
+            workerId: w.id,
+            content: JSON.stringify({
+              'zh-TW': { title: '量子編織排程器', startBtn: '開始排程', statusReady: '就緒', shareText: '分享進度' },
+              en: { title: 'QuantumLoom Scheduler', startBtn: 'Start Pipeline', statusReady: 'Ready', shareText: 'Share Run' },
+            }, null, 2),
+          };
+        } else if (task.category === 'pixel_spec') {
+          payload = {
+            workerId: w.id,
+            content: JSON.stringify({
+              palette: ['#0b1020', '#1e293b', '#38bdf8', '#facc15'],
+              icons: ['loom_idle', 'loom_running', 'loom_done'],
+              typography: { heading: 'Press Start 2P', body: 'Inter' },
+            }, null, 2),
+          };
+        } else if (task.category === 'unit_test') {
+          payload = {
+            workerId: w.id,
+            content: [
+              'import test from "node:test";',
+              'import assert from "node:assert/strict";',
+              'test("QuantumLoom schedules valid DAG jobs", () => {',
+              '  const jobs = [{ id: "a", deps: [] }, { id: "b", deps: ["a"] }];',
+              '  assert.equal(jobs.length, 2);',
+              '  assert.deepEqual(jobs[1].deps, ["a"]);',
+              '});',
+            ].join('\n'),
+          };
+        } else {
+          payload = {
+            workerId: w.id,
+            prUrl: `https://github.com/pixel-compute-town/quantum-loom/pull/${task.category === 'feature_pr' ? 11 : 12}`,
+            content: [
+              'export function runQuantumLoomPipeline(jobs = []) {',
+              '  if (!Array.isArray(jobs)) throw new TypeError("jobs must be an array");',
+              '  const completed = new Set();',
+              '  for (const job of jobs) { completed.add(job.id); }',
+              '  return { ok: true, count: completed.size };',
+              '}',
+            ].join('\n'),
+          };
+        }
+
+        const sRes = await apiJson(isoUrl, 'POST', `/api/tasks/${task.id}/submit`, payload, builderCookie);
+        assert.equal(sRes.status, 200);
+        assert.equal(sRes.json.passed, true, `Task ${task.id} (${task.category}) must pass verification`);
+      }
+
+      // Check pre-launch balances
+      const origPre = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, origCookie);
+      const builderPre = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, builderCookie);
+      const origUsdBefore = origPre.json.state.player.usdBalance;
+      const builderUsdBefore = builderPre.json.state.player.usdBalance;
+      const isoCarryBefore = builderPre.json.state.founderRevenue.incubationCarryUsd;
+      const readyProj = builderPre.json.state.projects.find((p) => p.id === newProjId);
+      assert.equal(readyProj.progressPct, 100);
+      assert.equal(readyProj.contributions[origId] || 0, 0, 'Originator must have 0 hands-on points');
+      assert.ok(readyProj.contributions[builderId] > 0, 'Builder must hold 100% of hands-on points');
+
+      // Launch with $200 initial revenue -> Originator: $10 (5%), Builder: $170 (85%), Platform: $20 (10%)
+      const isoLaunch = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/projects/${newProjId}/launch`,
+        { initialRevenueUsd: 200 },
+        builderCookie,
+      );
+      assert.equal(isoLaunch.status, 200);
+      const isoDiv = isoLaunch.json.dividend;
+      assert.equal(isoDiv.grossRevenueUsd, 200);
+      assert.equal(isoDiv.sparkRoyaltyUsd, 10);
+      assert.equal(isoDiv.meritPoolUsd, 170);
+      assert.equal(isoDiv.platformCarryUsd, 20);
+      assert.equal(isoDiv.originatorTotalUsd, 10, 'Hands-off originator must receive EXACTLY 5% ($10)');
+      assert.equal(isoDiv.payoutsByUser[origId].sparkUsd, 10);
+      assert.equal(isoDiv.payoutsByUser[origId].meritUsd, 0);
+      assert.equal(isoDiv.payoutsByUser[origId].totalUsd, 10);
+      assert.equal(isoDiv.payoutsByUser[origId].totalSharePct, 5);
+      assert.equal(isoDiv.payoutsByUser[builderId].sparkUsd, 0);
+      assert.equal(isoDiv.payoutsByUser[builderId].meritUsd, 170);
+      assert.equal(isoDiv.payoutsByUser[builderId].totalUsd, 170, 'Sole hands-on builder must receive EXACTLY 85% ($170)');
+      assert.equal(isoDiv.payoutsByUser[builderId].meritRatioPct, 100);
+      assert.equal(isoDiv.payoutsByUser[builderId].totalSharePct, 85);
+      assert.equal(isoDiv.playerSparkUsd, 0);
+      assert.equal(isoDiv.playerMeritUsd, 170);
+      assert.equal(isoDiv.playerTotalUsd, 170);
+      assert.equal(round2(isoDiv.payouts.reduce((s, p) => s + p.amountUsd, 0)), 200);
+      assert.equal(isoLaunch.json.founderRevenue.incubationCarryUsd, round2(isoCarryBefore + 20));
+
+      // Verify persisted balances of both users down to the exact cent
+      const origPost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, origCookie);
+      const builderPost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, builderCookie);
+      assert.equal(origPost.json.state.player.usdBalance, round2(origUsdBefore + 10));
+      assert.equal(builderPost.json.state.player.usdBalance, round2(builderUsdBefore + 170));
+
+      // Simulate subsequent $100 revenue -> Originator +$5.00, Builder +$85.00, Platform +$10.00
+      const isoSim = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/projects/${newProjId}/simulate-revenue`,
+        { amountUsd: 100 },
+        origCookie,
+      );
+      assert.equal(isoSim.status, 200);
+      assert.equal(isoSim.json.dividend.sparkRoyaltyUsd, 5);
+      assert.equal(isoSim.json.dividend.meritPoolUsd, 85);
+      assert.equal(isoSim.json.dividend.platformCarryUsd, 10);
+      assert.equal(isoSim.json.dividend.playerSparkUsd, 5);
+      assert.equal(isoSim.json.dividend.playerMeritUsd, 0);
+      assert.equal(isoSim.json.dividend.playerTotalUsd, 5);
+      assert.equal(isoSim.json.dividend.payoutsByUser[builderId].totalUsd, 85);
+      assert.equal(isoSim.json.state.player.usdBalance, round2(origUsdBefore + 10 + 5));
+    } finally {
+      await stopServer(isoStarted.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
   });
 
   it('7. Neon billboard ad ($29) and shop purchases accurately update founderRevenue & inventory', async () => {
@@ -1388,5 +1580,177 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(typeof statsRes.json.totalUsersCount, 'number');
     assert.ok(statsRes.json.totalUsersCount >= 3, 'Should count founder + registered test users');
     assert.ok(Array.isArray(statsRes.json.featuredProjects) && statsRes.json.featuredProjects.length >= 1);
+  });
+
+  it('21. Idea Provenance SHA-256 hash chain & public verification API (full hash, prefix, 404 fake hash)', async () => {
+    const chainBefore = await apiJson(baseUrl, 'GET', '/api/provenance/chain');
+    assert.equal(chainBefore.status, 200);
+    assert.equal(chainBefore.json.ok, true);
+    assert.equal(chainBefore.json.valid, true, 'Initial provenance chain must be cryptographically valid');
+    assert.ok(chainBefore.json.chainLength >= 3);
+    assert.equal(chainBefore.json.genesisHash, '0'.repeat(64));
+    assert.match(chainBefore.json.headHash, /^[a-f0-9]{64}$/);
+    assert.equal(chainBefore.json.records.length, chainBefore.json.chainLength);
+    assert.equal(chainBefore.json.records[0].prevIdeaHash, chainBefore.json.genesisHash);
+    for (let i = 0; i < chainBefore.json.records.length; i += 1) {
+      const rec = chainBefore.json.records[i];
+      assert.equal(rec.verified, true, `Record #${i} (${rec.projectId}) must be verified`);
+      assert.match(rec.ideaHash, /^[a-f0-9]{64}$/);
+      if (i > 0) {
+        assert.equal(rec.prevIdeaHash, chainBefore.json.records[i - 1].ideaHash);
+      }
+    }
+
+    // Propose a brand-new original project -> must auto-link to previous headHash
+    const propRes = await apiJson(baseUrl, 'POST', '/api/projects', {
+      name: 'RetroSynth DAW（像素晶片合成器）',
+      tagline: '在瀏覽器用 8-bit 波形積木共創開源遊戲配樂',
+      description: '支援 WebAudio 即時混音、MIDI 匯出與創作者分軌協作的像素音樂工作站',
+      votesRequired: 5,
+    });
+    assert.equal(propRes.status, 201);
+    const createdProj = propRes.json.project;
+    assert.match(createdProj.ideaHash, /^[a-f0-9]{64}$/);
+    assert.equal(createdProj.prevIdeaHash, chainBefore.json.headHash, 'New proposal must link to previous headHash');
+    assert.equal(createdProj.provenanceIndex, chainBefore.json.chainLength);
+    assert.equal(createdProj.sparkRoyaltyPct, 5);
+    assert.equal(createdProj.meritPoolPct, 85);
+    assert.equal(createdProj.platformSharePct, 10);
+    assert.ok(Array.isArray(createdProj.coBuilders) && createdProj.coBuilders.length === 1);
+
+    // Chain length increments by 1 and remains valid === true
+    const chainAfter = await apiJson(baseUrl, 'GET', '/api/provenance/chain');
+    assert.equal(chainAfter.status, 200);
+    assert.equal(chainAfter.json.valid, true);
+    assert.equal(chainAfter.json.chainLength, chainBefore.json.chainLength + 1);
+    assert.equal(chainAfter.json.headHash, createdProj.ideaHash);
+
+    // Public verify by full 64-char SHA-256 hash
+    const verifyFull = await apiJson(baseUrl, 'GET', `/api/provenance/verify/${createdProj.ideaHash}`);
+    assert.equal(verifyFull.status, 200);
+    assert.equal(verifyFull.json.ok, true);
+    assert.equal(verifyFull.json.verified, true);
+    assert.equal(verifyFull.json.chainValid, true);
+    assert.equal(verifyFull.json.record.projectId, createdProj.id);
+    assert.equal(verifyFull.json.record.ideaHash, createdProj.ideaHash);
+    assert.equal(verifyFull.json.project.id, createdProj.id);
+
+    // Public verify by 10-char prefix
+    const prefix = createdProj.ideaHash.slice(0, 10);
+    const verifyPrefix = await apiJson(baseUrl, 'GET', `/api/provenance/verify/${prefix}`);
+    assert.equal(verifyPrefix.status, 200);
+    assert.equal(verifyPrefix.json.ok, true);
+    assert.equal(verifyPrefix.json.verified, true);
+    assert.equal(verifyPrefix.json.record.projectId, createdProj.id);
+    assert.equal(verifyPrefix.json.record.ideaHash, createdProj.ideaHash);
+
+    // Fake 64-char hash returns 404
+    const verifyFake = await apiJson(baseUrl, 'GET', `/api/provenance/verify/${'f'.repeat(64)}`);
+    assert.equal(verifyFake.status, 404);
+    assert.equal(verifyFake.json.ok, false);
+    assert.equal(verifyFake.json.verified, false);
+
+    // Too-short / malformed hash returns 404
+    const verifyShort = await apiJson(baseUrl, 'GET', '/api/provenance/verify/abc123');
+    assert.equal(verifyShort.status, 404);
+    assert.equal(verifyShort.json.verified, false);
+  });
+
+  it('22. Anti-copycat similarity detection, HTTP 409 POTENTIAL_COPYCAT blocking & idempotent co-builder join', async () => {
+    // Retrieve the original RetroSynth DAW project created in #21
+    const boot = await apiJson(baseUrl, 'GET', '/api/bootstrap');
+    const originalProj = boot.json.state.projects.find((p) => p.name.includes('RetroSynth DAW'));
+    assert.ok(originalProj, 'Original RetroSynth DAW project must exist');
+
+    // 1. Check similarity on a highly similar / near-copycat proposal -> isHighRisk === true
+    const simHigh = await apiJson(baseUrl, 'POST', '/api/projects/check-similarity', {
+      name: 'RetroSynth DAW（像素晶片合成器）',
+      tagline: '在瀏覽器用 8-bit 波形積木共創開源遊戲配樂',
+    });
+    assert.equal(simHigh.status, 200);
+    assert.equal(simHigh.json.ok, true);
+    assert.equal(simHigh.json.isHighRisk, true);
+    assert.equal(simHigh.json.isWarning, true);
+    assert.ok(simHigh.json.topMatch);
+    assert.equal(simHigh.json.topMatch.projectId, originalProj.id);
+    assert.equal(simHigh.json.topMatch.originatorName, originalProj.originatorName);
+    assert.equal(simHigh.json.topMatch.ideaHash, originalProj.ideaHash);
+    assert.ok(simHigh.json.topMatch.similarity >= 0.65);
+
+    // 2. Check similarity on a completely unrelated original idea -> isHighRisk === false
+    const simLow = await apiJson(baseUrl, 'POST', '/api/projects/check-similarity', {
+      name: 'DeepSea Sonar Atlas',
+      tagline: 'Interactive bathymetric ocean floor mapping toolkit',
+    });
+    assert.equal(simLow.status, 200);
+    assert.equal(simLow.json.ok, true);
+    assert.equal(simLow.json.isHighRisk, false);
+    assert.equal(simLow.json.isWarning, false);
+
+    // 3. Submitting a highly duplicate proposal without acknowledgeDerivative must be blocked with HTTP 409 POTENTIAL_COPYCAT
+    const copycatAttempt = await apiJson(baseUrl, 'POST', '/api/projects', {
+      name: 'RetroSynth DAW（像素晶片合成器）',
+      tagline: '在瀏覽器用 8-bit 波形積木共創開源遊戲配樂',
+      votesRequired: 4,
+    });
+    assert.equal(copycatAttempt.status, 409);
+    assert.equal(copycatAttempt.json.ok, false);
+    assert.equal(copycatAttempt.json.code, 'POTENTIAL_COPYCAT');
+    assert.ok(copycatAttempt.json.copycatMatch);
+    assert.equal(copycatAttempt.json.copycatMatch.projectId, originalProj.id);
+    assert.equal(copycatAttempt.json.copycatMatch.originatorName, originalProj.originatorName);
+    assert.equal(copycatAttempt.json.copycatMatch.ideaHash, originalProj.ideaHash);
+    assert.ok(copycatAttempt.json.copycatMatch.similarity >= 0.65);
+
+    // 4. Explicitly acknowledging derivative creation links inspiredByHash cleanly
+    const derivativeOk = await apiJson(baseUrl, 'POST', '/api/projects', {
+      name: 'RetroSynth DAW（像素晶片合成器）Mobile Edition',
+      tagline: '在瀏覽器用 8-bit 波形積木共創開源遊戲配樂（行動端延伸版）',
+      acknowledgeDerivative: true,
+    });
+    assert.equal(derivativeOk.status, 201);
+    assert.equal(derivativeOk.json.project.inspiredByHash, originalProj.ideaHash);
+
+    // 5. Another developer joins the original project as a co-builder (idempotent)
+    const loginBob = await apiJson(baseUrl, 'POST', '/api/auth/login', {
+      email: 'bob@pixelcompute.test',
+      password: 'bob-password-456',
+    });
+    assert.equal(loginBob.status, 200);
+    const bobCookie = loginBob.cookie;
+    const bobId = loginBob.json.user.id;
+    const countBefore = originalProj.coBuilders.length;
+
+    const joinFirst = await apiJson(
+      baseUrl,
+      'POST',
+      `/api/projects/${originalProj.id}/join`,
+      {},
+      bobCookie,
+    );
+    assert.equal(joinFirst.status, 200);
+    assert.equal(joinFirst.json.ok, true);
+    assert.equal(joinFirst.json.alreadyJoined, false);
+    assert.equal(joinFirst.json.coBuildersCount, countBefore + 1);
+    assert.ok(joinFirst.json.project.coBuilders.some((b) => b.userId === bobId));
+
+    // Joining a second time must be idempotent (alreadyJoined: true, count unchanged, no duplicate)
+    const joinSecond = await apiJson(
+      baseUrl,
+      'POST',
+      `/api/projects/${originalProj.id}/join`,
+      {},
+      bobCookie,
+    );
+    assert.equal(joinSecond.status, 200);
+    assert.equal(joinSecond.json.ok, true);
+    assert.equal(joinSecond.json.alreadyJoined, true);
+    assert.equal(joinSecond.json.coBuildersCount, countBefore + 1);
+    const bobEntries = joinSecond.json.project.coBuilders.filter((b) => b.userId === bobId);
+    assert.equal(bobEntries.length, 1, 'Co-builder list must remain deduplicated');
+
+    // Joining a non-existent project returns 404
+    const joinMissing = await apiJson(baseUrl, 'POST', '/api/projects/proj-does-not-exist/join', {}, bobCookie);
+    assert.equal(joinMissing.status, 404);
   });
 });

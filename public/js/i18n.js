@@ -139,12 +139,12 @@ export const DICTIONARY = Object.freeze({
     'guild.empty': '暫無工會大單，前往孵化廣場投票解鎖新項目可自動生成高價值懸賞！',
     'guild.workerBusyTag': '接單處理中',
     'guild.workerDoneTag': '結案',
-    'guild.poolBadge': '🚀 30/60/10 分紅池',
+    'guild.poolBadge': '🚀 5/85/10 多勞多得分紅池',
     'guild.bountyNetFee': '💰 ${gross} (實得 ${net} / 服務費 ${fee})',
 
     // Incubator Tab
-    'incubator.summaryDefault': '投票立項 → 雙軌共建 → 上線透明分紅（30% 發起人 / 60% 貢獻者 / 10% 平臺）',
-    'incubator.summary': '投票中 {voting} ｜ 建設中 {building} ｜ 已上線 {launched} ｜ 30/60/10 透明分紅',
+    'incubator.summaryDefault': 'SHA-256 創意溯源 → 雙軌共建 → 透明多勞多得（5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺）',
+    'incubator.summary': '投票中 {voting} ｜ 建設中 {building} ｜ 已上線 {launched} ｜ 5/85/10 多勞多得協議',
     'incubator.proposeBtn': '＋ 我要提案新項目',
     'incubator.jumpImport': '🔗 匯入 GitHub Issue',
     'incubator.loading': '載入孵化項目中...',
@@ -153,8 +153,18 @@ export const DICTIONARY = Object.freeze({
     'incubator.statusLaunched': '🚀 已發布上線',
     'incubator.statusBuilding': '🏗️ 建設中 {pct}%',
     'incubator.creatorPrefix': '👤 發起人：{name}',
-    'incubator.poolTag': '📊 分紅池 30/60/10',
-    'incubator.myPoints': '✨ 你持有 {pts} 貢獻點（約佔貢獻池 {pct}%）',
+    'incubator.originatorPrefix': '💡 首發創意人：{name}',
+    'incubator.coBuildersCount': '🤝 {count} 人共建',
+    'incubator.hashVerifyTitle': '點擊驗證完整 SHA-256 溯源鏈與下載首發證書',
+    'incubator.splitSpark': '5% 創意版稅',
+    'incubator.splitMerit': '85% 實幹多勞多得',
+    'incubator.splitPlatform': '10% 平臺',
+    'incubator.joinBtn': '🤝 加入共建',
+    'incubator.joinedBtn': '✓ 已加入共建',
+    'incubator.certBtn': '📜 溯源證書',
+    'incubator.poolTag': '📊 分紅協議 5/85/10',
+    'incubator.myPoints': '✨ 你持有 {pts} 貢獻點（約佔 85% 實幹池 {pct}%）',
+    'incubator.myPointsSpark': '✨ 你持有 {pts} 貢獻點（估總份額 {pct}%｜含 5% 首發版稅）',
     'incubator.bountyPool': '💰 現金懸賞池 ${amount}',
     'incubator.totalRev': '💵 累計產品營收 {amount}',
     'incubator.voteProgress': '立項投票進度（還差 {left} 票自動破土並生成 5 張雙軌任務！）',
@@ -333,8 +343,8 @@ export const DICTIONARY = Object.freeze({
     'modal.guild.bountyBadge': '💰 懸賞 ${gross}（實得 ${net}）',
 
     // Modal 3: Propose Project
-    'modal.propose.title': '🚀 提案新孵化項目',
-    'modal.propose.banner': '提案上牆後由社群投票，達標後將<strong>自動破土動工並生成雙軌任務</strong>！上線後收益按 30% 發起人 / 60% 貢獻者 / 10% 平臺透明分紅。',
+    'modal.propose.title': '🚀 提案新孵化項目（SHA-256 創意首發公證）',
+    'modal.propose.banner': '提案上牆即刻生成 <strong>SHA-256 創意首發哈希鏈憑證</strong>！達標後自動破土生成雙軌任務，上線營收按 <strong>5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺</strong> 透明分紅。',
     'modal.propose.nameLabel': '項目名稱 *',
     'modal.propose.namePlaceholder': '例如：PixelMetrics（開源輕量統計看板）',
     'modal.propose.descLabel': '項目簡介與願景 *',
@@ -346,7 +356,38 @@ export const DICTIONARY = Object.freeze({
     'modal.propose.catGame': '像素互動工具',
     'modal.propose.bountyLabel': '初期現金懸賞預算（USD，可填 0）',
     'modal.propose.repoLabel': 'GitHub 倉庫連結（選填）',
-    'modal.propose.submitBtn': '🚀 送出提案上牆投票',
+    'modal.propose.submitBtn': '🚀 送出提案並鑄造首發指紋',
+    'modal.propose.copycatHighTitle': '🛡️ 反抄襲偵測警告：發現高度雷同的原創創意（相似度 {pct}%）！',
+    'modal.propose.copycatWarnTitle': '⚠️ 靈感查重提示：已有相似原創創意（相似度 {pct}%）',
+    'modal.propose.copycatMeta': '原創首發者：{originator} ｜ 公證時間：{time} ｜ 指紋：#{hash}',
+    'modal.propose.copycatDesc': '像素算力鎮反對抄襲複製蒸餾——與其重複造輪子，不如直接加入原創意共建，靠實幹拿走 85% 多勞多得分紅池大頭！',
+    'modal.propose.copycatJoinBtn': '🤝 尊重原創：直接加入該創意共建',
+    'modal.propose.copycatClean': '✅ 即時反抄襲查重通過：未發現高度雷同提案，送出即鑄造首發 SHA-256 證書！',
+    'modal.propose.derivativeAck': '我確認此為差異化延伸靈感，並願標記致敬來源指紋',
+
+    // Modal 8: Provenance & Merit Calculator (#provenance-modal)
+    'modal.provenance.title': '📜 創意首發溯源憑證 & 多勞多得分紅試算',
+    'modal.provenance.chainVerifying': '⏳ 正在向小鎮節點驗證 SHA-256 雜湊鏈...',
+    'modal.provenance.chainValid': '✅ SHA-256 哈希鏈驗證通過（區塊 #{idx} · 全鏈 {len} 筆原創公證無竄改）',
+    'modal.provenance.chainInvalid': '⚠️ 哈希鏈驗證異常，請檢查紀錄完整性',
+    'modal.provenance.originatorLabel': '首發創意人',
+    'modal.provenance.timestampLabel': '公證時間 (UTC)',
+    'modal.provenance.coBuildersLabel': '共建開發者',
+    'modal.provenance.ideaHashLabel': 'SHA-256 創意首發指紋 (ideaHash)',
+    'modal.provenance.prevHashLabel': '前序鏈雜湊 (prevIdeaHash)',
+    'modal.provenance.copyHashBtn': '📋 複製指紋',
+    'modal.provenance.calcTitle': '⚖️ 實時多勞多得分紅試算表（5% 首發版稅 / 85% 實幹池 / 10% 平臺）',
+    'modal.provenance.calcRevLabel': '假設項目總營收（USD）：',
+    'modal.provenance.calcWorkLabel': '假設你的實幹貢獻佔比：',
+    'modal.provenance.calcOriginatorCheck': '我是首發創意人（疊加 5% 永久版稅）',
+    'modal.provenance.calcRowSpark': '💡 首發創意永久版稅 (5%)',
+    'modal.provenance.calcRowMerit': '⚡ 實幹建設多勞多得池 (85%)',
+    'modal.provenance.calcRowPlatform': '🛡️ 平臺公證運營 (10%)',
+    'modal.provenance.calcRowYou': '🎯 你的預估實得（合計 {pct}%）',
+    'modal.provenance.calcContributorsTitle': '👥 目前鏈上實幹貢獻者與預估權重',
+    'modal.provenance.calcNoContributors': '尚無完工驗收紀錄，現在接單即可搶先瓜分 85% 實幹池！',
+    'modal.provenance.certPreviewTitle': '🖼️ 《創意首發溯源證書 PNG》即時預覽（900×520）',
+    'modal.provenance.downloadCertBtn': '⬇️ 下載創意首發證書 PNG',
 
     // Modal 4: Report
     'modal.report.title': '📋 AI 交付物與 Proof of Accepted Work 驗收報告',
@@ -498,6 +539,11 @@ export const DICTIONARY = Object.freeze({
     'toast.adminStrictChanged': '🛡️ 嚴格裝置審核模式已切換為：{state}',
     'toast.adminDeviceReviewed': '🛡️ 裝置 {code} 已{action}！',
     'toast.adminCodesGenerated': '🎟️ 已成功生成 {count} 組全新卡密兌換碼！',
+    'toast.joinedProject': '🤝 已加入《{name}》共建行列！目前共 {count} 位共建者',
+    'toast.alreadyJoined': '✓ 你已經是《{name}》的共建開發者了！',
+    'toast.ideaCertExported': '📜 已匯出《{name}》創意首發溯源證書 PNG！',
+    'toast.copycatBlocked': '🛡️ 偵測到與既有原創創意《{name}》高度相似（{pct}%），建議直接加入原創意共建！',
+    'toast.hashCopied': '🔐 已複製完整 SHA-256 創意溯源指紋！',
   },
 
   'zh-CN': {
@@ -615,12 +661,12 @@ export const DICTIONARY = Object.freeze({
     'guild.empty': '暂无工会大单，前往孵化广场投票解锁新项目可自动生成高价值悬赏！',
     'guild.workerBusyTag': '接单处理中',
     'guild.workerDoneTag': '结案',
-    'guild.poolBadge': '🚀 30/60/10 分红池',
+    'guild.poolBadge': '🚀 5/85/10 多劳多得分红池',
     'guild.bountyNetFee': '💰 ${gross} (实得 ${net} / 服务费 ${fee})',
 
     // Incubator Tab
-    'incubator.summaryDefault': '投票立项 → 双轨共建 → 上线透明分红（30% 发起人 / 60% 贡献者 / 10% 平台）',
-    'incubator.summary': '投票中 {voting} ｜ 建设中 {building} ｜ 已上线 {launched} ｜ 30/60/10 透明分红',
+    'incubator.summaryDefault': 'SHA-256 创意溯源 → 双轨共建 → 透明多劳多得（5% 首发创意版税 / 85% 实干多劳多得 / 10% 平台）',
+    'incubator.summary': '投票中 {voting} ｜ 建设中 {building} ｜ 已上线 {launched} ｜ 5/85/10 多劳多得协议',
     'incubator.proposeBtn': '＋ 我要提案新项目',
     'incubator.jumpImport': '🔗 导入 GitHub Issue',
     'incubator.loading': '加载孵化项目中...',
@@ -629,8 +675,18 @@ export const DICTIONARY = Object.freeze({
     'incubator.statusLaunched': '🚀 已发布上线',
     'incubator.statusBuilding': '🏗️ 建设中 {pct}%',
     'incubator.creatorPrefix': '👤 发起人：{name}',
-    'incubator.poolTag': '📊 分红池 30/60/10',
-    'incubator.myPoints': '✨ 你持有 {pts} 贡献点（约占贡献池 {pct}%）',
+    'incubator.originatorPrefix': '💡 首发创意人：{name}',
+    'incubator.coBuildersCount': '🤝 {count} 人共建',
+    'incubator.hashVerifyTitle': '点击验证完整 SHA-256 溯源链与下载首发证书',
+    'incubator.splitSpark': '5% 创意版税',
+    'incubator.splitMerit': '85% 实干多劳多得',
+    'incubator.splitPlatform': '10% 平台',
+    'incubator.joinBtn': '🤝 加入共建',
+    'incubator.joinedBtn': '✓ 已加入共建',
+    'incubator.certBtn': '📜 溯源证书',
+    'incubator.poolTag': '📊 分红协议 5/85/10',
+    'incubator.myPoints': '✨ 你持有 {pts} 贡献点（约占 85% 实干池 {pct}%）',
+    'incubator.myPointsSpark': '✨ 你持有 {pts} 贡献点（估总份额 {pct}%｜含 5% 首发版税）',
     'incubator.bountyPool': '💰 现金悬赏池 ${amount}',
     'incubator.totalRev': '💵 累计产品营收 {amount}',
     'incubator.voteProgress': '立项投票进度（还差 {left} 票自动破土并生成 5 张双轨任务！）',
@@ -809,8 +865,8 @@ export const DICTIONARY = Object.freeze({
     'modal.guild.bountyBadge': '💰 悬赏 ${gross}（实得 ${net}）',
 
     // Modal 3: Propose Project
-    'modal.propose.title': '🚀 提案新孵化项目',
-    'modal.propose.banner': '提案上墙后由社区投票，达标后将<strong>自动破土动工并生成双轨任务</strong>！上线后收益按 30% 发起人 / 60% 贡献者 / 10% 平台透明分红。',
+    'modal.propose.title': '🚀 提案新孵化项目（SHA-256 创意首发公证）',
+    'modal.propose.banner': '提案上墙即刻生成 <strong>SHA-256 创意首发哈希链凭证</strong>！达标后自动破土生成双轨任务，上线营收按 <strong>5% 首发创意版税 / 85% 实干多劳多得 / 10% 平台</strong> 透明分红。',
     'modal.propose.nameLabel': '项目名称 *',
     'modal.propose.namePlaceholder': '例如：PixelMetrics（开源轻量统计看板）',
     'modal.propose.descLabel': '项目简介与愿景 *',
@@ -822,7 +878,38 @@ export const DICTIONARY = Object.freeze({
     'modal.propose.catGame': '像素互动工具',
     'modal.propose.bountyLabel': '初期现金悬赏预算（USD，可填 0）',
     'modal.propose.repoLabel': 'GitHub 仓库链接（选填）',
-    'modal.propose.submitBtn': '🚀 送出提案上墙投票',
+    'modal.propose.submitBtn': '🚀 送出提案并铸造首发指纹',
+    'modal.propose.copycatHighTitle': '🛡️ 反抄袭检测警告：发现高度雷同的原创创意（相似度 {pct}%）！',
+    'modal.propose.copycatWarnTitle': '⚠️ 灵感查重提示：已有相似原创创意（相似度 {pct}%）',
+    'modal.propose.copycatMeta': '原创首发者：{originator} ｜ 公证时间：{time} ｜ 指纹：#{hash}',
+    'modal.propose.copycatDesc': '像素算力镇反对抄袭复制蒸馏——与其重复造轮子，不如直接加入原创意共建，靠实干拿走 85% 多劳多得分红池大头！',
+    'modal.propose.copycatJoinBtn': '🤝 尊重原创：直接加入该创意共建',
+    'modal.propose.copycatClean': '✅ 实时反抄袭查重通过：未发现高度雷同提案，送出即铸造首发 SHA-256 证书！',
+    'modal.propose.derivativeAck': '我确认此为差异化延伸灵感，并愿标记致敬来源指纹',
+
+    // Modal 8: Provenance & Merit Calculator (#provenance-modal)
+    'modal.provenance.title': '📜 创意首发溯源凭证 & 多劳多得分红试算',
+    'modal.provenance.chainVerifying': '⏳ 正在向小镇节点验证 SHA-256 哈希链...',
+    'modal.provenance.chainValid': '✅ SHA-256 哈希链验证通过（区块 #{idx} · 全链 {len} 笔原创公证无篡改）',
+    'modal.provenance.chainInvalid': '⚠️ 哈希链验证异常，请检查记录完整性',
+    'modal.provenance.originatorLabel': '首发创意人',
+    'modal.provenance.timestampLabel': '公证时间 (UTC)',
+    'modal.provenance.coBuildersLabel': '共建开发者',
+    'modal.provenance.ideaHashLabel': 'SHA-256 创意首发指纹 (ideaHash)',
+    'modal.provenance.prevHashLabel': '前序链哈希 (prevIdeaHash)',
+    'modal.provenance.copyHashBtn': '📋 复制指纹',
+    'modal.provenance.calcTitle': '⚖️ 实时多劳多得分红试算表（5% 首发版税 / 85% 实干池 / 10% 平台）',
+    'modal.provenance.calcRevLabel': '假设项目总营收（USD）：',
+    'modal.provenance.calcWorkLabel': '假设你的实干贡献占比：',
+    'modal.provenance.calcOriginatorCheck': '我是首发创意人（叠加 5% 永久版税）',
+    'modal.provenance.calcRowSpark': '💡 首发创意永久版税 (5%)',
+    'modal.provenance.calcRowMerit': '⚡ 实干建设多劳多得池 (85%)',
+    'modal.provenance.calcRowPlatform': '🛡️ 平台公证运营 (10%)',
+    'modal.provenance.calcRowYou': '🎯 你的预估实得（合计 {pct}%）',
+    'modal.provenance.calcContributorsTitle': '👥 当前链上实干贡献者与预估权重',
+    'modal.provenance.calcNoContributors': '暂无完工验收记录，现在接单即可抢先瓜分 85% 实干池！',
+    'modal.provenance.certPreviewTitle': '🖼️ 《创意首发溯源证书 PNG》实时预览（900×520）',
+    'modal.provenance.downloadCertBtn': '⬇️ 下载创意首发证书 PNG',
 
     // Modal 4: Report
     'modal.report.title': '📋 AI 交付物与 Proof of Accepted Work 验收报告',
@@ -974,6 +1061,11 @@ export const DICTIONARY = Object.freeze({
     'toast.adminStrictChanged': '🛡️ 严格设备审核模式已切换为：{state}',
     'toast.adminDeviceReviewed': '🛡️ 设备 {code} 已{action}！',
     'toast.adminCodesGenerated': '🎟️ 已成功生成 {count} 组全新卡密兑换码！',
+    'toast.joinedProject': '🤝 已加入《{name}》共建行列！当前共 {count} 位共建者',
+    'toast.alreadyJoined': '✓ 你已经是《{name}》的共建开发者了！',
+    'toast.ideaCertExported': '📜 已导出《{name}》创意首发溯源证书 PNG！',
+    'toast.copycatBlocked': '🛡️ 检测到与既有原创创意《{name}》高度相似（{pct}%），建议直接加入原创意共建！',
+    'toast.hashCopied': '🔐 已复制完整 SHA-256 创意溯源指纹！',
   },
 
   en: {
@@ -1091,12 +1183,12 @@ export const DICTIONARY = Object.freeze({
     'guild.empty': 'No guild bounties yet. Vote on a project in Launchpad to unlock high-value bounties!',
     'guild.workerBusyTag': 'In Progress',
     'guild.workerDoneTag': 'Settled',
-    'guild.poolBadge': '🚀 30/60/10 Pool',
+    'guild.poolBadge': '🚀 5/85/10 Merit Pool',
     'guild.bountyNetFee': '💰 ${gross} (${net} net / ${fee} fee)',
 
     // Incubator Tab
-    'incubator.summaryDefault': 'Vote -> Dual-Track Build -> Launch & Split Revenue (30% Creator / 60% Contributors / 10% Platform)',
-    'incubator.summary': 'Voting {voting} | Building {building} | Launched {launched} | 30/60/10 Split',
+    'incubator.summaryDefault': 'SHA-256 Provenance -> Dual-Track Co-Build -> Merit Split (5% First Spark / 85% Merit Builders / 10% Platform)',
+    'incubator.summary': 'Voting {voting} | Building {building} | Launched {launched} | 5/85/10 Merit Split',
     'incubator.proposeBtn': '+ Propose Project',
     'incubator.jumpImport': '🔗 Import GitHub Issues',
     'incubator.loading': 'Loading incubated projects...',
@@ -1105,8 +1197,18 @@ export const DICTIONARY = Object.freeze({
     'incubator.statusLaunched': '🚀 Launched',
     'incubator.statusBuilding': '🏗️ Building {pct}%',
     'incubator.creatorPrefix': '👤 Creator: {name}',
-    'incubator.poolTag': '📊 30/60/10 Pool',
-    'incubator.myPoints': '✨ Your {pts} pts (~{pct}% of contributor pool)',
+    'incubator.originatorPrefix': '💡 First Spark: {name}',
+    'incubator.coBuildersCount': '🤝 {count} Co-Builders',
+    'incubator.hashVerifyTitle': 'Click to verify full SHA-256 chain & download First-Spark Certificate',
+    'incubator.splitSpark': '5% Spark Royalty',
+    'incubator.splitMerit': '85% Merit Builders',
+    'incubator.splitPlatform': '10% Platform',
+    'incubator.joinBtn': '🤝 Co-Build',
+    'incubator.joinedBtn': '✓ Joined',
+    'incubator.certBtn': '📜 Provenance Cert',
+    'incubator.poolTag': '📊 5/85/10 Merit Split',
+    'incubator.myPoints': '✨ Your {pts} pts (~{pct}% of 85% merit pool)',
+    'incubator.myPointsSpark': '✨ Your {pts} pts (~{pct}% total incl. 5% Spark)',
     'incubator.bountyPool': '💰 Cash Bounty Pool ${amount}',
     'incubator.totalRev': '💵 Total Product Revenue {amount}',
     'incubator.voteProgress': 'Voting progress ({left} more votes to break ground & spawn 5 dual-track tasks!)',
@@ -1285,8 +1387,8 @@ export const DICTIONARY = Object.freeze({
     'modal.guild.bountyBadge': '💰 Bounty ${gross} (${net} net)',
 
     // Modal 3: Propose Project
-    'modal.propose.title': '🚀 Propose New Incubator Project',
-    'modal.propose.banner': 'Once community votes hit the goal, the project <strong>automatically breaks ground & spawns 5 dual-track tasks</strong>! Launch revenue splits transparently: 30% Creator / 60% Contributors / 10% Platform.',
+    'modal.propose.title': '🚀 Propose Project (SHA-256 First-Spark Notary)',
+    'modal.propose.banner': 'Submitting mints an immutable <strong>SHA-256 Proof of First Spark hash</strong>! Once voted in, it spawns 5 dual-track tasks and splits launch revenue transparently: <strong>5% First-Spark Royalty / 85% Merit Builders / 10% Platform</strong>.',
     'modal.propose.nameLabel': 'Project Name *',
     'modal.propose.namePlaceholder': 'e.g. PixelMetrics (Lightweight Open-Source Analytics)',
     'modal.propose.descLabel': 'Tagline & Vision *',
@@ -1298,7 +1400,38 @@ export const DICTIONARY = Object.freeze({
     'modal.propose.catGame': 'Pixel Interactive Tool',
     'modal.propose.bountyLabel': 'Initial Cash Bounty Pool (USD, 0 allowed)',
     'modal.propose.repoLabel': 'GitHub Repo URL (optional)',
-    'modal.propose.submitBtn': '🚀 Post Proposal for Voting',
+    'modal.propose.submitBtn': '🚀 Post Proposal & Mint First-Spark Hash',
+    'modal.propose.copycatHighTitle': '🛡️ Anti-Copycat Warning: Highly Similar Original Idea Found ({pct}% match)!',
+    'modal.propose.copycatWarnTitle': '⚠️ Similarity Notice: Related Original Idea Exists ({pct}% match)',
+    'modal.propose.copycatMeta': 'Originator: {originator} | Notarized: {time} | Hash: #{hash}',
+    'modal.propose.copycatDesc': 'PixelCompute Town rejects copycats & clones. Join the original idea instead and earn the lion’s share from the 85% merit builders pool!',
+    'modal.propose.copycatJoinBtn': '🤝 Respect Original: Join & Co-Build',
+    'modal.propose.copycatClean': '✅ Anti-copycat check clear: unique idea! Submitting mints your SHA-256 First-Spark cert.',
+    'modal.propose.derivativeAck': 'I confirm this is a distinct derivative idea and attribute the source hash',
+
+    // Modal 8: Provenance & Merit Calculator (#provenance-modal)
+    'modal.provenance.title': '📜 Proof of First Spark & Merit Split Calculator',
+    'modal.provenance.chainVerifying': '⏳ Verifying SHA-256 provenance hash chain...',
+    'modal.provenance.chainValid': '✅ SHA-256 Chain Verified (Block #{idx} · {len} notarized original ideas intact)',
+    'modal.provenance.chainInvalid': '⚠️ Hash chain integrity alert — please check records',
+    'modal.provenance.originatorLabel': 'First-Spark Originator',
+    'modal.provenance.timestampLabel': 'Notarized (UTC)',
+    'modal.provenance.coBuildersLabel': 'Co-Builders',
+    'modal.provenance.ideaHashLabel': 'SHA-256 Idea Fingerprint (ideaHash)',
+    'modal.provenance.prevHashLabel': 'Previous Chain Hash (prevIdeaHash)',
+    'modal.provenance.copyHashBtn': '📋 Copy Hash',
+    'modal.provenance.calcTitle': '⚖️ Live Merit Split Calculator (5% Spark / 85% Merit / 10% Platform)',
+    'modal.provenance.calcRevLabel': 'Simulated Project Revenue (USD):',
+    'modal.provenance.calcWorkLabel': 'Your Verified Work Share:',
+    'modal.provenance.calcOriginatorCheck': 'I am the First-Spark Originator (+5% Royalty)',
+    'modal.provenance.calcRowSpark': '💡 First-Spark Permanent Royalty (5%)',
+    'modal.provenance.calcRowMerit': '⚡ Merit Builders Pool (85%)',
+    'modal.provenance.calcRowPlatform': '🛡️ Platform Notary & Infra (10%)',
+    'modal.provenance.calcRowYou': '🎯 Your Estimated Payout ({pct}% total)',
+    'modal.provenance.calcContributorsTitle': '👥 Current Verified Builders & Weight Breakdown',
+    'modal.provenance.calcNoContributors': 'No verified contributions yet — claim a task now to lead the 85% merit pool!',
+    'modal.provenance.certPreviewTitle': '🖼️ Proof of First Spark Certificate PNG Preview (900×520)',
+    'modal.provenance.downloadCertBtn': '⬇️ Download First-Spark Cert PNG',
 
     // Modal 4: Report
     'modal.report.title': '📋 AI Deliverable & Proof of Accepted Work Report',
@@ -1450,6 +1583,11 @@ export const DICTIONARY = Object.freeze({
     'toast.adminStrictChanged': '🛡️ Strict Device Review mode set to: {state}',
     'toast.adminDeviceReviewed': '🛡️ Device {code} {action}!',
     'toast.adminCodesGenerated': '🎟️ Generated {count} new redeem code(s)!',
+    'toast.joinedProject': '🤝 Joined "{name}" as a co-builder! ({count} co-builders total)',
+    'toast.alreadyJoined': '✓ You are already a co-builder on "{name}"!',
+    'toast.ideaCertExported': '📜 Exported Proof of First Spark Certificate PNG for "{name}"!',
+    'toast.copycatBlocked': '🛡️ Blocked potential copycat of "{name}" ({pct}% match) — join the original idea instead!',
+    'toast.hashCopied': '🔐 Full SHA-256 idea provenance hash copied!',
   },
 });
 
@@ -1462,22 +1600,22 @@ const PROJECT_I18N = Object.freeze({
     'zh-TW': {
       name: '像素算力鎮 v1.0（創世 Meta 項目）',
       shortName: '像素算力鎮 v1.0',
-      tagline: '用社群閒置算力一起把像素算力鎮推向公開上線，共享創世 30/60/10 分紅池！',
+      tagline: '用社群閒置算力一起把像素算力鎮推向公開上線，共享創世 5/85/10 多勞多得分紅池！',
       description: '這就是你正在體驗的創世 Meta 項目！零現金懸賞純靠熱血與分紅池驅動，完成 2~3 張雙軌任務即可衝到 100% 發布上線並即時分紅。',
       billboardText: '',
     },
     'zh-CN': {
       name: '像素算力镇 v1.0（创始 Meta 项目）',
       shortName: '像素算力镇 v1.0',
-      tagline: '用社区闲置算力一起把像素算力镇推向公开上线，共享创始 30/60/10 分红池！',
+      tagline: '用社区闲置算力一起把像素算力镇推向公开上线，共享创始 5/85/10 多劳多得分红池！',
       description: '这就是你正在体验的创始 Meta 项目！零现金悬赏纯靠热血与分红池驱动，完成 2~3 张双轨任务即可冲到 100% 发布上线并实时分红。',
       billboardText: '',
     },
     en: {
       name: 'PixelCompute Town v1.0 (Genesis Meta Project)',
       shortName: 'PixelCompute v1.0',
-      tagline: 'Pool idle community AI compute to launch PixelCompute Town and share the 30/60/10 genesis revenue pool!',
-      description: 'This is the live Genesis Meta Project you are playing right now! Zero cash bounty, pure co-op dividend pool — complete 2-3 tasks to reach 100% and launch.',
+      tagline: 'Pool idle community AI compute to launch PixelCompute Town and share the 5/85/10 merit revenue pool!',
+      description: 'This is the live Genesis Meta Project you are playing right now! Zero cash bounty, pure co-op merit pool — complete 2-3 tasks to reach 100% and launch.',
       billboardText: '',
     },
   },
@@ -1486,21 +1624,21 @@ const PROJECT_I18N = Object.freeze({
       name: 'i18n-PixelBot（開源多語系插件）',
       shortName: 'i18n-PixelBot',
       tagline: '自動掃描 Repo 並以 Gemini Flash 開出精準多語系 PR 的開源插件，含真實現金懸賞！',
-      description: '專為獨立開發者與開源維護者打造的多語系自動化工具。內含社群企業贊助的 $40 / $25 / $10 現金懸賞任務，加上 30/60/10 商業授權收益分紅池。',
+      description: '專為獨立開發者與開源維護者打造的多語系自動化工具。內含社群企業贊助的 $40 / $25 / $10 現金懸賞任務，加上 5/85/10 商業授權收益多勞多得分紅池。',
       billboardText: '🔥 i18n-PixelBot $40/$25 現金懸賞徵求高手！',
     },
     'zh-CN': {
       name: 'i18n-PixelBot（开源多语言插件）',
       shortName: 'i18n-PixelBot',
       tagline: '自动扫描 Repo 并以 Gemini Flash 开出精准多语言 PR 的开源插件，含真实现金悬赏！',
-      description: '专为独立开发者与开源维护者打造的多语言自动化工具。内含社区企业赞助的 $40 / $25 / $10 现金悬赏任务，加上 30/60/10 商业授权收益分红池。',
+      description: '专为独立开发者与开源维护者打造的多语言自动化工具。内含社区企业赞助的 $40 / $25 / $10 现金悬赏任务，加上 5/85/10 商业授权收益多劳多得分红池。',
       billboardText: '🔥 i18n-PixelBot $40/$25 现金悬赏征求高手！',
     },
     en: {
       name: 'i18n-PixelBot (Open-Source Localization Plugin)',
       shortName: 'i18n-PixelBot',
       tagline: 'Open-source plugin that scans repos and opens crisp i18n PRs with Gemini Flash — with live cash bounties!',
-      description: 'Automated localization CLI & GitHub Action for indie devs. Includes sponsored $40 / $25 / $10 cash bounties plus a 30/60/10 commercial license revenue pool.',
+      description: 'Automated localization CLI & GitHub Action for indie devs. Includes sponsored $40 / $25 / $10 cash bounties plus a 5/85/10 merit commercial license revenue pool.',
       billboardText: '🔥 i18n-PixelBot $40/$25 Cash Bounties Open Now!',
     },
   },
@@ -1827,9 +1965,9 @@ const ACHIEVEMENT_I18N = Object.freeze({
     en: { name: 'Launch Founder', description: 'Push an incubated project to 100% and launch it with town fireworks.' },
   },
   dividend_earner: {
-    'zh-TW': { name: '首批分紅股東', description: '從已上線項目的 30/60/10 透明分紅池中領取到真實美金分紅。' },
-    'zh-CN': { name: '首批分红股东', description: '从已上线项目的 30/60/10 透明分红池中领取到真实美金分红。' },
-    en: { name: 'Dividend Earner', description: 'Receive USD dividends from a launched project’s 30/60/10 revenue pool.' },
+    'zh-TW': { name: '首批分紅股東', description: '從已上線項目的 5/85/10 多勞多得透明分紅池中領取到真實美金分紅。' },
+    'zh-CN': { name: '首批分红股东', description: '从已上线项目的 5/85/10 多劳多得透明分红池中领取到真实美金分红。' },
+    en: { name: 'Dividend Earner', description: 'Receive USD dividends from a launched project’s 5/85/10 merit revenue pool.' },
   },
   cli_pioneer: {
     'zh-TW': { name: '本機 CLI 先鋒', description: '透過本機 pixel-worker CLI 橋接器發送即時心跳同步像素小人狀態。' },
@@ -1906,10 +2044,14 @@ export function localizeUser(user, locale) {
 export function localizeProject(project, locale) {
   const loc = normalizeLocale(locale);
   if (!project || typeof project !== 'object') {
-    return { name: '', shortName: '', tagline: '', description: '', billboardText: '', creatorName: '' };
+    return { name: '', shortName: '', tagline: '', description: '', billboardText: '', creatorName: '', originatorName: '' };
   }
   const known = project.id && PROJECT_I18N[project.id]?.[loc];
   const creatorName = translateKnownName(project.creatorName || (project.creatorId && NPC_USER_I18N[project.creatorId]?.[loc]) || '社群', loc);
+  const originatorName = translateKnownName(
+    project.originatorName || (project.originatorId && NPC_USER_I18N[project.originatorId]?.[loc]) || creatorName,
+    loc,
+  );
   if (known) {
     let billboardText = project.billboardText || '';
     if (billboardText && known.billboardText && billboardText === PROJECT_I18N[project.id]['zh-TW'].billboardText) {
@@ -1924,6 +2066,7 @@ export function localizeProject(project, locale) {
       description: known.description,
       billboardText,
       creatorName,
+      originatorName,
     };
   }
 
@@ -1950,7 +2093,7 @@ export function localizeProject(project, locale) {
     billboardText = localizeBillboardText(billboardText, shortName, loc);
   }
 
-  return { name, shortName, tagline, description, billboardText, creatorName };
+  return { name, shortName, tagline, description, billboardText, creatorName, originatorName };
 }
 
 function localizeBillboardText(raw, shortName, loc) {
@@ -2469,12 +2612,30 @@ export function localizeFeedMessage(msg, locale) {
       : `"${m[1]}" lit up the Plaza Neon Billboard (+$${m[2]} ad revenue)`;
   }
 
-  // Pattern 8: Project launched
-  m = s.match(/^🎆 《(.+?)》正式發布上線！首筆營收 \$(\d+(?:\.\d+)?) 已按 30\/60\/10 結算分紅/);
+  // Pattern 8: Project launched (supports both 5/85/10 and legacy 30/60/10 messages)
+  m = s.match(/^🎆 《(.+?)》正式發布上線！首筆營收 \$(\d+(?:\.\d+)?) 已按 (?:5\/85\/10|30\/60\/10)/);
   if (m) {
     return loc === 'zh-CN'
-      ? `🎆 《${m[1]}》正式发布上线！首笔营收 $${m[2]} 已按 30/60/10 结算分红！`
-      : `🎆 "${m[1]}" launched! Day-1 revenue $${m[2]} settled via 30/60/10 split!`;
+      ? `🎆 《${m[1]}》正式发布上线！首笔营收 $${m[2]} 已按 5/85/10 多劳多得协议结算分红！`
+      : `🎆 "${m[1]}" launched! Day-1 revenue $${m[2]} settled via 5/85/10 merit split!`;
+  }
+
+  // Pattern 8b: Co-builder joined a project
+  m = s.match(/^(.+?) 加入原創項目《(.+?)》共建（(?:目前|現共)\s*(\d+)\s*位共建者）/);
+  if (m) {
+    const uName = translateKnownName(m[1], loc);
+    return loc === 'zh-CN'
+      ? `${uName} 加入原创项目《${m[2]}》共建（共 ${m[3]} 位共建者）`
+      : `${uName} joined original project "${m[2]}" as a co-builder (${m[3]} co-builders)`;
+  }
+
+  // Pattern 8c: Provenance idea minted
+  m = s.match(/^(.+?) 首發提案《(.+?)》並鑄造 SHA-256 溯源指紋 #([a-f0-9]+)/i);
+  if (m) {
+    const uName = translateKnownName(m[1], loc);
+    return loc === 'zh-CN'
+      ? `${uName} 首发提案《${m[2]}》并铸造 SHA-256 溯源指纹 #${m[3]}`
+      : `${uName} sparked original idea "${m[2]}" & minted SHA-256 hash #${m[3]}`;
   }
 
   // Pattern 9: Simulated revenue
@@ -2563,6 +2724,124 @@ export function localizeFeedMessage(msg, locale) {
   return s;
 }
 
+const PRESET_REDEEM_NOTE_I18N = Object.freeze({
+  'PIXEL-PRO-2026': {
+    'zh-TW': '創世開通 Pro 會員測試碼（愛發電 / Ko-fi 範例）',
+    'zh-CN': '创始开通 Pro 会员测试码（爱发电 / Ko-fi 示例）',
+    en: 'Genesis Pro Pass sandbox code (Afdian / Ko-fi sample)',
+  },
+  'PIXEL-PACK-2026': {
+    'zh-TW': '解鎖全部 3 款創世限定塗裝大禮包測試碼',
+    'zh-CN': '解锁全部 3 款创始限定涂装大礼包测试码',
+    en: 'Genesis 3-Skin Collector Bundle sandbox code',
+  },
+  'PIXEL-GOLD-500': {
+    'zh-TW': '創世 500 金幣啟動紅包測試碼',
+    'zh-CN': '创始 500 金币启动红包测试码',
+    en: 'Genesis 500 Gold starter bonus sandbox code',
+  },
+});
+
+export function localizeRedeemNote(codeObj, locale) {
+  const loc = normalizeLocale(locale);
+  if (!codeObj || typeof codeObj !== 'object') return '';
+  const codeKey = String(codeObj.code || '').toUpperCase();
+  if (PRESET_REDEEM_NOTE_I18N[codeKey]) {
+    return PRESET_REDEEM_NOTE_I18N[codeKey][loc] || codeObj.note || '';
+  }
+  const raw = String(codeObj.note || '');
+  if (!raw || loc === 'zh-TW') return raw;
+  if (loc === 'zh-CN') {
+    return raw
+      .replaceAll('創世', '创始')
+      .replaceAll('開通', '开通')
+      .replaceAll('會員', '会员')
+      .replaceAll('測試碼', '测试码')
+      .replaceAll('愛發電', '爱发电')
+      .replaceAll('範例', '示例')
+      .replaceAll('塗裝', '涂装')
+      .replaceAll('禮包', '礼包')
+      .replaceAll('金幣', '金币')
+      .replaceAll('紅包', '红包');
+  }
+  if (/創世開通|创始开通/.test(raw)) return 'Genesis Pro Pass sandbox code';
+  if (/塗裝大禮包|涂装大礼包/.test(raw)) return 'Genesis 3-Skin Collector Bundle code';
+  if (/500 金幣|500 金币/.test(raw)) return '500 Town Gold starter bonus code';
+  if (/鎮長生成|镇长生成/.test(raw)) return 'Mayor-generated redeem code';
+  return raw;
+}
+
+export function localizeServerMessage(msg, locale) {
+  const loc = normalizeLocale(locale);
+  if (!msg) return '';
+  const s = String(msg).trim();
+  if (loc === 'zh-TW') return s;
+
+  // Common redeem reward summaries & server feedback
+  const exactMap = {
+    '已開通 Pro 會員通行證': { 'zh-CN': '已开通 Pro 会员通行证', en: 'Pro Pass activated' },
+    '已解鎖創世限定外觀大禮包（全 3 款 HD 皮膚）': {
+      'zh-CN': '已解锁创始限定外观大礼包（全 3 款 HD 皮肤）',
+      en: 'Unlocked Genesis Skin Bundle (all 3 HD skins)',
+    },
+    '已入帳 +500 小鎮金幣': { 'zh-CN': '已入账 +500 小镇金币', en: 'Credited +500 Town Gold' },
+    '已獲得霓虹廣告位兌換資格': { 'zh-CN': '已获得霓虹广告位兑换资格', en: 'Neon Billboard voucher credited' },
+    '偵測到與既有原創創意高度相似，平臺反對抄襲複製，建議直接加入原創意共建！': {
+      'zh-CN': '检测到与既有原创创意高度相似，平台反对抄袭复制，建议直接加入原创意共建！',
+      en: 'Highly similar to an existing original idea — PixelCompute Town opposes copycats. Join the original idea to co-build instead!',
+    },
+    '此兌換碼已被使用': { 'zh-CN': '此兑换码已被使用', en: 'This redeem code has already been used' },
+    '找不到此兌換碼，請檢查拼寫': { 'zh-CN': '找不到此兑换码，请检查拼写', en: 'Redeem code not found — please check spelling' },
+    '請先綁定穩定幣收款錢包地址': { 'zh-CN': '请先绑定稳定币收款钱包地址', en: 'Please bind a stablecoin payout wallet address first' },
+    '餘額不足': { 'zh-CN': '余额不足', en: 'Insufficient balance' },
+    '提領金額不可低於 $5': { 'zh-CN': '提现金额不可低于 $5', en: 'Minimum payout amount is $5' },
+    '小鎮金幣不足': { 'zh-CN': '小镇金币不足', en: 'Insufficient Town Gold' },
+    '你已經擁有此商品': { 'zh-CN': '你已经拥有此商品', en: 'You already own this item' },
+    '你已經是該創意的共建者': { 'zh-CN': '你已经是该创意的共建者', en: 'You are already a co-builder of this idea' },
+    '項目尚未達到 100% 開發進度': { 'zh-CN': '项目尚未达到 100% 开发进度', en: 'Project has not reached 100% build progress yet' },
+  };
+  if (exactMap[s]) return exactMap[s][loc] || s;
+
+  if (loc === 'en') {
+    if (s.includes('Pro') && (s.includes('開通') || s.includes('开通'))) return 'Pro Pass activated!';
+    if (s.includes('500') && (s.includes('金幣') || s.includes('金币'))) return '+500 Town Gold credited!';
+    if (s.includes('大禮包') || s.includes('大礼包')) return 'Genesis Skin Bundle unlocked!';
+    if (s.includes('霓虹廣告') || s.includes('霓虹广告')) return 'Neon Billboard activated!';
+    if (s.includes('高度相似') || s.includes('抄襲') || s.includes('抄袭')) {
+      return 'Highly similar to an existing original idea — join the original idea to co-build instead!';
+    }
+    if (s.includes('已被使用')) return 'This redeem code has already been used.';
+    if (s.includes('找不到') && s.includes('兌換碼')) return 'Redeem code not found.';
+    if (s.includes('最低') && s.includes('$5')) return 'Minimum withdrawal amount is $5.00.';
+    if (s.includes('餘額不足') || s.includes('余额不足')) return 'Insufficient balance.';
+    if (s.includes('金幣不足') || s.includes('金币不足')) return 'Not enough Town Gold.';
+    if (s.includes('體力不足') || s.includes('体力不足')) return 'Worker stamina too low — grab a coffee in the Lounge!';
+    if (s.includes('尚未達到 100%')) return 'Project has not reached 100% progress yet.';
+    if (s.includes('信箱已被註冊') || s.includes('邮箱已被注册')) return 'This email is already registered.';
+    if (s.includes('帳號或密碼錯誤') || s.includes('账号或密码错误')) return 'Invalid email or password.';
+    if (s.includes('請先綁定') && s.includes('錢包')) return 'Please bind a stablecoin payout wallet first.';
+  }
+
+  if (loc === 'zh-CN') {
+    return s
+      .replaceAll('平臺', '平台')
+      .replaceAll('項目', '项目')
+      .replaceAll('開通', '开通')
+      .replaceAll('會員', '会员')
+      .replaceAll('兌換碼', '兑换码')
+      .replaceAll('金幣', '金币')
+      .replaceAll('餘額', '余额')
+      .replaceAll('錢包', '钱包')
+      .replaceAll('提領', '提现')
+      .replaceAll('綁定', '绑定')
+      .replaceAll('抄襲', '抄袭')
+      .replaceAll('複製', '复制')
+      .replaceAll('創意', '创意')
+      .replaceAll('體力', '体力');
+  }
+  return s;
+}
+
 // ============================================================================
 // Canvas & Work Certificate Complete Trilingual Dictionary (for pixelEngine.js & certCard.js)
 // ============================================================================
@@ -2604,8 +2883,8 @@ const CANVAS_I18N = Object.freeze({
     ticker: {
       sponsorFallback: '★ {name} 贊助徵求算力貢獻者！',
       launchedMsg: '🚀 {name} 已正式上線分紅中！',
-      launchBanner: '🚀 《{name}》正式上線！30/60/10 分紅結算中！',
-      defaultMeta: '⚡ 像素算力鎮 · 《{name}》進度 {pct}% · 雙軌算力 30/60/10 透明分紅',
+      launchBanner: '🚀 《{name}》正式上線！5/85/10 多勞多得分紅結算中！',
+      defaultMeta: '⚡ 像素算力鎮 · 《{name}》進度 {pct}% · 5/85/10 創意溯源 × 多勞多得',
       newProjectFallback: '新創世項目',
     },
     cert: {
@@ -2616,7 +2895,7 @@ const CANVAS_I18N = Object.freeze({
       proBadge: '👑 PRO 會員',
       squadTitle: 'ACTIVE SQUAD · 旗下算力小人 ({count})',
       sealLine1: '防刷單鐵律 · 按驗收成果記功',
-      sealLine2: 'BYOK 零信任金鑰 · 30/60/10 透明分紅',
+      sealLine2: 'BYOK 零信任金鑰 · 5/85/10 多勞多得透明分紅',
       tierGenesis: '創世開拓者',
       tierCertified: '認證算力工程師',
       tierMaster: '公會資深大匠',
@@ -2681,8 +2960,8 @@ const CANVAS_I18N = Object.freeze({
     ticker: {
       sponsorFallback: '★ {name} 赞助征求算力贡献者！',
       launchedMsg: '🚀 {name} 已正式上线分红中！',
-      launchBanner: '🚀 《{name}》正式上线！30/60/10 分红结算中！',
-      defaultMeta: '⚡ 像素算力镇 · 《{name}》进度 {pct}% · 双轨算力 30/60/10 透明分红',
+      launchBanner: '🚀 《{name}》正式上线！5/85/10 多劳多得分红结算中！',
+      defaultMeta: '⚡ 像素算力镇 · 《{name}》进度 {pct}% · 5/85/10 创意溯源 × 多劳多得',
       newProjectFallback: '新创始项目',
     },
     cert: {
@@ -2693,7 +2972,7 @@ const CANVAS_I18N = Object.freeze({
       proBadge: '👑 PRO 会员',
       squadTitle: 'ACTIVE SQUAD · 旗下算力小人 ({count})',
       sealLine1: '防刷单铁律 · 按验收成果记功',
-      sealLine2: 'BYOK 零信任密钥 · 30/60/10 透明分红',
+      sealLine2: 'BYOK 零信任密钥 · 5/85/10 多劳多得透明分红',
       tierGenesis: '创始开拓者',
       tierCertified: '认证算力工程师',
       tierMaster: '公会资深大匠',
@@ -2758,8 +3037,8 @@ const CANVAS_I18N = Object.freeze({
     ticker: {
       sponsorFallback: '★ {name} Sponsored — Seeking Compute Builders!',
       launchedMsg: '🚀 {name} is LIVE & streaming dividends!',
-      launchBanner: '🚀 "{name}" LAUNCHED! 30/60/10 Dividends Settling!',
-      defaultMeta: '⚡ PixelCompute Town · {name} {pct}% · 30/60/10 Revenue Split',
+      launchBanner: '🚀 "{name}" LAUNCHED! 5/85/10 Merit Dividends Settling!',
+      defaultMeta: '⚡ PixelCompute Town · {name} {pct}% · 5/85/10 Proof of First Spark',
       newProjectFallback: 'Genesis Project',
     },
     cert: {
@@ -2770,7 +3049,7 @@ const CANVAS_I18N = Object.freeze({
       proBadge: '👑 PRO PASS',
       squadTitle: 'ACTIVE SQUAD · PIXEL WORKERS ({count})',
       sealLine1: 'Anti-Cheat Proof of Accepted Work',
-      sealLine2: 'Zero-Trust BYOK · 30/60/10 Revenue Split',
+      sealLine2: 'Zero-Trust BYOK · 5/85/10 Merit Revenue Split',
       tierGenesis: 'Genesis Pioneer',
       tierCertified: 'Verified Engineer',
       tierMaster: 'Senior Guild Artisan',
