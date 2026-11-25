@@ -431,9 +431,12 @@
               <label class="form-label" for="wallet-chain" data-i18n="payout.walletChainLabel">收款公鏈</label>
               <select class="select" id="wallet-chain">
                 <option value="base">Base (USDC / USDT)</option>
+                <option value="bnb">BNB Chain BEP-20 (USDC / USDT)</option>
+                <option value="ethereum">Ethereum ERC-20 (USDC / USDT)</option>
                 <option value="polygon">Polygon (USDC / USDT)</option>
                 <option value="arbitrum">Arbitrum (USDC / USDT)</option>
                 <option value="solana">Solana (USDC / USDT)</option>
+                <option value="tron">TRON TRC-20 (USDT / USDC)</option>
               </select>
             </div>
             <div class="form-field">
@@ -885,10 +888,13 @@
             <div class="form-field">
               <label class="form-label" for="pay-chain" data-i18n="pay.chainLabel">選擇公鏈網路</label>
               <select class="select" id="pay-chain">
+                <option value="bnb">BNB Smart Chain (BEP-20)</option>
+                <option value="solana">Solana (SPL)</option>
+                <option value="tron">TRON (TRC-20)</option>
+                <option value="ethereum">Ethereum (ERC-20)</option>
                 <option value="base">Base (Low Gas)</option>
                 <option value="polygon">Polygon</option>
                 <option value="arbitrum">Arbitrum</option>
-                <option value="solana">Solana</option>
               </select>
             </div>
             <div class="form-field">

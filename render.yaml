@@ -32,6 +32,8 @@ services:
         sync: false
       - key: TREASURY_SOL_ADDRESS
         sync: false
+      - key: TREASURY_TRON_ADDRESS
+        sync: false
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
       - key: SESSION_SECRET

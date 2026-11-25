@@ -4,17 +4,21 @@ import crypto from 'node:crypto';
 import { ensureStateSchema, PLATFORM_BOUNTY_FEE_PCT, round2 } from './seed.mjs';
 import { getActiveUserContext, projectStateForUser, syncUserLeaderboard } from './auth.mjs';
 
-export const STABLECOIN_CHAINS = Object.freeze(['base', 'polygon', 'arbitrum', 'solana']);
+export const STABLECOIN_CHAINS = Object.freeze(['base', 'bnb', 'ethereum', 'polygon', 'arbitrum', 'solana', 'tron']);
 export const STABLECOIN_TOKENS = Object.freeze(['USDC', 'USDT']);
 export const MIN_PAYOUT_USD = 5;
 
 const DEFAULT_DEMO_EVM_ADDRESS = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
 const DEFAULT_DEMO_SOL_ADDRESS = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+const DEFAULT_DEMO_TRON_ADDRESS = 'T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb';
 
+const EVM_CHAINS = new Set(['base', 'bnb', 'ethereum', 'polygon', 'arbitrum']);
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const TRON_ADDRESS_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
 const EVM_TXHASH_RE = /^0x[a-fA-F0-9]{64}$/;
 const SOL_TXHASH_RE = /^[1-9A-HJ-NP-Za-km-z]{32,88}$/;
+const TRON_TXHASH_RE = /^(?:0x)?[a-fA-F0-9]{64}$/;
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 export const PAYMENT_PRODUCTS = Object.freeze({
@@ -99,6 +103,13 @@ export function getTreasuryAddress(chain) {
       isDemoAddress: !envAddr,
     };
   }
+  if (chain === 'tron') {
+    const envAddr = (process.env.TREASURY_TRON_ADDRESS || '').trim();
+    return {
+      address: envAddr || DEFAULT_DEMO_TRON_ADDRESS,
+      isDemoAddress: !envAddr,
+    };
+  }
   const envAddr = (process.env.TREASURY_EVM_ADDRESS || '').trim();
   return {
     address: envAddr || DEFAULT_DEMO_EVM_ADDRESS,
@@ -123,6 +134,7 @@ export function getPaymentConfig() {
     minPayoutUsd: MIN_PAYOUT_USD,
     treasuryEvmAddress: getTreasuryAddress('base').address,
     treasurySolAddress: getTreasuryAddress('solana').address,
+    treasuryTronAddress: getTreasuryAddress('tron').address,
     products: Object.values(PAYMENT_PRODUCTS),
   };
 }
@@ -131,7 +143,8 @@ export function validateWalletAddress(chain, address) {
   if (typeof address !== 'string') return false;
   const trimmed = address.trim();
   if (chain === 'solana') return SOL_ADDRESS_RE.test(trimmed);
-  if (chain === 'base' || chain === 'polygon' || chain === 'arbitrum') {
+  if (chain === 'tron') return TRON_ADDRESS_RE.test(trimmed);
+  if (EVM_CHAINS.has(chain)) {
     return EVM_ADDRESS_RE.test(trimmed);
   }
   return false;
@@ -141,6 +154,7 @@ export function validateTxHash(chain, txHash) {
   if (typeof txHash !== 'string') return false;
   const trimmed = txHash.trim();
   if (chain === 'solana') return SOL_TXHASH_RE.test(trimmed);
+  if (chain === 'tron') return TRON_TXHASH_RE.test(trimmed);
   return EVM_TXHASH_RE.test(trimmed);
 }
 
@@ -152,6 +166,9 @@ export function generateSandboxTxHash(chain) {
       out += BASE58_ALPHABET[bytes[i] % BASE58_ALPHABET.length];
     }
     return out;
+  }
+  if (chain === 'tron') {
+    return crypto.randomBytes(32).toString('hex');
   }
   return `0x${crypto.randomBytes(32).toString('hex')}`;
 }
