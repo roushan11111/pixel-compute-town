@@ -323,11 +323,50 @@ function shouldHideSandboxControls() {
 }
 
 function syncLiveModeSandboxControls() {
+  const live = isLiveProductionMode();
   const hide = shouldHideSandboxControls();
   ['btn-pay-sim-tx', 'btn-pay-sandbox-complete', 'btn-request-payout-instant'].forEach((id) => {
     const el = $(id);
     if (el) el.style.display = hide ? 'none' : '';
   });
+
+  // Hide public demo redeem codes in Live Production Mode
+  const demoCodesWrap = $('pay-demo-codes-wrap');
+  if (demoCodesWrap) {
+    demoCodesWrap.style.display = live ? 'none' : '';
+  }
+
+  // Optional external Redeem Store link (Afdian / Ko-fi)
+  const storeBtn = $('btn-pay-redeem-store');
+  const storeUrl = (app.paymentConfig?.redeemStoreUrl || '').trim();
+  if (storeBtn) {
+    if (storeUrl && /^https?:\/\//i.test(storeUrl)) {
+      storeBtn.href = storeUrl;
+      storeBtn.style.display = 'inline-flex';
+    } else {
+      storeBtn.style.display = 'none';
+    }
+  }
+
+  // Card tab: show only configured providers in Live Mode, or honest "coming soon" notice
+  const polarOn = Boolean(app.paymentConfig?.polarEnabled);
+  const stripeOn = Boolean(app.paymentConfig?.stripeEnabled);
+  const polarBtn = $('btn-pay-polar');
+  const stripeBtn = $('btn-pay-stripe');
+  const cardNotice = $('pay-card-live-notice');
+  const cardDesc = $('pay-card-desc');
+  if (live) {
+    if (polarBtn) polarBtn.style.display = polarOn ? '' : 'none';
+    if (stripeBtn) stripeBtn.style.display = stripeOn ? '' : 'none';
+    const neither = !polarOn && !stripeOn;
+    if (cardNotice) cardNotice.style.display = neither ? 'flex' : 'none';
+    if (cardDesc) cardDesc.style.display = neither ? 'none' : '';
+  } else {
+    if (polarBtn) polarBtn.style.display = '';
+    if (stripeBtn) stripeBtn.style.display = '';
+    if (cardNotice) cardNotice.style.display = 'none';
+    if (cardDesc) cardDesc.style.display = '';
+  }
 }
 
 function getTaskAudienceSafe(task) {

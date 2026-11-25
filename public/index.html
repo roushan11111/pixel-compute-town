@@ -1074,8 +1074,9 @@
 
         <!-- Track 2: Card (Polar / Stripe) -->
         <div class="pay-pane" id="pay-pane-card" data-pay-pane="card">
-          <div class="card-subtitle" data-i18n="pay.cardDesc">支援 Polar.sh 與 Stripe 國際信用卡／Apple Pay 安全結帳；本機未設定真實金鑰時提供一鍵沙盒刷卡體驗。</div>
-          <div class="auth-oauth-grid">
+          <div class="card-subtitle" id="pay-card-desc" data-i18n="pay.cardDesc">支援 Polar.sh 與 Stripe 國際信用卡／Apple Pay 安全結帳；本機未設定真實金鑰時提供一鍵沙盒刷卡體驗。</div>
+          <div class="info-banner amber" id="pay-card-live-notice" style="display: none;" data-i18n="pay.cardLiveSoon">⏳ 國際信用卡直刷正在串接開通中，目前請優先使用「💎 穩定幣 (USDC/USDT)」或「🎟️ 卡密兌換碼」，1 秒自動開通！</div>
+          <div class="auth-oauth-grid" id="pay-card-btn-grid">
             <button type="button" class="btn btn-primary" id="btn-pay-polar" data-i18n="pay.polarBtn">❄️ 使用 Polar.sh 結帳</button>
             <button type="button" class="btn btn-pink" id="btn-pay-stripe" data-i18n="pay.stripeBtn">💳 使用 Stripe 結帳</button>
           </div>
@@ -1088,11 +1089,14 @@
         <!-- Track 3: Redeem Code (Afdian / Ko-fi / Gumroad) -->
         <div class="pay-pane" id="pay-pane-redeem" data-pay-pane="redeem">
           <div class="card-subtitle" data-i18n="pay.redeemDesc">在愛發電 / Ko-fi / Gumroad 贊助取得的卡密兌換碼，可於此一鍵兌換入帳！</div>
-          <div class="zero-trust-callout" data-i18n="pay.redeemHint">🎁 內建測試體驗碼：PIXEL-PRO-2026（Pro 會員）｜PIXEL-PACK-2026（創世禮包）｜PIXEL-GOLD-500（500 金幣）</div>
-          <div class="badge-row">
-            <button type="button" class="quick-chip" data-fill-redeem="PIXEL-PRO-2026">PIXEL-PRO-2026</button>
-            <button type="button" class="quick-chip" data-fill-redeem="PIXEL-PACK-2026">PIXEL-PACK-2026</button>
-            <button type="button" class="quick-chip" data-fill-redeem="PIXEL-GOLD-500">PIXEL-GOLD-500</button>
+          <a class="btn btn-primary" id="btn-pay-redeem-store" href="#" target="_blank" rel="noopener noreferrer" style="display: none; width: 100%; margin-bottom: 8px;" data-i18n="pay.redeemStoreBtn">🛒 前往官方小舖購買卡密（支援微信 / 支付寶 / 刷卡）↗</a>
+          <div id="pay-demo-codes-wrap">
+            <div class="zero-trust-callout" data-i18n="pay.redeemHint">🎁 內建測試體驗碼：PIXEL-PRO-2026（Pro 會員）｜PIXEL-PACK-2026（創世禮包）｜PIXEL-GOLD-500（500 金幣）</div>
+            <div class="badge-row" style="margin-top: 6px;">
+              <button type="button" class="quick-chip" data-fill-redeem="PIXEL-PRO-2026">PIXEL-PRO-2026</button>
+              <button type="button" class="quick-chip" data-fill-redeem="PIXEL-PACK-2026">PIXEL-PACK-2026</button>
+              <button type="button" class="quick-chip" data-fill-redeem="PIXEL-GOLD-500">PIXEL-GOLD-500</button>
+            </div>
           </div>
           <form id="pay-redeem-form" class="v1-form-stack">
             <div class="form-field">

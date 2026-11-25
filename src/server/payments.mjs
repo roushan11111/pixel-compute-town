@@ -117,18 +117,49 @@ export function getTreasuryAddress(chain) {
   };
 }
 
+export const DEMO_REDEEM_CODES = new Set(['PIXEL-PRO-2026', 'PIXEL-PACK-2026', 'PIXEL-GOLD-500']);
+
+const POLAR_PRODUCT_ENV_MAP = Object.freeze({
+  'shop-pro-pass': 'POLAR_PRO_CHECKOUT_URL',
+  'shop-genesis-pack': 'POLAR_GENESIS_CHECKOUT_URL',
+  'billboard-ad': 'POLAR_BILLBOARD_CHECKOUT_URL',
+  'bounty-topup': 'POLAR_BOUNTY_CHECKOUT_URL',
+});
+
+const STRIPE_PRODUCT_ENV_MAP = Object.freeze({
+  'shop-pro-pass': 'STRIPE_PRO_CHECKOUT_URL',
+  'shop-genesis-pack': 'STRIPE_GENESIS_CHECKOUT_URL',
+  'billboard-ad': 'STRIPE_BILLBOARD_CHECKOUT_URL',
+  'bounty-topup': 'STRIPE_BOUNTY_CHECKOUT_URL',
+});
+
+export function getPolarCheckoutUrl(productId = null) {
+  const envKey = productId ? POLAR_PRODUCT_ENV_MAP[productId] : null;
+  const specific = envKey ? (process.env[envKey] || '').trim() : '';
+  return specific || (process.env.POLAR_CHECKOUT_URL || '').trim();
+}
+
+export function getStripeCheckoutUrl(productId = null) {
+  const envKey = productId ? STRIPE_PRODUCT_ENV_MAP[productId] : null;
+  const specific = envKey ? (process.env[envKey] || '').trim() : '';
+  return specific || (process.env.STRIPE_CHECKOUT_URL || '').trim();
+}
+
 export function isPolarEnabled() {
-  return Boolean((process.env.POLAR_CHECKOUT_URL || '').trim());
+  if ((process.env.POLAR_CHECKOUT_URL || '').trim()) return true;
+  return Object.values(POLAR_PRODUCT_ENV_MAP).some((k) => Boolean((process.env[k] || '').trim()));
 }
 
 export function isStripeEnabled() {
-  return Boolean((process.env.STRIPE_SECRET_KEY || '').trim() && (process.env.STRIPE_CHECKOUT_URL || '').trim());
+  if ((process.env.STRIPE_CHECKOUT_URL || '').trim()) return true;
+  return Object.values(STRIPE_PRODUCT_ENV_MAP).some((k) => Boolean((process.env[k] || '').trim()));
 }
 
 export function getPaymentConfig() {
   return {
     polarEnabled: isPolarEnabled(),
     stripeEnabled: isStripeEnabled(),
+    redeemStoreUrl: (process.env.REDEEM_STORE_URL || '').trim(),
     stablecoinChains: [...STABLECOIN_CHAINS],
     stablecoinTokens: [...STABLECOIN_TOKENS],
     minPayoutUsd: MIN_PAYOUT_USD,
@@ -772,16 +803,20 @@ export async function handleFiatCheckout(req, res, body, store, sseHub) {
 
   let checkoutUrl = null;
   let sandboxMode = true;
-  if (provider === 'polar' && isPolarEnabled()) {
-    const base = process.env.POLAR_CHECKOUT_URL.trim();
-    const sep = base.includes('?') ? '&' : '?';
-    checkoutUrl = `${base}${sep}metadata[orderId]=${encodeURIComponent(result.order.id)}&metadata[productId]=${encodeURIComponent(product.id)}`;
-    sandboxMode = false;
-  } else if (provider === 'stripe' && isStripeEnabled()) {
-    const base = process.env.STRIPE_CHECKOUT_URL.trim();
-    const sep = base.includes('?') ? '&' : '?';
-    checkoutUrl = `${base}${sep}client_reference_id=${encodeURIComponent(result.order.id)}`;
-    sandboxMode = false;
+  if (provider === 'polar') {
+    const base = getPolarCheckoutUrl(product.id);
+    if (base) {
+      const sep = base.includes('?') ? '&' : '?';
+      checkoutUrl = `${base}${sep}metadata[orderId]=${encodeURIComponent(result.order.id)}&metadata[productId]=${encodeURIComponent(product.id)}`;
+      sandboxMode = false;
+    }
+  } else if (provider === 'stripe') {
+    const base = getStripeCheckoutUrl(product.id);
+    if (base) {
+      const sep = base.includes('?') ? '&' : '?';
+      checkoutUrl = `${base}${sep}client_reference_id=${encodeURIComponent(result.order.id)}`;
+      sandboxMode = false;
+    }
   }
 
   sseHub?.broadcast('payment_order_created', { order: result.order });
@@ -873,8 +908,30 @@ export async function handlePaymentWebhook(req, res, provider, rawBody, store, s
         valid = verifyHmacHex(`${timestamp}.${rawBody}`, secret, v1);
       }
     } else {
-      const sig = req.headers['webhook-signature'] || req.headers['x-polar-signature'] || '';
-      valid = verifyHmacHex(rawBody, secret, String(sig));
+      // Polar.sh uses Standard Webhooks (webhook-id, webhook-timestamp, webhook-signature: "v1,<base64>") or raw HMAC hex
+      const sigHeader = String(req.headers['webhook-signature'] || req.headers['x-polar-signature'] || '');
+      const whId = String(req.headers['webhook-id'] || '');
+      const whTs = String(req.headers['webhook-timestamp'] || '');
+      if (whId && whTs && sigHeader.includes('v1,')) {
+        const keyMaterial = secret.startsWith('polar_whs_')
+          ? Buffer.from(secret.slice('polar_whs_'.length), 'utf8')
+          : secret.startsWith('whsec_')
+            ? Buffer.from(secret.slice('whsec_'.length), 'base64')
+            : Buffer.from(secret, 'utf8');
+        const expectedB64 = crypto
+          .createHmac('sha256', keyMaterial)
+          .update(`${whId}.${whTs}.${rawBody}`, 'utf8')
+          .digest('base64');
+        const candidates = sigHeader.split(/\s+/).map((part) => part.replace(/^v1,/, '').trim()).filter(Boolean);
+        valid = candidates.some((cand) => {
+          const a = Buffer.from(cand, 'utf8');
+          const b = Buffer.from(expectedB64, 'utf8');
+          return a.length === b.length && crypto.timingSafeEqual(a, b);
+        });
+      }
+      if (!valid) {
+        valid = verifyHmacHex(rawBody, secret, sigHeader);
+      }
     }
     if (!valid) {
       return sendJson(res, 401, { ok: false, error: `${provider} Webhook HMAC 簽名驗證失敗` });
@@ -952,6 +1009,12 @@ export async function handleRedeemCode(req, res, body, store, sseHub) {
     if (!entry) {
       errStatus = 404;
       errMessage = `無效的兌換碼：${rawCode}`;
+      return null;
+    }
+    if (s.settings?.liveProductionMode && (DEMO_REDEEM_CODES.has(rawCode) || entry.disabledByLiveMode)) {
+      errStatus = 403;
+      errCode = 'DEMO_CODE_DISABLED';
+      errMessage = '正式營運模式已自動停用公開測試兌換碼，請使用購買取得之專屬卡密';
       return null;
     }
     if (entry.used) {

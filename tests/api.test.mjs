@@ -3441,4 +3441,101 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('36. Live Mode auto-revokes public demo redeem codes, supports per-product Polar URLs & Standard Webhooks HMAC', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-pay-live-'));
+    const prevPolarPro = process.env.POLAR_PRO_CHECKOUT_URL;
+    const prevPolarWh = process.env.POLAR_WEBHOOK_SECRET;
+    process.env.POLAR_PRO_CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_test_pro_9usd';
+    process.env.POLAR_WEBHOOK_SECRET = 'polar_whs_test_secret_12345';
+
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      // 1. Register a real user
+      const reg = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'buyer-live@pixelcompute.test',
+        password: 'buyer-password-123',
+        displayName: 'Live Buyer',
+      });
+      assert.equal(reg.status, 201);
+      const buyerCookie = reg.cookie;
+
+      // 2. Founder activates Live Production Mode -> revokes all 3 public demo redeem codes
+      const clean = await apiJson(isoUrl, 'POST', '/api/admin/launch-clean-mode', {});
+      assert.equal(clean.status, 200);
+      assert.equal(clean.json.revokedDemoCodesCount, 3);
+
+      // 3. Buyer trying to redeem public demo code PIXEL-PRO-2026 must be blocked with 403 DEMO_CODE_DISABLED
+      const demoRedeem = await apiJson(isoUrl, 'POST', '/api/payments/redeem', { code: 'PIXEL-PRO-2026' }, buyerCookie);
+      assert.equal(demoRedeem.status, 403);
+      assert.equal(demoRedeem.json.code, 'DEMO_CODE_DISABLED');
+
+      // 4. Founder-generated real redeem code STILL works cleanly in Live Mode!
+      const genCode = await apiJson(isoUrl, 'POST', '/api/admin/codes/generate', {
+        rewardType: 'gold_500',
+        count: 1,
+        note: 'Afdian Real Order #1',
+      });
+      assert.equal(genCode.status, 201);
+      const realCode = genCode.json.codes[0].code;
+
+      const realRedeem = await apiJson(isoUrl, 'POST', '/api/payments/redeem', { code: realCode }, buyerCookie);
+      assert.equal(realRedeem.status, 200);
+      assert.equal(realRedeem.json.ok, true);
+
+      // 5. Per-product Polar.sh checkout URL resolves cleanly (sandboxMode === false)
+      const checkout = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/checkout',
+        { productId: 'shop-pro-pass', provider: 'polar' },
+        buyerCookie,
+      );
+      assert.equal(checkout.status, 201);
+      assert.equal(checkout.json.sandboxMode, false);
+      assert.ok(checkout.json.checkoutUrl.startsWith('https://buy.polar.sh/polar_cl_test_pro_9usd?'));
+      const orderId = checkout.json.order.id;
+
+      // 6. Standard Webhooks signature verification fulfills Polar order automatically
+      const whPayload = JSON.stringify({
+        type: 'order.paid',
+        id: 'polar-evt-001',
+        data: { metadata: { orderId } },
+      });
+      const whId = 'msg_test_001';
+      const whTs = String(Math.floor(Date.now() / 1000));
+      const sigB64 = crypto
+        .createHmac('sha256', Buffer.from('test_secret_12345', 'utf8'))
+        .update(`${whId}.${whTs}.${whPayload}`, 'utf8')
+        .digest('base64');
+
+      const whRes = await fetch(`${isoUrl}/api/webhooks/polar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'webhook-id': whId,
+          'webhook-timestamp': whTs,
+          'webhook-signature': `v1,${sigB64}`,
+        },
+        body: whPayload,
+      });
+      const whJson = await whRes.json();
+      assert.equal(whRes.status, 200);
+      assert.equal(whJson.ok, true);
+      assert.equal(whJson.verified, true);
+      assert.equal(whJson.fulfilledOrderId, orderId);
+
+      const buyerAfter = await apiJson(isoUrl, 'GET', '/api/auth/me', undefined, buyerCookie);
+      assert.equal(buyerAfter.json.user.isPro, true);
+    } finally {
+      if (prevPolarPro === undefined) delete process.env.POLAR_PRO_CHECKOUT_URL;
+      else process.env.POLAR_PRO_CHECKOUT_URL = prevPolarPro;
+      if (prevPolarWh === undefined) delete process.env.POLAR_WEBHOOK_SECRET;
+      else process.env.POLAR_WEBHOOK_SECRET = prevPolarWh;
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });

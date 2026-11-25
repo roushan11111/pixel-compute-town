@@ -67,6 +67,7 @@ import {
   syncUserLeaderboard,
 } from './src/server/auth.mjs';
 import {
+  DEMO_REDEEM_CODES,
   PAYMENT_PRODUCTS,
   getPaymentConfig,
   handleAdminBatchMarkPaid,
@@ -1337,15 +1338,29 @@ export function createAppServer(options = {}) {
           const DEMO_REVIEW_IDS = new Set(['rev-clean-01', 'rev-slop-01']);
           s.reviewQueue = (s.reviewQueue || []).filter((item) => item && !DEMO_REVIEW_IDS.has(item.id));
 
+          // 5. Auto-revoke public demo redeem codes so strangers cannot claim free Pro in Live Mode
+          let revokedDemoCodesCount = 0;
+          const revokeTime = new Date().toISOString();
+          for (const rc of s.redeemCodes || []) {
+            if (rc && DEMO_REDEEM_CODES.has(String(rc.code || '').toUpperCase()) && !rc.used) {
+              rc.used = true;
+              rc.disabledByLiveMode = true;
+              rc.usedByName = '正式營運模式自動停用';
+              rc.usedAt = revokeTime;
+              revokedDemoCodesCount += 1;
+            }
+          }
+
           // All registered real users in s.users (GitHub / Email / Google) are 100% preserved!
           pushActivity(s, {
             type: 'admin',
             icon: '🟢',
-            message: `鎮長已啟動【正式營運模式】！已清空 ${clearedBountiesCount} 筆示範假現金懸賞、示範營收與預置測試審閱單，完整保留全部真實註冊鎮民資料！`,
+            message: `鎮長已啟動【正式營運模式】！已清空 ${clearedBountiesCount} 筆示範假現金懸賞、停用 ${revokedDemoCodesCount} 組公開測試卡密，完整保留全部真實註冊鎮民資料！`,
           });
 
           return {
             clearedBountiesCount,
+            revokedDemoCodesCount,
             userId: ctx.userId,
             adminName: ctx.user.displayName || ctx.user.username || 'Founder',
           };
@@ -1367,6 +1382,7 @@ export function createAppServer(options = {}) {
           ok: true,
           liveProductionMode: true,
           clearedBountiesCount: result.clearedBountiesCount,
+          revokedDemoCodesCount: result.revokedDemoCodesCount,
           state: projectClientState(state, result.userId),
         });
       }
