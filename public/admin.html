@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>📊 鎮長數據後臺 — PixelCompute Town Admin Console</title>
+  <style>
+    :root {
+      --bg: #0b0e1c;
+      --panel: #13192f;
+      --panel-2: #192240;
+      --border: #2a3966;
+      --cyan: #38bdf8;
+      --emerald: #34d399;
+      --gold: #facc15;
+      --pink: #f472b6;
+      --red: #f87171;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+      background: radial-gradient(circle at top right, #1b1640 0%, var(--bg) 52%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .mono { font-family: 'Cascadia Mono', 'JetBrains Mono', Consolas, monospace; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(11, 14, 28, 0.94);
+      backdrop-filter: blur(10px);
+      border-bottom: 2px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 900;
+      font-size: 16px;
+      color: #fff;
+      text-decoration: none;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      border: 1px solid var(--border);
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--cyan);
+      white-space: nowrap;
+    }
+    .pill.green { background: rgba(52, 211, 153, 0.14); border-color: rgba(52, 211, 153, 0.45); color: var(--emerald); }
+    .pill.gold { background: rgba(250, 204, 21, 0.14); border-color: rgba(250, 204, 21, 0.45); color: var(--gold); }
+    .pill.pink { background: rgba(244, 114, 182, 0.14); border-color: rgba(244, 114, 182, 0.45); color: var(--pink); }
+    .pill.red { background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.45); color: var(--red); }
+    .pill.muted { background: rgba(148, 163, 184, 0.12); border-color: rgba(148, 163, 184, 0.3); color: var(--muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 13px;
+      border-radius: 7px;
+      border: 2px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: transform 0.08s ease, border-color 0.15s ease;
+    }
+    .btn:hover { border-color: var(--cyan); transform: translateY(-1px); }
+    .btn.primary { background: linear-gradient(135deg, #0ea5e9, #6366f1); border-color: #7dd3fc; color: #fff; }
+    .btn.green { background: linear-gradient(135deg, #059669, #10b981); border-color: #6ee7b7; color: #fff; }
+    .btn.gold { background: linear-gradient(135deg, #b45309, #f59e0b); border-color: #fde047; color: #0b0e1c; }
+    .btn.danger { background: rgba(248, 113, 113, 0.16); border-color: rgba(248, 113, 113, 0.6); color: #fecaca; }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .gate-card {
+      max-width: 520px;
+      margin: 70px auto;
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      text-align: center;
+    }
+    .gate-card h1 { margin: 8px 0 10px; font-size: 22px; }
+    .gate-card p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .kpi-card {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::after {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 3px;
+      background: var(--accent, var(--cyan));
+    }
+    .kpi-label { font-size: 12px; color: var(--muted); font-weight: 700; display: flex; justify-content: space-between; }
+    .kpi-value { font-size: 28px; font-weight: 900; margin: 8px 0 6px; color: #fff; }
+    .kpi-sub { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 10px;
+    }
+    .tab-btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: var(--cyan);
+      color: #fff;
+    }
+    .panel {
+      display: none;
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+    }
+    .panel.active { display: block; }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .panel-head h2 { margin: 0; font-size: 16px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .input, .select {
+      background: var(--bg);
+      border: 2px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+    .input:focus, .select:focus { outline: none; border-color: var(--cyan); }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(42, 57, 102, 0.65);
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      white-space: nowrap;
+      background: rgba(11, 14, 28, 0.45);
+    }
+    tr:hover td { background: rgba(56, 189, 248, 0.05); }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 16px;
+    }
+    .subbox {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .switch-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px dashed var(--border);
+    }
+    .switch-row:last-child { border-bottom: 0; }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 90;
+      background: #0f172a;
+      border: 2px solid var(--emerald);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      display: none;
+    }
+    .empty { color: var(--muted); text-align: center; padding: 24px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/admin">
+        <span>📊 PixelCompute Town · 鎮長數據後臺</span>
+        <span class="pill green" id="admin-identity-pill">檢查權限中...</span>
+      </a>
+      <div class="toolbar">
+        <span class="mono" id="last-updated" style="font-size:11px;color:var(--muted);"></span>
+        <button type="button" class="btn" id="btn-refresh">🔄 立即刷新</button>
+        <a class="btn gold" id="btn-backup" href="/api/admin/export-backup">📦 下載 SQLite 備份</a>
+        <a class="btn primary" href="/app">🎮 算力小鎮</a>
+        <a class="btn" href="/">🏠 官網</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Auth Gate (shown when 403) -->
+    <section id="auth-gate" class="gate-card" style="display:none;">
+      <div style="font-size:44px;">🔐</div>
+      <h1>鎮長專屬數據後臺</h1>
+      <p id="gate-msg">此頁面包含全站註冊用戶名冊、收款訂單與提領審核資料，僅限創始鎮長（GitHub 帳號 <code>roushan11111</code>）登入檢視。</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px;">
+        <a class="btn primary" href="/api/auth/github" style="padding:10px 18px;font-size:14px;">🐙 使用鎮長 GitHub 帳號登入</a>
+        <a class="btn" href="/app" style="padding:10px 16px;font-size:14px;">返回算力小鎮</a>
+      </div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px dashed var(--border);">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">或輸入環境變數 <code>ADMIN_SECRET</code> 金鑰解鎖（選用）：</div>
+        <div style="display:flex;gap:8px;justify-content:center;">
+          <input class="input mono" id="admin-key-input" type="password" placeholder="X-Admin-Key" style="width:220px;" />
+          <button type="button" class="btn green" id="btn-unlock-key">解鎖</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Dashboard -->
+    <section id="dashboard" style="display:none;">
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab-btn active" data-tab="users">👥 註冊用戶名冊 (<span id="tab-count-users">0</span>)</button>
+        <button type="button" class="tab-btn" data-tab="finance">💳 訂單與穩定幣提領 (<span id="tab-count-payouts">0</span>)</button>
+        <button type="button" class="tab-btn" data-tab="codes">🎟️ 卡密兌換碼工廠 (<span id="tab-count-codes">0</span>)</button>
+        <button type="button" class="tab-btn" data-tab="governance">🛡️ 裝置審核與治理 (<span id="tab-count-pending">0</span>)</button>
+        <button type="button" class="tab-btn" data-tab="audit">📜 SQLite 稽核日誌</button>
+      </div>
+
+      <!-- Tab 1: Users -->
+      <div class="panel active" id="panel-users">
+        <div class="panel-head">
+          <h2>👥 全站註冊用戶名冊（含真實註冊統計）</h2>
+          <div class="toolbar">
+            <input class="input" id="user-search" type="search" placeholder="搜尋暱稱 / GitHub / 信箱 / 錢包..." style="width:240px;" />
+            <select class="select" id="user-filter">
+              <option value="all">全部帳號</option>
+              <option value="real">僅真實註冊（排除 Demo）</option>
+              <option value="github">GitHub OAuth 用戶</option>
+              <option value="email">信箱密碼用戶</option>
+              <option value="pro">Pro 會員</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用戶 / 帳號</th>
+                <th>登入方式</th>
+                <th>身分 / 方案</th>
+                <th>信箱</th>
+                <th>金幣 / 分紅餘額</th>
+                <th>信譽 / 任務 / 小人</th>
+                <th>綁定穩定幣錢包</th>
+                <th>註冊時間</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 2: Finance -->
+      <div class="panel" id="panel-finance">
+        <div class="grid-2">
+          <div class="subbox">
+            <div class="panel-head">
+              <h2>💸 穩定幣分紅提領申請佇列</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>用戶</th>
+                    <th>鏈 / 金額</th>
+                    <th>收款錢包</th>
+                    <th>狀態 / 操作</th>
+                  </tr>
+                </thead>
+                <tbody id="payouts-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="subbox">
+            <div class="panel-head">
+              <h2>🧾 付款收單紀錄（USDC / Polar / Stripe）</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>訂單 / 備註</th>
+                    <th>商品 / 金額</th>
+                    <th>管道</th>
+                    <th>狀態 / TxHash</th>
+                  </tr>
+                </thead>
+                <tbody id="orders-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Redeem Codes -->
+      <div class="panel" id="panel-codes">
+        <div class="panel-head">
+          <h2>🎟️ 卡密兌換碼工廠（上架愛發電 / Ko-fi / Gumroad 販售）</h2>
+          <form class="toolbar" id="gen-code-form">
+            <select class="select" id="gen-reward-type">
+              <option value="pro">💎 Pro 通行證（$9）</option>
+              <option value="genesis_pack">🎁 創世限定禮包（$15）</option>
+              <option value="billboard">📺 霓虹廣告位（$29）</option>
+              <option value="gold_500">🪙 500 遊戲金幣</option>
+            </select>
+            <input class="input mono" id="gen-count" type="number" min="1" max="20" value="3" style="width:70px;" />
+            <input class="input" id="gen-note" type="text" placeholder="備註（例：愛發電首批）" style="width:180px;" />
+            <button type="submit" class="btn green">✨ 批次產生卡密</button>
+          </form>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>兌換碼（點按複製）</th>
+                <th>獎勵類型</th>
+                <th>狀態</th>
+                <th>使用用戶 / 時間</th>
+                <th>備註</th>
+              </tr>
+            </thead>
+            <tbody id="codes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 4: Governance & Devices -->
+      <div class="panel" id="panel-governance">
+        <div class="grid-2">
+          <div class="subbox">
+            <div class="panel-head"><h2>⚙️ 全局防刷與安全治理開關</h2></div>
+            <div class="switch-row">
+              <div>
+                <div style="font-weight:800;font-size:13px;">🛡️ 嚴格裝置人工審核（strictDeviceReview）</div>
+                <div style="font-size:12px;color:var(--muted);">開啟後，新裝置透過 <code>/onboard</code> 綁定需由鎮長在此核准才可上工。</div>
+              </div>
+              <button type="button" class="btn" id="btn-toggle-strict">載入中...</button>
+            </div>
+            <div class="switch-row">
+              <div>
+                <div style="font-weight:800;font-size:13px;">⚖️ 全局強制雙階段實幹審閱（peerReviewRequired）</div>
+                <div style="font-size:12px;color:var(--muted);">開啟後，所有工會大單必須進審閱佇列由實幹者核准才能合併發分。</div>
+              </div>
+              <button type="button" class="btn" id="btn-toggle-peer">載入中...</button>
+            </div>
+            <div class="switch-row">
+              <div>
+                <div style="font-weight:800;font-size:13px;">⚖️ 目前待審 PR 佇列（<span id="gov-review-count">0</span> 筆）</div>
+                <div style="font-size:12px;color:var(--muted);">可前往算力小鎮「懸賞工會」親自批准或沒收垃圾 AI 押金。</div>
+              </div>
+              <a class="btn primary" href="/app">前往審閱 →</a>
+            </div>
+          </div>
+
+          <div class="subbox">
+            <div class="panel-head"><h2>💻 本機 CLI 裝置綁定審核清單</h2></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>裝置碼 / 主機</th>
+                    <th>用戶 / 小人</th>
+                    <th>狀態 / 操作</th>
+                  </tr>
+                </thead>
+                <tbody id="devices-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 5: SQLite Audit Log -->
+      <div class="panel" id="panel-audit">
+        <div class="panel-head">
+          <h2>📜 SQLite WAL 即時操作稽核日誌（近 80 筆）</h2>
+          <input class="input" id="audit-search" type="search" placeholder="篩選事件類型或內容..." style="width:240px;" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>事件類型</th>
+                <th>摘要</th>
+                <th>時間 (UTC)</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (function () {
+      let cachedData = null;
+      let adminKey = sessionStorage.getItem('pct_admin_key') || '';
+
+      function esc(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function fmtTime(iso) {
+        if (!iso) return '—';
+        try {
+          return new Date(iso).toLocaleString('zh-TW', { hour12: false });
+        } catch {
+          return String(iso);
+        }
+      }
+
+      function showToast(msg, isError = false) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.style.borderColor = isError ? 'var(--red)' : 'var(--emerald)';
+        el.style.display = 'block';
+        clearTimeout(el._timer);
+        el._timer = setTimeout(() => { el.style.display = 'none'; }, 2800);
+      }
+
+      function apiHeaders(extra = {}) {
+        const h = { ...extra };
+        if (adminKey) h['x-admin-key'] = adminKey;
+        return h;
+      }
+
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast('✅ 已複製：' + text);
+        } catch {
+          showToast('複製失敗，請手動選取', true);
+        }
+      }
+
+      async function loadOverview() {
+        try {
+          const res = await fetch('/api/admin/overview', { headers: apiHeaders() });
+          const data = await res.json();
+          if (res.status === 403 || !data.ok) {
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('auth-gate').style.display = 'block';
+            document.getElementById('admin-identity-pill').textContent = '🔒 未授權';
+            document.getElementById('admin-identity-pill').className = 'pill red';
+            if (data.error) document.getElementById('gate-msg').textContent = data.error;
+            return;
+          }
+          cachedData = data;
+          document.getElementById('auth-gate').style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+          const adm = data.currentAdmin || {};
+          const pill = document.getElementById('admin-identity-pill');
+          pill.textContent = `👑 ${adm.displayName || adm.username || 'Founder'} (${adm.authMode || 'admin'})`;
+          pill.className = 'pill green';
+          document.getElementById('last-updated').textContent = '更新：' + fmtTime(data.generatedAt);
+          renderAll(data);
+        } catch (err) {
+          showToast('無法連線伺服器：' + err.message, true);
+        }
+      }
+
+      function renderAll(data) {
+        const s = data.summary || {};
+        const rev = s.founderRevenue || {};
+
+        document.getElementById('kpi-grid').innerHTML = `
+          <div class="kpi-card" style="--accent: var(--cyan);">
+            <div class="kpi-label"><span>👥 真實註冊人數</span><span class="pill">總帳號 ${s.totalUsers}</span></div>
+            <div class="kpi-value mono">${s.realRegisteredUsers}</div>
+            <div class="kpi-sub">GitHub ${s.githubUsers} · 信箱 ${s.emailUsers} · Google ${s.googleUsers} · 24h 新增 +${s.newUsers24h} · Pro ${s.proUsers}</div>
+          </div>
+          <div class="kpi-card" style="--accent: var(--gold);">
+            <div class="kpi-label"><span>💰 累計平臺營收</span><span class="pill gold">4 流合計</span></div>
+            <div class="kpi-value mono">$${Number(rev.totalUsd || 0).toFixed(2)}</div>
+            <div class="kpi-sub">懸賞費 $${Number(rev.bountyFeesUsd || 0).toFixed(2)} · 孵化 $${Number(rev.incubationCarryUsd || 0).toFixed(2)} · 廣告 $${Number(rev.billboardAdsUsd || 0).toFixed(2)} · Pro $${Number(rev.proSkinsUsd || 0).toFixed(2)}</div>
+          </div>
+          <div class="kpi-card" style="--accent: var(--emerald);">
+            <div class="kpi-label"><span>🤖 全鎮算力小人</span><span class="pill green">運作中 ${s.workingWorkers}</span></div>
+            <div class="kpi-value mono">${s.totalWorkers}</div>
+            <div class="kpi-sub">反刷冷卻中 ${s.cooldownWorkers} · 已綁定 CLI 裝置 ${s.totalDevicesCount} 台</div>
+          </div>
+          <div class="kpi-card" style="--accent: var(--pink);">
+            <div class="kpi-label"><span>📋 項目與任務進度</span><span class="pill pink">已上線 ${s.launchedProjects}</span></div>
+            <div class="kpi-value mono">${s.totalProjects} 項目</div>
+            <div class="kpi-sub">投票 ${s.votingProjects} · 建設 ${s.buildingProjects} ｜ 任務 開放 ${s.openTasks} / 完工 ${s.completedTasks}</div>
+          </div>
+          <div class="kpi-card" style="--accent: ${(s.pendingDevicesCount + s.pendingReviewsCount + s.pendingPayoutsCount) > 0 ? 'var(--red)' : 'var(--emerald)'};">
+            <div class="kpi-label"><span>⏳ 待處理審核</span><span class="pill ${(s.pendingPayoutsCount + s.pendingDevicesCount) > 0 ? 'red' : 'green'}">即時佇列</span></div>
+            <div class="kpi-value mono">${s.pendingDevicesCount + s.pendingReviewsCount + s.pendingPayoutsCount}</div>
+            <div class="kpi-sub">待審裝置 ${s.pendingDevicesCount} · 待審 PR ${s.pendingReviewsCount} · 待出款 ${s.pendingPayoutsCount} ($${Number(s.pendingPayoutsUsd || 0).toFixed(2)})</div>
+          </div>
+          <div class="kpi-card" style="--accent: var(--emerald);">
+            <div class="kpi-label"><span>🗄️ 資料庫與系統健康</span><span class="pill green">${esc(String(s.dbDriver || 'sqlite').toUpperCase())}</span></div>
+            <div class="kpi-value mono">${s.provenanceValid ? '✅ HEALTHY' : '⚠️ CHECK'}</div>
+            <div class="kpi-sub">哈希鏈 ${s.provenanceChainLength} 筆 · SSE 在線 ${s.sseClients} · RAM ${s.memoryMb}MB · Uptime ${s.uptimeSec}s</div>
+          </div>
+        `;
+
+        document.getElementById('tab-count-users').textContent = s.totalUsers;
+        document.getElementById('tab-count-payouts').textContent = s.pendingPayoutsCount;
+        document.getElementById('tab-count-codes').textContent = (data.redeemCodes || []).filter((c) => !c.usedByUserId).length;
+        document.getElementById('tab-count-pending').textContent = s.pendingDevicesCount + s.pendingReviewsCount;
+        document.getElementById('gov-review-count').textContent = s.pendingReviewsCount;
+
+        renderUsers();
+        renderFinance();
+        renderCodes();
+        renderGovernance();
+        renderAudit();
+      }
+
+      function renderUsers() {
+        if (!cachedData) return;
+        const q = (document.getElementById('user-search').value || '').trim().toLowerCase();
+        const filter = document.getElementById('user-filter').value;
+        let list = cachedData.users || [];
+        if (filter === 'real') list = list.filter((u) => !u.isDemo);
+        else if (filter === 'github') list = list.filter((u) => u.authMode === 'github');
+        else if (filter === 'email') list = list.filter((u) => u.authMode === 'email');
+        else if (filter === 'pro') list = list.filter((u) => u.isPro);
+        if (q) {
+          list = list.filter((u) =>
+            `${u.displayName} ${u.username} ${u.email} ${u.walletAddress} ${u.id}`.toLowerCase().includes(q)
+          );
+        }
+        const tbody = document.getElementById('users-tbody');
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="empty">目前沒有符合條件的註冊用戶。</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.map((u) => {
+          const modePill = u.authMode === 'github'
+            ? '<span class="pill green">🐙 GitHub</span>'
+            : u.authMode === 'email'
+              ? '<span class="pill">📧 Email</span>'
+              : u.authMode === 'google'
+                ? '<span class="pill pink">🌐 Google</span>'
+                : '<span class="pill muted">🎮 Demo</span>';
+          const roleBadge = u.role === 'founder' ? '<span class="pill gold">👑 鎮長</span>' : '<span class="pill muted">一般</span>';
+          const proBadge = u.isPro ? ' <span class="pill pink">💎 PRO</span>' : '';
+          const walletHtml = u.walletAddress
+            ? `<span class="mono" style="font-size:11px;">[${esc(u.walletChain)}] ${esc(u.walletAddress.slice(0, 8))}...${esc(u.walletAddress.slice(-6))}</span>`
+            : '<span style="color:var(--muted);">未綁定</span>';
+          return `
+            <tr>
+              <td><strong>${esc(u.displayName)}</strong><div class="mono" style="font-size:11px;color:var(--muted);">@${esc(u.username)}</div></td>
+              <td>${modePill}</td>
+              <td>${roleBadge}${proBadge}</td>
+              <td class="mono" style="font-size:11px;">${esc(u.email || '—')}</td>
+              <td class="mono"><strong>${u.gold}G</strong> / <span style="color:var(--emerald);">$${Number(u.usdBalance).toFixed(2)}</span></td>
+              <td class="mono">信譽 ${u.reputation} · ${u.completedTasks}單 · ${u.workersCount}小人</td>
+              <td>${walletHtml}</td>
+              <td class="mono" style="font-size:11px;color:var(--muted);">${esc(fmtTime(u.createdAt))}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      function renderFinance() {
+        if (!cachedData) return;
+        const payouts = cachedData.payouts || [];
+        const ptBody = document.getElementById('payouts-tbody');
+        if (!payouts.length) {
+          ptBody.innerHTML = '<tr><td colspan="4" class="empty">尚無穩定幣提領申請。</td></tr>';
+        } else {
+          ptBody.innerHTML = payouts.map((p) => `
+            <tr>
+              <td><strong>${esc(p.displayName || p.userId)}</strong><div class="mono" style="font-size:10px;color:var(--muted);">${esc(fmtTime(p.createdAt))}</div></td>
+              <td class="mono"><strong>$${Number(p.amountUsd || 0).toFixed(2)}</strong> ${esc(p.token || 'USDC')}<div style="font-size:10px;color:var(--cyan);">${esc(String(p.chain || '').toUpperCase())}</div></td>
+              <td><button type="button" class="btn" style="padding:3px 7px;font-size:11px;" data-copy="${esc(p.address || '')}">${esc((p.address || '').slice(0, 8))}... 📋</button></td>
+              <td>
+                ${p.status === 'paid'
+                  ? `<span class="pill green">✅ 已打款</span><div class="mono" style="font-size:10px;color:var(--muted);">${esc((p.txHash || '').slice(0, 12))}...</div>`
+                  : `<button type="button" class="btn green" data-mark-paid="${esc(p.id)}">✅ 標記已打款</button>`}
+              </td>
+            </tr>
+          `).join('');
+        }
+
+        const orders = cachedData.paymentOrders || [];
+        const ordBody = document.getElementById('orders-tbody');
+        if (!orders.length) {
+          ordBody.innerHTML = '<tr><td colspan="4" class="empty">尚無收款訂單紀錄。</td></tr>';
+        } else {
+          ordBody.innerHTML = orders.map((o) => `
+            <tr>
+              <td class="mono" style="font-size:11px;"><strong>${esc(o.memoCode || o.id)}</strong><div style="color:var(--muted);">${esc(fmtTime(o.createdAt))}</div></td>
+              <td>${esc(o.productName || o.productId)}<div class="mono" style="color:var(--gold);">$${Number(o.amountUsd || 0).toFixed(2)}</div></td>
+              <td class="mono" style="font-size:11px;">${esc(o.method || o.provider || '')} ${o.chain ? `(${esc(o.chain)})` : ''}</td>
+              <td>${o.status === 'confirmed' ? '<span class="pill green">✅ 已到帳</span>' : '<span class="pill gold">⏳ 待付款</span>'}</td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      function renderCodes() {
+        if (!cachedData) return;
+        const codes = cachedData.redeemCodes || [];
+        const tbody = document.getElementById('codes-tbody');
+        if (!codes.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">尚無兌換碼。</td></tr>';
+          return;
+        }
+        tbody.innerHTML = codes.map((c) => `
+          <tr>
+            <td><button type="button" class="btn mono" style="padding:4px 9px;" data-copy="${esc(c.code)}">${esc(c.code)} 📋</button></td>
+            <td><span class="pill">${esc(c.rewardType)}</span></td>
+            <td>${c.usedByUserId ? '<span class="pill muted">已兌換</span>' : '<span class="pill green">可使用</span>'}</td>
+            <td class="mono" style="font-size:11px;">${c.usedByUserId ? `${esc(c.usedByName || c.usedByUserId)} · ${esc(fmtTime(c.usedAt))}` : '—'}</td>
+            <td style="font-size:12px;color:var(--muted);">${esc(c.note || '')}</td>
+          </tr>
+        `).join('');
+      }
+
+      function renderGovernance() {
+        if (!cachedData) return;
+        const st = cachedData.settings || {};
+        const btnStrict = document.getElementById('btn-toggle-strict');
+        btnStrict.textContent = st.strictDeviceReview ? '🔒 嚴格人工審核中（點此關閉）' : '🔓 自動放行中（點此開啟）';
+        btnStrict.className = st.strictDeviceReview ? 'btn gold' : 'btn';
+
+        const btnPeer = document.getElementById('btn-toggle-peer');
+        btnPeer.textContent = st.peerReviewRequired ? '⚖️ 強制雙階段審閱中（點此關閉）' : '⚡ 自選審閱中（點此開啟）';
+        btnPeer.className = st.peerReviewRequired ? 'btn gold' : 'btn';
+
+        const devs = cachedData.devices || [];
+        const tbody = document.getElementById('devices-tbody');
+        if (!devs.length) {
+          tbody.innerHTML = '<tr><td colspan="3" class="empty">尚無本機 CLI 裝置綁定紀錄。</td></tr>';
+          return;
+        }
+        tbody.innerHTML = devs.map((d) => `
+          <tr>
+            <td><strong class="mono">${esc(d.code)}</strong><div style="font-size:11px;color:var(--muted);">${esc(d.deviceName || 'Device')} (${esc(d.os || '')})</div></td>
+            <td>${esc(d.userName || '—')}<div style="font-size:11px;color:var(--cyan);">${esc(d.workerName || '')}</div></td>
+            <td>
+              ${d.status === 'pending_review'
+                ? `<div style="display:flex;gap:6px;"><button type="button" class="btn green" data-dev-review="${esc(d.code)}" data-action="approve">✅ 核准</button><button type="button" class="btn danger" data-dev-review="${esc(d.code)}" data-action="reject">🚫 拒絕</button></div>`
+                : `<span class="pill ${d.status === 'approved' ? 'green' : d.status === 'rejected' ? 'red' : 'gold'}">${esc(d.status)}</span>`}
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      function renderAudit() {
+        if (!cachedData) return;
+        const q = (document.getElementById('audit-search').value || '').trim().toLowerCase();
+        let rows = cachedData.auditLog || [];
+        if (q) {
+          rows = rows.filter((r) => `${r.eventType} ${r.summary}`.toLowerCase().includes(q));
+        }
+        const tbody = document.getElementById('audit-tbody');
+        if (!rows.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">尚無稽核紀錄。</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map((r) => `
+          <tr>
+            <td class="mono" style="color:var(--muted);">#${esc(r.id)}</td>
+            <td><span class="pill">${esc(r.eventType)}</span></td>
+            <td>${esc(r.summary)}</td>
+            <td class="mono" style="font-size:11px;color:var(--muted);">${esc(fmtTime(r.createdAt))}</td>
+          </tr>
+        `).join('');
+      }
+
+      // Tabs
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+        });
+      });
+
+      document.getElementById('btn-refresh').addEventListener('click', () => loadOverview().then(() => showToast('✅ 數據已刷新')));
+      document.getElementById('user-search').addEventListener('input', renderUsers);
+      document.getElementById('user-filter').addEventListener('change', renderUsers);
+      document.getElementById('audit-search').addEventListener('input', renderAudit);
+
+      document.getElementById('btn-unlock-key').addEventListener('click', () => {
+        adminKey = (document.getElementById('admin-key-input').value || '').trim();
+        sessionStorage.setItem('pct_admin_key', adminKey);
+        loadOverview();
+      });
+
+      document.getElementById('gen-code-form').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const rewardType = document.getElementById('gen-reward-type').value;
+        const count = Number(document.getElementById('gen-count').value || 1);
+        const note = document.getElementById('gen-note').value.trim();
+        const res = await fetch('/api/admin/codes/generate', {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ rewardType, count, note }),
+        });
+        const data = await res.json();
+        if (!res.ok) return showToast(data.error || '產生失敗', true);
+        showToast(`✅ 成功產生 ${data.codes.length} 組新卡密！`);
+        document.getElementById('gen-note').value = '';
+        await loadOverview();
+      });
+
+      document.getElementById('btn-toggle-strict').addEventListener('click', async () => {
+        if (!cachedData) return;
+        const next = !cachedData.settings.strictDeviceReview;
+        const res = await fetch('/api/admin/settings', {
+          method: 'PATCH',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ strictDeviceReview: next }),
+        });
+        const data = await res.json();
+        if (!res.ok) return showToast(data.error || '切換失敗', true);
+        showToast(next ? '🔒 已開啟嚴格裝置人工審核' : '🔓 已切回自動放行模式');
+        await loadOverview();
+      });
+
+      document.getElementById('btn-toggle-peer').addEventListener('click', async () => {
+        if (!cachedData) return;
+        const next = !cachedData.settings.peerReviewRequired;
+        const res = await fetch('/api/admin/settings', {
+          method: 'PATCH',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ peerReviewRequired: next }),
+        });
+        const data = await res.json();
+        if (!res.ok) return showToast(data.error || '切換失敗', true);
+        showToast(next ? '⚖️ 已開啟全局強制雙階段實幹審閱' : '⚡ 已切回自選審閱模式');
+        await loadOverview();
+      });
+
+      document.addEventListener('click', async (ev) => {
+        const copyBtn = ev.target.closest('[data-copy]');
+        if (copyBtn) {
+          return copyText(copyBtn.getAttribute('data-copy') || '');
+        }
+        const paidBtn = ev.target.closest('[data-mark-paid]');
+        if (paidBtn) {
+          const payoutId = paidBtn.getAttribute('data-mark-paid');
+          const txHash = window.prompt('請貼上實際轉帳 TxHash（留空將使用沙盒模擬 Hash）：', '');
+          if (txHash === null) return;
+          const res = await fetch(`/api/admin/payouts/${encodeURIComponent(payoutId)}/mark-paid`, {
+            method: 'POST',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(txHash.trim() ? { txHash: txHash.trim() } : { simulate: true }),
+          });
+          const data = await res.json();
+          if (!res.ok) return showToast(data.error || '操作失敗', true);
+          showToast('✅ 已標記為已打款並記錄 TxHash！');
+          return loadOverview();
+        }
+        const devBtn = ev.target.closest('[data-dev-review]');
+        if (devBtn) {
+          const code = devBtn.getAttribute('data-dev-review');
+          const action = devBtn.getAttribute('data-action');
+          const res = await fetch(`/api/admin/devices/${encodeURIComponent(code)}/review`, {
+            method: 'POST',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ action }),
+          });
+          const data = await res.json();
+          if (!res.ok) return showToast(data.error || '審核失敗', true);
+          showToast(action === 'approve' ? `✅ 已核准裝置 ${code}` : `🚫 已拒絕裝置 ${code}`);
+          return loadOverview();
+        }
+      });
+
+      loadOverview();
+      setInterval(loadOverview, 15000);
+    })();
+  </script>
+</body>
+</html>

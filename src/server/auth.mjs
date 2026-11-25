@@ -16,6 +16,57 @@ const FALLBACK_SECRET = crypto.randomBytes(32).toString('hex');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+export function getAdminGithubLogins() {
+  const raw = process.env.ADMIN_GITHUB_LOGINS || 'roushan11111';
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export function getAdminEmails() {
+  const raw = process.env.ADMIN_EMAILS || '';
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export function isFounderAdmin(req, ctx) {
+  const adminSecret = (process.env.ADMIN_SECRET || '').trim();
+  if (adminSecret && req?.headers) {
+    const provided = String(req.headers['x-admin-key'] || '').trim();
+    if (provided && provided.length === adminSecret.length) {
+      const a = Buffer.from(provided);
+      const b = Buffer.from(adminSecret);
+      if (crypto.timingSafeEqual(a, b)) return true;
+    }
+  }
+
+  const user = ctx?.user;
+  if (!user) return false;
+
+  const ghLogins = getAdminGithubLogins();
+  if (user.authMode === 'github' && user.username && ghLogins.has(String(user.username).toLowerCase())) {
+    return true;
+  }
+
+  const adminEmails = getAdminEmails();
+  if (user.email && adminEmails.has(String(user.email).toLowerCase())) {
+    return true;
+  }
+
+  // In production, unauthenticated Demo fallback does NOT grant access to sensitive founder analytics
+  if (process.env.NODE_ENV === 'production') {
+    return Boolean(user.role === 'founder' && !ctx?.isGuestDemo);
+  }
+  return user.role === 'founder';
+}
+
 export function isGitHubOAuthEnabled() {
   return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
 }
@@ -586,6 +637,8 @@ export async function handleGitHubCallback(req, res, url, store) {
 
   const { state, result: sessionId } = await store.mutate((s) => {
     ensureStateSchema(s);
+    const loginLower = String(profile.login || '').toLowerCase();
+    const isAdminLogin = getAdminGithubLogins().has(loginLower);
     let u = s.users[userId];
     if (!u) {
       u = createNewUserRecord({
@@ -595,7 +648,7 @@ export async function handleGitHubCallback(req, res, url, store) {
         displayName,
         avatarUrl: profile.avatar_url || '',
         authMode: 'github',
-        role: 'user',
+        role: isAdminLogin ? 'founder' : 'user',
       });
       s.users[userId] = u;
     } else {
@@ -604,6 +657,7 @@ export async function handleGitHubCallback(req, res, url, store) {
       u.avatarUrl = profile.avatar_url || u.avatarUrl;
       u.email = profile.email || u.email;
       u.authMode = 'github';
+      if (isAdminLogin) u.role = 'founder';
     }
     syncUserLeaderboard(s, u);
     return createPersistedSession(s, userId);

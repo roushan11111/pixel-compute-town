@@ -59,6 +59,7 @@ import {
   handleLogout,
   handleMe,
   handleRegister,
+  isFounderAdmin,
   isGitHubOAuthEnabled,
   isGoogleOAuthEnabled,
   projectStateForUser,
@@ -1077,12 +1078,144 @@ export function createAppServer(options = {}) {
         });
       }
 
+      // Founder Admin Dashboard Data Overview: GET /api/admin/overview
+      if (pathname === '/api/admin/overview' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        const ctx = getActiveUserContext(req, state);
+        if (!isFounderAdmin(req, ctx)) {
+          throw new HttpError(403, '僅限創始鎮長存取數據後臺（請使用鎮長 GitHub 帳號 roushan11111 登入）', {
+            code: 'ADMIN_ONLY',
+          });
+        }
+
+        const allUsers = Object.values(state.users || {});
+        const nowMs = Date.now();
+        const dayAgoMs = nowMs - 24 * 60 * 60 * 1000;
+
+        const realUsers = allUsers.filter((u) => u.id !== FOUNDER_USER_ID && u.authMode !== 'demo');
+        const githubUsers = allUsers.filter((u) => u.authMode === 'github').length;
+        const emailUsers = allUsers.filter((u) => u.authMode === 'email').length;
+        const googleUsers = allUsers.filter((u) => u.authMode === 'google').length;
+        const proUsers = allUsers.filter((u) => Boolean(u.isPro)).length;
+        const newUsers24h = realUsers.filter((u) => u.createdAt && Date.parse(u.createdAt) >= dayAgoMs).length;
+
+        const allWorkers = allUsers.flatMap((u) => Array.isArray(u.workers) ? u.workers : []);
+        const workingWorkers = allWorkers.filter((w) => w.status === 'working').length;
+        const cooldownWorkers = allWorkers.filter((w) => w.cooldownUntil && Date.parse(w.cooldownUntil) > nowMs).length;
+
+        const projects = state.projects || [];
+        const tasks = state.tasks || [];
+        const devices = Object.values(state.deviceAuthorizations || {});
+        const pendingDevices = devices.filter((d) => d.status === 'pending_review');
+        const payouts = state.payouts || [];
+        const pendingPayouts = payouts.filter((p) => p.status === 'pending');
+        const pendingPayoutsUsd = round2(pendingPayouts.reduce((s, p) => s + (Number(p.amountUsd) || 0), 0));
+        const reviewQueue = state.reviewQueue || [];
+        const provenance = verifyProvenanceChain(projects);
+        const backupMeta = await store.exportBackup();
+        const memoryMb = round2(process.memoryUsage().rss / (1024 * 1024));
+
+        const usersTable = allUsers
+          .map((u) => ({
+            id: u.id,
+            username: u.username || u.id,
+            displayName: u.displayName || u.username || u.id,
+            email: u.email || '',
+            authMode: u.authMode || 'demo',
+            role: u.role || 'user',
+            isDemo: u.id === FOUNDER_USER_ID && u.authMode === 'demo',
+            isPro: Boolean(u.isPro),
+            gold: Number(u.gold || 0),
+            usdBalance: round2(u.usdBalance || 0),
+            reputation: Number(u.reputation ?? 100),
+            completedTasks: Number(u.completedTasks || 0),
+            totalContribution: Number(u.totalContribution || 0),
+            workersCount: Array.isArray(u.workers) ? u.workers.length : 0,
+            walletChain: u.walletChain || '',
+            walletAddress: u.walletAddress || '',
+            achievementsUnlocked: Array.isArray(u.achievements) ? u.achievements.filter((a) => a.unlocked).length : 0,
+            createdAt: u.createdAt || state.createdAt,
+          }))
+          .sort((a, b) => {
+            if (a.isDemo !== b.isDemo) return a.isDemo ? 1 : -1;
+            return Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0);
+          });
+
+        return sendJson(res, 200, {
+          ok: true,
+          generatedAt: new Date().toISOString(),
+          currentAdmin: {
+            id: ctx.user.id,
+            username: ctx.user.username,
+            displayName: ctx.user.displayName,
+            authMode: ctx.user.authMode,
+          },
+          summary: {
+            totalUsers: allUsers.length,
+            realRegisteredUsers: realUsers.length,
+            githubUsers,
+            emailUsers,
+            googleUsers,
+            proUsers,
+            newUsers24h,
+            totalWorkers: allWorkers.length,
+            workingWorkers,
+            cooldownWorkers,
+            totalProjects: projects.length,
+            votingProjects: projects.filter((p) => p.status === 'voting').length,
+            buildingProjects: projects.filter((p) => p.status === 'building').length,
+            launchedProjects: projects.filter((p) => p.status === 'launched').length,
+            totalTasks: tasks.length,
+            openTasks: tasks.filter((t) => t.status === 'open').length,
+            inProgressTasks: tasks.filter((t) => t.status === 'in_progress').length,
+            pendingReviewTasks: tasks.filter((t) => t.status === 'pending_review').length,
+            completedTasks: tasks.filter((t) => t.status === 'completed').length,
+            pendingDevicesCount: pendingDevices.length,
+            totalDevicesCount: devices.length,
+            pendingReviewsCount: reviewQueue.length,
+            pendingPayoutsCount: pendingPayouts.length,
+            pendingPayoutsUsd,
+            founderRevenue: state.founderRevenue,
+            provenanceValid: provenance.valid,
+            provenanceChainLength: provenance.chainLength,
+            dbDriver: store.driver,
+            memoryMb,
+            uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
+            sseClients: sseHub.getClientCount(),
+            rateLimitBlockedCount,
+          },
+          users: usersTable,
+          paymentOrders: (state.paymentOrders || []).slice(0, 60),
+          payouts: payouts.slice(0, 60),
+          devices: devices.slice(0, 60).map((d) => ({
+            code: d.code,
+            deviceName: d.deviceName,
+            os: d.os,
+            cliTools: d.cliTools || [],
+            status: d.status,
+            userId: d.userId || null,
+            userName: d.userName || '',
+            workerName: d.workerName || '',
+            createdAt: d.createdAt,
+            approvedAt: d.approvedAt || null,
+          })),
+          redeemCodes: (state.redeemCodes || []).slice(0, 80),
+          reviewQueue,
+          auditLog: (backupMeta.recentAudit || []).slice(0, 80),
+          settings: {
+            strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+            peerReviewRequired: Boolean(state.settings?.peerReviewRequired),
+          },
+        });
+      }
+
       // Admin SQLite Backup Export: GET /api/admin/export-backup
       if (pathname === '/api/admin/export-backup' && method === 'GET') {
         const state = await store.load();
         ensureStateSchema(state);
         const ctx = getActiveUserContext(req, state);
-        if (ctx.user.role !== 'founder') {
+        if (!isFounderAdmin(req, ctx)) {
           throw new HttpError(403, '僅限創始鎮長匯出完整系統備份');
         }
         store.appendAudit('backup_export', `Founder ${ctx.user.displayName} exported full system backup`);
@@ -3996,6 +4129,9 @@ export function createAppServer(options = {}) {
       }
       if (decodedPath === '/onboard' || decodedPath === '/onboard/') {
         return await serveStaticFile(res, method, 'onboard.html');
+      }
+      if (decodedPath === '/admin' || decodedPath === '/admin/') {
+        return await serveStaticFile(res, method, 'admin.html');
       }
 
       const safeRelPath = decodedPath.replace(/^\/+/, '');

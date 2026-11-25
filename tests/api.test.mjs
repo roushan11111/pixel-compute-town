@@ -2765,4 +2765,35 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       }
     }
   });
+
+  it('31. Founder Admin Console (/admin & /api/admin/overview) enforces Founder-only access and returns full registered user & ops analytics', async () => {
+    // 1. /admin page loads cleanly with HTTP 200 HTML
+    const pageRes = await fetch(`${baseUrl}/admin`);
+    assert.equal(pageRes.status, 200);
+    assert.match(pageRes.headers.get('content-type') || '', /^text\/html/i);
+    const pageHtml = await pageRes.text();
+    assert.ok(pageHtml.includes('鎮長數據後臺') && pageHtml.includes('/api/admin/overview'));
+
+    // 2. Non-founder regular registered user MUST be blocked with HTTP 403 ADMIN_ONLY
+    const loginBob = await apiJson(baseUrl, 'POST', '/api/auth/login', {
+      email: 'bob@pixelcompute.test',
+      password: 'bob-password-456',
+    });
+    assert.equal(loginBob.status, 200);
+    const blockedRes = await apiJson(baseUrl, 'GET', '/api/admin/overview', null, loginBob.cookie);
+    assert.equal(blockedRes.status, 403);
+    assert.equal(blockedRes.json.code, 'ADMIN_ONLY');
+
+    // 3. Founder accesses /api/admin/overview and gets exact user counts, users table, revenue, orders, payouts, devices, redeemCodes & auditLog
+    const adminRes = await apiJson(baseUrl, 'GET', '/api/admin/overview');
+    assert.equal(adminRes.status, 200);
+    assert.equal(adminRes.json.ok, true);
+    assert.ok(adminRes.json.summary.totalUsers >= 3, 'Must count founder + registered users');
+    assert.ok(adminRes.json.summary.realRegisteredUsers >= 2, 'Must separately count real non-demo registered users');
+    assert.ok(Array.isArray(adminRes.json.users) && adminRes.json.users.length === adminRes.json.summary.totalUsers);
+    assert.ok(adminRes.json.users.some((u) => u.email === 'bob@pixelcompute.test'));
+    assert.ok(Array.isArray(adminRes.json.redeemCodes));
+    assert.ok(Array.isArray(adminRes.json.auditLog));
+    assert.equal(adminRes.json.summary.dbDriver, 'sqlite');
+  });
 });
