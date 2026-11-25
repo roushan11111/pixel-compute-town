@@ -2795,5 +2795,139 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.ok(Array.isArray(adminRes.json.redeemCodes));
     assert.ok(Array.isArray(adminRes.json.auditLog));
     assert.equal(adminRes.json.summary.dbDriver, 'sqlite');
+    assert.equal(typeof adminRes.json.settings.liveProductionMode, 'boolean');
+  });
+
+  it('32. Live production clean mode (POST /api/admin/launch-clean-mode), beginner tasks & tutorial graduation bonus (POST /api/tutorial/claim-bonus)', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-clean-mode-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+    const sse = openSseClient(started.port);
+
+    try {
+      await sse.connectedPromise;
+      await sse.waitForEvent('connected');
+
+      // 1. Verify initial bootstrap settings.liveProductionMode === false & beginner tasks seeded cleanly
+      const boot0 = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      assert.equal(boot0.status, 200);
+      assert.equal(boot0.json.settings.liveProductionMode, false);
+      assert.equal(boot0.json.state.settings.liveProductionMode, false);
+
+      const tasks0 = boot0.json.state.tasks;
+      assert.ok(tasks0.every((t) => t.audience === 'beginner' || t.audience === 'dev'), 'Every task must declare audience');
+
+      const sloganTask = tasks0.find((t) => t.id === 'task-meta-slogan');
+      assert.ok(sloganTask, 'Must seed beginner task-meta-slogan');
+      assert.equal(sloganTask.projectId, 'proj-meta');
+      assert.equal(sloganTask.track, 'api_auto');
+      assert.equal(sloganTask.audience, 'beginner');
+      assert.equal(sloganTask.category, 'docs');
+      assert.equal(sloganTask.cashBountyUsd, 0);
+      assert.equal(sloganTask.contributionPoints, 20);
+      assert.equal(sloganTask.goldReward, 90);
+
+      const uxTask = tasks0.find((t) => t.id === 'task-meta-ux');
+      assert.ok(uxTask, 'Must seed beginner task-meta-ux');
+      assert.equal(uxTask.projectId, 'proj-meta');
+      assert.equal(uxTask.track, 'guild_bounty');
+      assert.equal(uxTask.audience, 'beginner');
+      assert.equal(uxTask.category, 'docs');
+      assert.equal(uxTask.cashBountyUsd, 0);
+      assert.equal(uxTask.stakeGold, 0);
+      assert.equal(uxTask.minReputation, 0);
+      assert.equal(uxTask.contributionPoints, 30);
+      assert.equal(uxTask.goldReward, 120);
+
+      // Confirm demo fake bounties, demo revenue & preset demo reviews exist prior to clean mode
+      assert.ok(tasks0.filter((t) => Number(t.cashBountyUsd || 0) > 0).length >= 3);
+      assert.ok(boot0.json.state.founderRevenue.totalUsd > 0);
+      assert.ok(boot0.json.state.reviewQueue.some((r) => r.id === 'rev-clean-01'));
+      assert.ok(boot0.json.state.reviewQueue.some((r) => r.id === 'rev-slop-01'));
+
+      // 2. Register a real email user and test POST /api/tutorial/claim-bonus (+100G once, 409 on repeat)
+      const regRes = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'rookie@pixelcompute.test',
+        password: 'rookie-password-789',
+        displayName: '新手小玩家 Rookie',
+      });
+      assert.equal(regRes.status, 201);
+      const rookieCookie = regRes.cookie;
+      const rookieId = regRes.json.user.id;
+      const rookieGoldBefore = regRes.json.state.player.gold;
+
+      const bonus1 = await apiJson(isoUrl, 'POST', '/api/tutorial/claim-bonus', {}, rookieCookie);
+      assert.equal(bonus1.status, 200);
+      assert.equal(bonus1.json.ok, true);
+      assert.equal(bonus1.json.bonusGold, 100);
+      assert.ok(bonus1.json.unlockedTitle && bonus1.json.unlockedTitle.length > 0);
+      assert.equal(bonus1.json.state.player.gold, rookieGoldBefore + 100);
+      assert.equal(bonus1.json.state.player.tutorialBonusClaimed, true);
+      assert.equal(bonus1.json.state.player.title, bonus1.json.unlockedTitle);
+
+      // Second claim by same user MUST return HTTP 409 and NOT grant extra gold
+      const bonus2 = await apiJson(isoUrl, 'POST', '/api/tutorial/claim-bonus', {}, rookieCookie);
+      assert.equal(bonus2.status, 409);
+      assert.equal(bonus2.json.ok, false);
+      assert.equal(bonus2.json.code, 'ALREADY_CLAIMED');
+
+      const rookieCheck = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, rookieCookie);
+      assert.equal(rookieCheck.json.state.player.gold, rookieGoldBefore + 100);
+
+      // 3. Non-founder calling POST /api/admin/launch-clean-mode MUST return HTTP 403 ADMIN_ONLY
+      const blockedClean = await apiJson(isoUrl, 'POST', '/api/admin/launch-clean-mode', {}, rookieCookie);
+      assert.equal(blockedClean.status, 403);
+      assert.equal(blockedClean.json.code, 'ADMIN_ONLY');
+
+      // 4. Verify /admin page includes launch-clean-mode controls & live status indicator
+      const adminHtml = await (await fetch(`${isoUrl}/admin`)).text();
+      assert.ok(adminHtml.includes('/api/admin/launch-clean-mode'));
+      assert.ok(adminHtml.includes('一鍵切換正式營運模式'));
+      assert.ok(adminHtml.includes('正式營運模式運行中'));
+
+      // 5. Founder calls POST /api/admin/launch-clean-mode -> zeroes fake bounties/revenue/demo reviews while keeping real users
+      const cleanRes = await apiJson(isoUrl, 'POST', '/api/admin/launch-clean-mode', {});
+      assert.equal(cleanRes.status, 200);
+      assert.equal(cleanRes.json.ok, true);
+      assert.equal(cleanRes.json.liveProductionMode, true);
+      assert.ok(cleanRes.json.clearedBountiesCount >= 3, 'Should clear at least 3 demo cash bounties');
+
+      const cleanState = cleanRes.json.state;
+      assert.equal(cleanState.settings.liveProductionMode, true);
+      assert.ok(cleanState.tasks.every((t) => Number(t.cashBountyUsd || 0) === 0), 'All demo cash bounties must be zeroed');
+      assert.ok(cleanState.projects.every((p) => Number(p.bountyPoolUsd || 0) === 0 && Number(p.totalRevenueUsd || 0) === 0), 'All project demo bounty pools & revenues must be zeroed');
+      assert.equal(cleanState.founderRevenue.bountyFeesUsd, 0);
+      assert.equal(cleanState.founderRevenue.incubationCarryUsd, 0);
+      assert.equal(cleanState.founderRevenue.billboardAdsUsd, 0);
+      assert.equal(cleanState.founderRevenue.proSkinsUsd, 0);
+      assert.equal(cleanState.founderRevenue.totalUsd, 0);
+      assert.deepEqual(cleanState.founderRevenue.history, []);
+      assert.deepEqual(cleanState.dividendLedger, []);
+      assert.ok(!cleanState.reviewQueue.some((r) => r.id === 'rev-clean-01' || r.id === 'rev-slop-01'), 'Preset demo review items must be cleared');
+
+      // SSE state_sync must be broadcast
+      const syncEvt = await sse.waitForEvent('state_sync', 3000);
+      assert.ok(syncEvt.data.updatedAt);
+
+      // 6. Verify /api/bootstrap & /api/admin/overview reflect liveProductionMode=true, SQLite audit_log & real user preservation
+      const bootAfter = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      assert.equal(bootAfter.json.settings.liveProductionMode, true);
+      assert.equal(bootAfter.json.state.settings.liveProductionMode, true);
+
+      const overviewAfter = await apiJson(isoUrl, 'GET', '/api/admin/overview');
+      assert.equal(overviewAfter.status, 200);
+      assert.equal(overviewAfter.json.settings.liveProductionMode, true);
+      const preservedRookie = overviewAfter.json.users.find((u) => u.id === rookieId && u.email === 'rookie@pixelcompute.test');
+      assert.ok(preservedRookie, 'Real registered user MUST remain completely intact after launch-clean-mode');
+      assert.equal(preservedRookie.gold, rookieGoldBefore + 100);
+      assert.ok(
+        overviewAfter.json.auditLog.some((a) => a.eventType === 'launch_clean_mode'),
+        'SQLite audit_log must record launch_clean_mode',
+      );
+    } finally {
+      sse.close();
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
   });
 });

@@ -41,6 +41,7 @@
 
     <div class="hud-actions">
       <a class="btn btn-sm" id="btn-hud-home" href="/" data-i18n="hud.homeBtn">🏠 官網</a>
+      <button type="button" class="btn btn-sm btn-tutorial" id="btn-hud-tutorial" data-i18n="hud.tutorialBtn" data-i18n-title="hud.tutorialTitle" title="打開經典 RPG 互動新手教學（5 步輕鬆上手＋領 +100G 禮包）">🎓 新手教學</button>
       <a class="btn btn-sm" id="btn-hud-docs" href="/docs" data-i18n="hud.docsBtn">📖 說明書</a>
       <a class="btn btn-sm" id="btn-hud-whitepaper" href="/whitepaper" data-i18n="hud.whitepaperBtn">📜 白皮書</a>
       <a class="btn btn-sm btn-primary" id="btn-hud-install" href="/#install" data-i18n="hud.installBtn">📦 安裝小人</a>
@@ -211,6 +212,13 @@
           </div>
         </div>
 
+        <div class="audience-filter-bar" id="filter-api-audience" role="group" aria-label="API Task Audience Filter">
+          <span class="audience-filter-label mono" data-i18n="audience.filterLabel">適合玩家：</span>
+          <button type="button" class="audience-pill active" data-audience-filter="all" aria-pressed="true" data-i18n="audience.filterAll">🌱 全部</button>
+          <button type="button" class="audience-pill beginner" data-audience-filter="beginner" aria-pressed="false" data-i18n="audience.filterBeginner">🌱 新手免程式</button>
+          <button type="button" class="audience-pill dev" data-audience-filter="dev" aria-pressed="false" data-i18n="audience.filterDev">💻 開發者核心</button>
+        </div>
+
         <div class="card-list" id="factory-task-list">
           <div class="empty-state" data-i18n="factory.loading">載入工坊任務中...</div>
         </div>
@@ -273,6 +281,13 @@
             <span class="mono" style="font-size: 11px; color: var(--text-muted);" data-i18n="guild.workerLabel">派駐工會小人：</span>
             <select class="select select-inline" id="guild-worker-select" aria-label="Select Guild Worker"></select>
           </div>
+        </div>
+
+        <div class="audience-filter-bar" id="filter-guild-audience" role="group" aria-label="Guild Task Audience Filter">
+          <span class="audience-filter-label mono" data-i18n="audience.filterLabel">適合玩家：</span>
+          <button type="button" class="audience-pill active" data-audience-filter="all" aria-pressed="true" data-i18n="audience.filterAll">🌱 全部</button>
+          <button type="button" class="audience-pill beginner" data-audience-filter="beginner" aria-pressed="false" data-i18n="audience.filterBeginner">🌱 新手免程式</button>
+          <button type="button" class="audience-pill dev" data-audience-filter="dev" aria-pressed="false" data-i18n="audience.filterDev">💻 開發者核心</button>
         </div>
 
         <div class="card-list" id="guild-task-list">

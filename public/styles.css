@@ -2990,6 +2990,656 @@ body[data-theme='day'] .ops-metrics-box {
 }
 
 /* ==========================================================================
+   HUD Tutorial Button, Audience Filter Bar & Demo/Live Escrow Badges
+   ========================================================================== */
+.btn-tutorial {
+  background: linear-gradient(180deg, #1d7a58, #12543c);
+  border-color: var(--accent-green);
+  color: #f3fff8;
+  box-shadow: var(--shadow-pixel-sm), 0 0 8px rgba(82, 229, 154, 0.24);
+}
+
+.btn-tutorial:hover:not(:disabled) {
+  background: linear-gradient(180deg, #24946b, #17694b);
+  border-color: #9bf6cb;
+  color: #ffffff;
+}
+
+body[data-theme='day'] .btn-tutorial {
+  background: linear-gradient(180deg, #059669, #047857);
+  border-color: #065f46;
+  color: #ffffff;
+}
+
+.audience-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 9px;
+  background: var(--bg-input);
+  border: 2px solid var(--border-pixel);
+  box-shadow: var(--shadow-pixel-sm);
+}
+
+.audience-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: 2px;
+  white-space: nowrap;
+}
+
+.audience-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-pixel);
+  color: var(--text-sub);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.08s ease, border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.audience-pill:hover {
+  border-color: var(--border-bright);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.audience-pill.active {
+  border-color: var(--accent-amber);
+  background: rgba(255, 183, 77, 0.18);
+  color: var(--accent-gold);
+  box-shadow: inset 0 -2px 0 var(--accent-amber);
+}
+
+.audience-pill.beginner.active {
+  border-color: var(--accent-green);
+  background: rgba(82, 229, 154, 0.2);
+  color: var(--accent-green);
+  box-shadow: inset 0 -2px 0 var(--accent-green);
+}
+
+.audience-pill.dev.active {
+  border-color: var(--accent-cyan);
+  background: rgba(77, 238, 234, 0.18);
+  color: var(--accent-cyan);
+  box-shadow: inset 0 -2px 0 var(--accent-cyan);
+}
+
+body[data-theme='day'] .audience-pill.active {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #d97706;
+}
+
+body[data-theme='day'] .audience-pill.beginner.active {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #059669;
+}
+
+body[data-theme='day'] .audience-pill.dev.active {
+  background: #cffafe;
+  color: #155e75;
+  border-color: #0891b2;
+}
+
+.badge.beginner-pill {
+  border-color: #34d399;
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.2);
+  font-weight: 900;
+}
+
+.badge.dev-pill {
+  border-color: rgba(139, 92, 246, 0.65);
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.16);
+  font-weight: 800;
+}
+
+.badge.bounty-demo {
+  border-color: rgba(255, 183, 77, 0.85);
+  color: var(--accent-gold);
+  background: rgba(255, 183, 77, 0.15);
+  font-weight: 800;
+}
+
+.badge.bounty-live {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+  background: rgba(82, 229, 154, 0.18);
+  font-weight: 900;
+}
+
+.bounty-mode-chip {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 900;
+  border: 1px solid currentColor;
+  vertical-align: middle;
+}
+
+body[data-theme='day'] .badge.beginner-pill {
+  color: #047857;
+  border-color: #059669;
+  background: #d1fae5;
+}
+
+body[data-theme='day'] .badge.dev-pill {
+  color: #5b21b6;
+  border-color: #7c3aed;
+  background: #ede9fe;
+}
+
+body[data-theme='day'] .badge.bounty-demo {
+  color: #92400e;
+  border-color: #d97706;
+  background: #fef3c7;
+}
+
+body[data-theme='day'] .badge.bounty-live {
+  color: #065f46;
+  border-color: #059669;
+  background: #d1fae5;
+}
+
+/* ==========================================================================
+   Classic RPG Pixel Dialogue Interactive Tutorial (Kairosoft / Stardew Style)
+   ========================================================================== */
+.rpg-tut-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px 18px 22px;
+  pointer-events: none;
+}
+
+.rpg-tut-overlay.open {
+  display: flex;
+}
+
+.rpg-tut-backdrop {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 6, 20, 0.18) 0%, rgba(8, 6, 20, 0.62) 100%);
+  pointer-events: auto;
+  animation: rpgFadeIn 0.18s ease-out;
+}
+
+@keyframes rpgFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.rpg-tut-window {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  width: min(820px, 100%);
+  display: grid;
+  grid-template-columns: 122px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, #1f1a3d 0%, #14102b 100%);
+  border: 4px solid #ffd95a;
+  outline: 3px solid #090617;
+  box-shadow:
+    0 0 0 2px #4deeea inset,
+    0 14px 36px rgba(0, 0, 0, 0.68),
+    6px 6px 0px #070511;
+  animation: rpgSlideUp 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+}
+
+body[data-theme='day'] .rpg-tut-window {
+  background: linear-gradient(180deg, #fffdf7 0%, #f4effd 100%);
+  border-color: #d97706;
+  outline-color: #2e1f5e;
+  box-shadow:
+    0 0 0 2px #0891b2 inset,
+    0 14px 32px rgba(27, 21, 51, 0.32),
+    6px 6px 0px rgba(45, 36, 86, 0.28);
+}
+
+@keyframes rpgSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.rpg-tut-corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #ffd95a;
+  border: 1px solid #090617;
+  pointer-events: none;
+}
+
+.rpg-tut-corner.tl { top: 4px; left: 4px; }
+.rpg-tut-corner.tr { top: 4px; right: 4px; }
+.rpg-tut-corner.bl { bottom: 4px; left: 4px; }
+.rpg-tut-corner.br { bottom: 4px; right: 4px; }
+
+.rpg-tut-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.rpg-tut-portrait-frame {
+  width: 86px;
+  height: 86px;
+  padding: 5px;
+  display: grid;
+  place-items: center;
+  background: #0e1326;
+  border: 3px solid var(--accent-cyan);
+  box-shadow: var(--shadow-pixel-sm), 0 0 14px rgba(77, 238, 234, 0.28);
+}
+
+.rpg-tut-portrait-frame.gold-glow {
+  border-color: #ffd95a;
+  box-shadow: var(--shadow-pixel-sm), 0 0 18px rgba(255, 217, 90, 0.45);
+}
+
+.rpg-tut-portrait-canvas {
+  width: 64px;
+  height: 64px;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.rpg-tut-nameplate {
+  width: 100%;
+  text-align: center;
+  padding: 5px 6px;
+  background: rgba(9, 7, 22, 0.72);
+  border: 2px solid var(--border-bright);
+  box-shadow: var(--shadow-pixel-sm);
+}
+
+body[data-theme='day'] .rpg-tut-nameplate {
+  background: #ede9fe;
+  border-color: #6d5bb8;
+}
+
+.rpg-tut-guide-name {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--accent-gold);
+  line-height: 1.2;
+}
+
+.rpg-tut-guide-role {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  margin-top: 2px;
+}
+
+.rpg-tut-content {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.rpg-tut-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rpg-tut-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rpg-tut-step-pill {
+  padding: 2px 8px;
+  background: rgba(77, 238, 234, 0.14);
+  border: 1px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.rpg-tut-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rpg-tut-dot {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid var(--border-bright);
+  background: var(--bg-input);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.14s ease, border-color 0.14s ease;
+}
+
+.rpg-tut-dot:hover {
+  transform: scale(1.18);
+  border-color: var(--accent-cyan);
+}
+
+.rpg-tut-dot.done {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.rpg-tut-dot.active {
+  width: 22px;
+  background: var(--accent-gold);
+  border-color: #fff3b0;
+  box-shadow: 0 0 8px rgba(255, 217, 90, 0.55);
+}
+
+.rpg-tut-skip-top {
+  appearance: none;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--border-pixel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rpg-tut-skip-top:hover {
+  color: var(--text-main);
+  border-color: var(--border-bright);
+  background: var(--bg-card);
+}
+
+.rpg-tut-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text-main);
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  line-height: 1.3;
+}
+
+.rpg-tut-cursor {
+  color: var(--accent-gold);
+  font-size: 13px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.rpg-tut-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.62;
+  color: var(--text-sub);
+}
+
+.rpg-tut-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rpg-tut-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rpg-tut-role-card {
+  appearance: none;
+  text-align: left;
+  padding: 11px 12px;
+  background: rgba(19, 16, 38, 0.85);
+  border: 2px solid var(--border-pixel);
+  box-shadow: var(--shadow-pixel-sm);
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.1s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+body[data-theme='day'] .rpg-tut-role-card {
+  background: #ffffff;
+}
+
+.rpg-tut-role-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-bright);
+}
+
+.rpg-tut-role-card.beginner:hover,
+.rpg-tut-role-card.beginner.selected {
+  border-color: var(--accent-green);
+  background: rgba(16, 185, 129, 0.16);
+  box-shadow: var(--shadow-pixel-sm), 0 0 12px rgba(82, 229, 154, 0.28);
+}
+
+.rpg-tut-role-card.dev:hover,
+.rpg-tut-role-card.dev.selected {
+  border-color: var(--accent-cyan);
+  background: rgba(77, 238, 234, 0.14);
+  box-shadow: var(--shadow-pixel-sm), 0 0 12px rgba(77, 238, 234, 0.25);
+}
+
+body[data-theme='day'] .rpg-tut-role-card.beginner.selected {
+  background: #ecfdf5;
+}
+
+body[data-theme='day'] .rpg-tut-role-card.dev.selected {
+  background: #ecfeff;
+}
+
+.rpg-tut-role-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rpg-tut-role-title {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.rpg-tut-role-check {
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 1px 6px;
+  background: var(--accent-green);
+  color: #062115;
+}
+
+.rpg-tut-role-card.dev .rpg-tut-role-check {
+  background: var(--accent-cyan);
+  color: #061b24;
+}
+
+.rpg-tut-role-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.48;
+  color: var(--text-sub);
+}
+
+.rpg-tut-tip {
+  padding: 8px 10px;
+  background: rgba(77, 238, 234, 0.09);
+  border: 1px dashed var(--accent-cyan);
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rpg-tut-tip.beginner {
+  background: rgba(82, 229, 154, 0.14);
+  border-color: var(--accent-green);
+}
+
+.rpg-tut-tip.dev {
+  background: rgba(77, 238, 234, 0.12);
+  border-color: var(--accent-cyan);
+}
+
+body[data-theme='day'] .rpg-tut-tip {
+  background: #f0fdfa;
+  color: #134e4a;
+}
+
+body[data-theme='day'] .rpg-tut-tip.beginner {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.rpg-tut-reward-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rpg-tut-claim-btn {
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 900;
+  background: linear-gradient(180deg, #f59e0b, #b45309);
+  border-color: #fde047;
+  color: #ffffff;
+  box-shadow: var(--shadow-pixel-sm), 0 0 14px rgba(255, 217, 90, 0.45);
+}
+
+.rpg-tut-claim-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fbbf24, #d97706);
+  border-color: #fffbeb;
+}
+
+.rpg-tut-claim-btn.claimed,
+.rpg-tut-claim-btn:disabled {
+  background: linear-gradient(180deg, #1b8c59, #13633f);
+  border-color: var(--accent-green);
+  opacity: 0.92;
+  color: #ffffff;
+}
+
+.rpg-tut-bgm-btn {
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+  background: linear-gradient(180deg, #2b2461, #1d1844);
+  border-color: var(--accent-cyan);
+  color: #e0fcff;
+}
+
+.rpg-tut-bgm-btn.playing {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.rpg-tut-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 2px dashed var(--border-pixel);
+}
+
+.rpg-tut-footer-left,
+.rpg-tut-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rpg-tut-next-btn {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 900;
+}
+
+.rpg-tut-caret {
+  display: inline-block;
+  font-size: 10px;
+  animation: rpgCaretBounce 0.9s steps(2, end) infinite;
+}
+
+@keyframes rpgCaretBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(2px); }
+}
+
+@media (max-width: 720px) {
+  .rpg-tut-overlay {
+    padding: 10px;
+  }
+  .rpg-tut-window {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 13px;
+    max-height: 88vh;
+    overflow-y: auto;
+  }
+  .rpg-tut-guide {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  .rpg-tut-portrait-frame {
+    width: 66px;
+    height: 66px;
+    padding: 3px;
+    flex-shrink: 0;
+  }
+  .rpg-tut-portrait-canvas {
+    width: 56px;
+    height: 56px;
+  }
+  .rpg-tut-nameplate {
+    width: auto;
+    text-align: left;
+    padding: 5px 10px;
+  }
+  .rpg-tut-role-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
    Responsive Design
    ========================================================================== */
 @media (max-width: 1280px) {

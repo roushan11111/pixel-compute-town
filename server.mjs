@@ -197,6 +197,7 @@ function buildTaskFromGitHubIssue(issue, project, repoInfo, requestedTrack, { is
     id: uid('task-gh'),
     projectId: project.id,
     track,
+    audience: category === 'docs' ? 'beginner' : 'dev',
     category,
     source: 'github_issue',
     isOfflineFallback: isFallback,
@@ -364,6 +365,7 @@ function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
       id: `task-${slug}-core-${suffix}`,
       projectId: project.id,
       track: 'guild_bounty',
+      audience: 'dev',
       category: 'feature_pr',
       source: 'auto_split',
       title: `[核心架構] 實作《${short}》功能：${briefShort}`.slice(0, 120),
@@ -399,6 +401,7 @@ function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
       id: `task-${slug}-test-${suffix}`,
       projectId: project.id,
       track: 'api_auto',
+      audience: 'dev',
       category: 'unit_test',
       source: 'auto_split',
       title: `[自動測試] 為「${briefShort}」補齊單元測試與邊界斷言`.slice(0, 120),
@@ -434,6 +437,7 @@ function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
       id: `task-${slug}-i18n-${suffix}`,
       projectId: project.id,
       track: 'api_auto',
+      audience: 'dev',
       category: 'i18n',
       source: 'auto_split',
       title: `[多語系/文件] 為「${briefShort}」產出三語 UI 文案與使用指南`.slice(0, 120),
@@ -510,6 +514,7 @@ function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
         id: `task-${slug}-docs-${suffix}`,
         projectId: project.id,
         track: 'api_auto',
+        audience: 'beginner',
         category: 'docs',
         source: 'auto_split',
         title: `[文件補齊] 撰寫「${briefShort}」README 範例與 API 規格`.slice(0, 120),
@@ -736,6 +741,12 @@ function buildProjectBucketsMap(state) {
 
 function projectClientState(state, userId) {
   const projected = projectStateForUser(state, userId);
+  const activeUser = state.users?.[userId] || state.users?.[FOUNDER_USER_ID];
+  if (activeUser && projected.player) {
+    projected.player.tutorialBonusClaimed = Boolean(activeUser.tutorialBonusClaimed);
+    projected.player.title = activeUser.title || '';
+    projected.player.unlockedTitles = Array.isArray(activeUser.unlockedTitles) ? activeUser.unlockedTitles : [];
+  }
   projected.reviewQueue = Array.isArray(state.reviewQueue) ? state.reviewQueue : [];
   projected.reviewHistory = Array.isArray(state.reviewHistory) ? state.reviewHistory : [];
   projected.antiSlopTreasuryGold = Number(state.antiSlopTreasuryGold || 0);
@@ -744,6 +755,7 @@ function projectClientState(state, userId) {
     ...(projected.settings || {}),
     strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
     peerReviewRequired: Boolean(state.settings?.peerReviewRequired),
+    liveProductionMode: Boolean(state.settings?.liveProductionMode),
   };
   return projected;
 }
@@ -1206,7 +1218,164 @@ export function createAppServer(options = {}) {
           settings: {
             strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
             peerReviewRequired: Boolean(state.settings?.peerReviewRequired),
+            liveProductionMode: Boolean(state.settings?.liveProductionMode),
           },
+        });
+      }
+
+      // Founder Admin One-Click Launch Clean Mode: POST /api/admin/launch-clean-mode
+      if (pathname === '/api/admin/launch-clean-mode' && method === 'POST') {
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          if (!isFounderAdmin(req, ctx)) {
+            throw new HttpError(403, '僅限創始鎮長切換正式營運模式（請使用鎮長 GitHub 帳號 roushan11111 登入）', {
+              code: 'ADMIN_ONLY',
+            });
+          }
+
+          s.settings.liveProductionMode = true;
+
+          // 1. Clear all un-escrowed demo fake cash bounties on tasks
+          let clearedBountiesCount = 0;
+          for (const task of s.tasks || []) {
+            if (!task || typeof task !== 'object') continue;
+            if (Number(task.cashBountyUsd || 0) > 0 && !task.escrowFunded) {
+              task.cashBountyUsd = 0;
+              if (typeof task.title === 'string') {
+                task.title = task.title.replace(/^\[\$\d+(?:\.\d+)?\s*(?:現金)?懸賞\]\s*/, '').trim();
+              }
+              clearedBountiesCount += 1;
+            }
+          }
+
+          // 2. Clear un-escrowed demo project bounty pools & demo revenues
+          for (const proj of s.projects || []) {
+            if (!proj || typeof proj !== 'object') continue;
+            if (!proj.escrowFunded) {
+              proj.bountyPoolUsd = 0;
+            }
+            proj.totalRevenueUsd = 0;
+            proj.distributedRevenueUsd = 0;
+            if (proj.id === 'proj-i18n' && typeof proj.billboardText === 'string' && proj.billboardText.includes('$40/$25')) {
+              proj.sponsoredBillboard = false;
+              proj.billboardText = '';
+            }
+          }
+
+          // 3. Reset demo platform revenue (all 4 streams + history) & dividend ledger
+          s.founderRevenue = {
+            bountyFeesUsd: 0,
+            incubationCarryUsd: 0,
+            billboardAdsUsd: 0,
+            proSkinsUsd: 0,
+            totalUsd: 0,
+            history: [],
+          };
+          s.dividendLedger = [];
+
+          // 4. Clear preset demo review queue items while preserving any real player submissions
+          const DEMO_REVIEW_IDS = new Set(['rev-clean-01', 'rev-slop-01']);
+          s.reviewQueue = (s.reviewQueue || []).filter((item) => item && !DEMO_REVIEW_IDS.has(item.id));
+
+          // All registered real users in s.users (GitHub / Email / Google) are 100% preserved!
+          pushActivity(s, {
+            type: 'admin',
+            icon: '🟢',
+            message: `鎮長已啟動【正式營運模式】！已清空 ${clearedBountiesCount} 筆示範假現金懸賞、示範營收與預置測試審閱單，完整保留全部真實註冊鎮民資料！`,
+          });
+
+          return {
+            clearedBountiesCount,
+            userId: ctx.userId,
+            adminName: ctx.user.displayName || ctx.user.username || 'Founder',
+          };
+        });
+
+        store.appendAudit(
+          'launch_clean_mode',
+          `Founder ${result.adminName} enabled liveProductionMode: cleared ${result.clearedBountiesCount} un-escrowed demo bounties, reset demo revenue/dividends & demo reviews`,
+        );
+
+        sseHub.broadcast('settings_updated', {
+          strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+          peerReviewRequired: Boolean(state.settings?.peerReviewRequired),
+          liveProductionMode: true,
+        });
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+
+        return sendJson(res, 200, {
+          ok: true,
+          liveProductionMode: true,
+          clearedBountiesCount: result.clearedBountiesCount,
+          state: projectClientState(state, result.userId),
+        });
+      }
+
+      // Tutorial Graduation Bonus: POST /api/tutorial/claim-bonus (one-time +100G + title per user)
+      if (pathname === '/api/tutorial/claim-bonus' && method === 'POST') {
+        const TUTORIAL_BONUS_GOLD = 100;
+        const TUTORIAL_GRADUATE_TITLE = '🎓 創世見習鎮民';
+
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+
+          if (user.tutorialBonusClaimed) {
+            throw new HttpError(409, '你已經領取過新手畢業禮包（+100G）囉！每個帳號限領一次。', {
+              code: 'ALREADY_CLAIMED',
+              alreadyClaimed: true,
+            });
+          }
+
+          const claimedAt = new Date().toISOString();
+          user.tutorialBonusClaimed = true;
+          user.tutorialBonusClaimedAt = claimedAt;
+          user.gold = Number(user.gold || 0) + TUTORIAL_BONUS_GOLD;
+          if (!user.title) {
+            user.title = TUTORIAL_GRADUATE_TITLE;
+          }
+          if (!Array.isArray(user.unlockedTitles)) {
+            user.unlockedTitles = [];
+          }
+          if (!user.unlockedTitles.some((t) => t && t.id === 'town_graduate')) {
+            user.unlockedTitles.push({
+              id: 'town_graduate',
+              name: TUTORIAL_GRADUATE_TITLE,
+              unlockedAt: claimedAt,
+            });
+          }
+
+          syncUserLeaderboard(s, user);
+          pushActivity(s, {
+            type: 'tutorial_bonus',
+            icon: '🎓',
+            message: `${user.displayName} 完成像素算力鎮新手教學，領取 +${TUTORIAL_BONUS_GOLD}G 創世新手禮包並解鎖稱號【${TUTORIAL_GRADUATE_TITLE}】！`,
+          });
+
+          return {
+            user,
+            bonusGold: TUTORIAL_BONUS_GOLD,
+            unlockedTitle: TUTORIAL_GRADUATE_TITLE,
+          };
+        });
+
+        store.appendAudit(
+          'tutorial_bonus_claimed',
+          `User ${result.user.displayName} (${result.user.id}) claimed +${result.bonusGold}G tutorial graduation bonus (${result.unlockedTitle})`,
+        );
+
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        return sendJson(res, 200, {
+          ok: true,
+          bonusGold: result.bonusGold,
+          goldAwarded: result.bonusGold,
+          unlockedTitle: result.unlockedTitle,
+          title: result.unlockedTitle,
+          alreadyClaimed: false,
+          playerGold: result.user.gold,
+          state: projectClientState(state, result.user.id),
         });
       }
 
@@ -1350,11 +1519,17 @@ export function createAppServer(options = {}) {
         const isAdmin = ctx.user.role === 'founder';
         const { pendingDevices, allDevices } = getAdminDevicesData(state);
         const peerReviewRequired = Boolean(state.settings?.peerReviewRequired);
+        const liveProductionMode = Boolean(state.settings?.liveProductionMode);
 
         return sendJson(res, 200, {
           ok: true,
           user,
           state: projected,
+          settings: {
+            strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
+            peerReviewRequired,
+            liveProductionMode,
+          },
           shopItems: SHOP_ITEMS,
           workerTemplates: WORKER_TEMPLATES,
           paymentProducts: Object.values(PAYMENT_PRODUCTS),
@@ -1363,6 +1538,7 @@ export function createAppServer(options = {}) {
             googleOAuthEnabled: isGoogleOAuthEnabled(),
             strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
             peerReviewRequired,
+            liveProductionMode,
             version: VERSION,
             platformFeePct: PLATFORM_BOUNTY_FEE_PCT,
             billboardPriceUsd: BILLBOARD_PRICE_USD,
@@ -1382,6 +1558,7 @@ export function createAppServer(options = {}) {
             googleOAuthEnabled: isGoogleOAuthEnabled(),
             strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
             peerReviewRequired,
+            liveProductionMode,
           },
           paymentConfig: getPaymentConfig(),
           adminData: isAdmin
@@ -1389,6 +1566,7 @@ export function createAppServer(options = {}) {
               isAdmin: true,
               strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
               peerReviewRequired,
+              liveProductionMode,
               pendingDevices,
               allDevices,
               redeemCodes: state.redeemCodes || [],
@@ -1398,6 +1576,7 @@ export function createAppServer(options = {}) {
               isAdmin: false,
               strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
               peerReviewRequired,
+              liveProductionMode,
               pendingDevices: [],
               allDevices: [],
               redeemCodes: [],
@@ -1921,6 +2100,7 @@ export function createAppServer(options = {}) {
             settings: {
               strictDeviceReview: Boolean(s.settings.strictDeviceReview),
               peerReviewRequired: Boolean(s.settings.peerReviewRequired),
+              liveProductionMode: Boolean(s.settings.liveProductionMode),
             },
             userId: ctx.userId,
           };

@@ -639,6 +639,64 @@ export const DICTIONARY = Object.freeze({
     'toast.metricsRefreshed': '📊 已同步最新系統運維與資料庫指標',
     'toast.backupDownloaded': '📦 已下載完整 SQLite 狀態與稽核備份：{filename}',
     'toast.backupFailed': '備份匯出失敗：{err}',
+
+    // RPG Interactive Tutorial & Everyone-Friendly Audience Filters
+    'hud.tutorialBtn': '🎓 新手教學',
+    'hud.tutorialTitle': '打開經典 RPG 互動新手教學（5 步輕鬆上手＋領 +100G 禮包）',
+    'audience.filterLabel': '適合玩家：',
+    'audience.filterAll': '🌱 全部',
+    'audience.filterBeginner': '🌱 新手免程式',
+    'audience.filterDev': '💻 開發者核心',
+    'audience.badgeBeginner': '🌱 新手免程式',
+    'audience.badgeDev': '💻 開發者核心',
+    'audience.emptyBeginner': '目前沒有符合篩選的新手免程式任務，點「🌱 全部」或到孵化廣場幫新項目投票解鎖吧！',
+    'bounty.demoTag': '示範體驗',
+    'bounty.liveEscrowTag': '真實託管',
+
+    'tutorial.guideName': '⚡ 閃電小吉',
+    'tutorial.guideRole': '小鎮引路人',
+    'tutorial.stepCounter': '步驟 {cur} / {total}',
+    'tutorial.skipBtn': '跳過教學',
+    'tutorial.prevBtn': '← 上一步',
+    'tutorial.nextBtn': '下一步 →',
+    'tutorial.finishBtn': '🚀 完成並開始冒險！',
+    'tutorial.roleSelectedBadge': '✓ 已選擇',
+
+    'tutorial.step1.title': '歡迎來到像素算力鎮！選擇你的冒險身分',
+    'tutorial.step1.body': '哈囉！我是引路人「閃電小吉」～這裡就像開羅經營遊戲，不管你懂不懂程式，都能派可愛像素小人幫大家做好玩產品、賺金幣拿分紅！先挑一個最適合你的冒險身分吧：',
+    'tutorial.step1.beginnerTitle': '🌱 我不懂程式 / 創意玩家',
+    'tutorial.step1.beginnerDesc': '完全不用寫代碼！提好點子就能拿 5% 永久版稅、幫忙寫標語／挑毛病／投票都能賺金幣和分紅！',
+    'tutorial.step1.beginnerTip': '✨ 已自動幫你切換至「🌱 新手免程式」任務篩選，全是大白話零門檻任務！',
+    'tutorial.step1.devTitle': '💻 我是開發者 / AI 極客',
+    'tutorial.step1.devDesc': '可接 Gemini API（零信任 BYOK）或用本機月／週訂閱 CLI 寫 PR，搶佔 70% 核心池與現金懸賞！',
+    'tutorial.step1.devTip': '⚡ 已為你切換至「💻 開發者核心」視角，隨時也能點「🌱 全部」看所有任務！',
+
+    'tutorial.step2.title': '派小人上班就像經營遊戲！',
+    'tutorial.step2.body': '我們進到「🏭 自動工坊」啦！不用填任何 API Key、完全免花錢——直接點綠色的「⚡ 一鍵派工執行」，就能親眼看像素小人坐到電腦前敲鍵盤、噴金幣！',
+    'tutorial.step2.tip': '💡 任務列表上方有「🌱 全部 / 🌱 新手免程式 / 💻 開發者核心」切換鈕，一秒挑出最適合你的任務！',
+
+    'tutorial.step3.title': '當小鎮裁判，抓垃圾 AI 賺押金！',
+    'tutorial.step3.body': '來到「⚔️ 懸賞工會」！最上面的審閱佇列裡，有個愛灌水的機器人「SlopBot-99」塞了一堆廢話。按一下紅色「🚫 駁回垃圾」，就能當場抓包、直接沒收它的 30G 押金進你口袋！',
+    'tutorial.step3.tip': '⚖️ 幫好作品點「✅ 批准合併」也能賺 +15G 裁判獎勵——誰都能當守護品質的小鎮裁判！',
+
+    'tutorial.step4.title': '創意是第一生產力（5% 永久溯源＋85% 多勞多得）',
+    'tutorial.step4.body': '在「🚀 孵化廣場」，人人都能提點子或投票立項！首發點子會立刻鑄造「SHA-256 創意首發證書 PNG」鎖死 5% 永久版稅；其餘 85% 實幹分紅池完全按貢獻結算，誰出力多誰拿大頭！',
+    'tutorial.step4.tip': '📜 點任意項目卡的「📜 溯源證書」可即時試算分紅，還能一鍵下載帥氣的復古像素證書 PNG！',
+
+    'tutorial.step5.title': '🎓 畢業領取 +100G 創世新手禮包！',
+    'tutorial.step5.body': '恭喜畢業，你已經是正式小鎮居民啦！點下方金色按鈕立刻領取「+100G 創世新手禮包」，順便打開我們原創的 8-bit 復古遊戲配樂，一起開啟像素造物冒險吧！',
+    'tutorial.step5.claimBtn': '🎁 領取 +100G 創世新手禮包',
+    'tutorial.step5.claimingBtn': '⏳ 領取中...',
+    'tutorial.step5.claimedBtn': '✅ 已領取 +100G 創世新手禮包！',
+    'tutorial.step5.bgmBtn': '🎵 一鍵開啟 8-bit 原創配樂',
+    'tutorial.step5.bgmPlayingBtn': '🎶 8-bit 原創配樂播放中',
+    'tutorial.step5.tip': '🎓 以後隨時想重溫，點擊頂部 HUD 的「🎓 新手教學」按鈕就能再次呼叫閃電小吉！',
+
+    'toast.tutorialBonusClaimed': '🎉 恭喜畢業！已領取 +{gold}G 創世新手禮包金幣！',
+    'toast.tutorialBonusAlready': '🎓 你已經領過 +100G 創世新手禮包囉，祝你在小鎮玩得開心！',
+    'toast.tutorialBonusFailed': '領取新手禮包失敗：{err}',
+    'toast.tutorialRoleBeginner': '🌱 已切換至「新手免程式」友善篩選！免寫代碼也能提點子賺金幣與分紅！',
+    'toast.tutorialRoleDev': '💻 已切換至「開發者核心」篩選，一眼鎖定核心 PR 與高價值任務！',
   },
 
   'zh-CN': {
@@ -1256,6 +1314,64 @@ export const DICTIONARY = Object.freeze({
     'toast.metricsRefreshed': '📊 已同步最新系统运维与数据库指标',
     'toast.backupDownloaded': '📦 已下载完整 SQLite 状态与审计备份：{filename}',
     'toast.backupFailed': '备份导出失败：{err}',
+
+    // RPG Interactive Tutorial & Everyone-Friendly Audience Filters
+    'hud.tutorialBtn': '🎓 新手教学',
+    'hud.tutorialTitle': '打开经典 RPG 互动新手教学（5 步轻松上手＋领 +100G 礼包）',
+    'audience.filterLabel': '适合玩家：',
+    'audience.filterAll': '🌱 全部',
+    'audience.filterBeginner': '🌱 新手免编程',
+    'audience.filterDev': '💻 开发者核心',
+    'audience.badgeBeginner': '🌱 新手免编程',
+    'audience.badgeDev': '💻 开发者核心',
+    'audience.emptyBeginner': '目前没有符合筛选的新手免编程任务，点「🌱 全部」或到孵化广场帮新项目投票解锁吧！',
+    'bounty.demoTag': '示范体验',
+    'bounty.liveEscrowTag': '真实托管',
+
+    'tutorial.guideName': '⚡ 闪电小吉',
+    'tutorial.guideRole': '小镇引路人',
+    'tutorial.stepCounter': '步骤 {cur} / {total}',
+    'tutorial.skipBtn': '跳过教学',
+    'tutorial.prevBtn': '← 上一步',
+    'tutorial.nextBtn': '下一步 →',
+    'tutorial.finishBtn': '🚀 完成并开始冒险！',
+    'tutorial.roleSelectedBadge': '✓ 已选择',
+
+    'tutorial.step1.title': '欢迎来到像素算力镇！选择你的冒险身份',
+    'tutorial.step1.body': '哈喽！我是引路人「闪电小吉」～这里就像开罗经营游戏，不管你懂不懂编程，都能派可爱像素小人帮大家做好玩产品、赚金币拿分红！先挑一个最适合你的冒险身份吧：',
+    'tutorial.step1.beginnerTitle': '🌱 我不懂编程 / 创意玩家',
+    'tutorial.step1.beginnerDesc': '完全不用写代码！提好点子就能拿 5% 永久版税、帮忙写标语／挑毛病／投票都能赚金币和分红！',
+    'tutorial.step1.beginnerTip': '✨ 已自动帮你切换至「🌱 新手免编程」任务筛选，全是大白话零门槛任务！',
+    'tutorial.step1.devTitle': '💻 我是开发者 / AI 极客',
+    'tutorial.step1.devDesc': '可接 Gemini API（零信任 BYOK）或用本机月／周订阅 CLI 写 PR，抢占 70% 核心池与现金悬赏！',
+    'tutorial.step1.devTip': '⚡ 已为你切换至「💻 开发者核心」视角，随时也能点「🌱 全部」看所有任务！',
+
+    'tutorial.step2.title': '派小人上班就像经营游戏！',
+    'tutorial.step2.body': '我们进到「🏭 自动工坊」啦！不用填任何 API Key、完全免花钱——直接点绿色的「⚡ 一键派工执行」，就能亲眼看像素小人坐到电脑前敲键盘、喷金币！',
+    'tutorial.step2.tip': '💡 任务列表上方有「🌱 全部 / 🌱 新手免编程 / 💻 开发者核心」切换钮，一秒挑出最适合你的任务！',
+
+    'tutorial.step3.title': '当小镇裁判，抓垃圾 AI 赚押金！',
+    'tutorial.step3.body': '来到「⚔️ 悬赏工会」！最上面的审阅队列里，有个爱灌水的机器人「SlopBot-99」塞了一堆废话。按一下红色「🚫 驳回垃圾」，就能当场抓包、直接没收它的 30G 押金进你口袋！',
+    'tutorial.step3.tip': '⚖️ 帮好作品点「✅ 批准合并」也能赚 +15G 裁判奖励——谁都能当守护质量的小镇裁判！',
+
+    'tutorial.step4.title': '创意是第一生产力（5% 永久溯源＋85% 多劳多得）',
+    'tutorial.step4.body': '在「🚀 孵化广场」，人人都能提点子或投票立项！首发点子会立刻铸造「SHA-256 创意首发证书 PNG」锁死 5% 永久版税；其余 85% 实干分红池完全按贡献结算，谁出力多谁拿大头！',
+    'tutorial.step4.tip': '📜 点任意项目卡的「📜 溯源证书」可实时试算分红，还能一键下载帅气的复古像素证书 PNG！',
+
+    'tutorial.step5.title': '🎓 毕业领取 +100G 创始新手礼包！',
+    'tutorial.step5.body': '恭喜毕业，你已经是正式小镇居民啦！点下方金色按钮立刻领取「+100G 创始新手礼包」，顺便打开我们原创的 8-bit 复古游戏配乐，一起开启像素造物冒险吧！',
+    'tutorial.step5.claimBtn': '🎁 领取 +100G 创始新手礼包',
+    'tutorial.step5.claimingBtn': '⏳ 领取中...',
+    'tutorial.step5.claimedBtn': '✅ 已领取 +100G 创始新手礼包！',
+    'tutorial.step5.bgmBtn': '🎵 一键开启 8-bit 原创配乐',
+    'tutorial.step5.bgmPlayingBtn': '🎶 8-bit 原创配乐播放中',
+    'tutorial.step5.tip': '🎓 以后随时想重温，点击顶部 HUD 的「🎓 新手教学」按钮就能再次呼叫闪电小吉！',
+
+    'toast.tutorialBonusClaimed': '🎉 恭喜毕业！已领取 +{gold}G 创始新手礼包金币！',
+    'toast.tutorialBonusAlready': '🎓 你已经领过 +100G 创始新手礼包啰，祝你在小镇玩得开心！',
+    'toast.tutorialBonusFailed': '领取新手礼包失败：{err}',
+    'toast.tutorialRoleBeginner': '🌱 已切换至「新手免编程」友善筛选！免写代码也能提点子赚金币与分红！',
+    'toast.tutorialRoleDev': '💻 已切换至「开发者核心」筛选，一眼锁定核心 PR 与高价值任务！',
   },
 
   en: {
@@ -1873,6 +1989,64 @@ export const DICTIONARY = Object.freeze({
     'toast.metricsRefreshed': '📊 Live system & database metrics refreshed',
     'toast.backupDownloaded': '📦 Downloaded full SQLite state & audit backup: {filename}',
     'toast.backupFailed': 'Backup export failed: {err}',
+
+    // RPG Interactive Tutorial & Everyone-Friendly Audience Filters
+    'hud.tutorialBtn': '🎓 Tutorial',
+    'hud.tutorialTitle': 'Open interactive RPG tutorial (5 quick steps + claim +100G pack)',
+    'audience.filterLabel': 'Track View:',
+    'audience.filterAll': '🌱 All',
+    'audience.filterBeginner': '🌱 No-Code Friendly',
+    'audience.filterDev': '💻 Dev Core',
+    'audience.badgeBeginner': '🌱 No-Code Friendly',
+    'audience.badgeDev': '💻 Dev Core',
+    'audience.emptyBeginner': 'No matching no-code tasks right now. Click "All" or vote in Launchpad to unlock fresh tasks!',
+    'bounty.demoTag': 'Demo Preview',
+    'bounty.liveEscrowTag': 'Live Escrow',
+
+    'tutorial.guideName': '⚡ Volt Kitty',
+    'tutorial.guideRole': 'Town Guide',
+    'tutorial.stepCounter': 'Step {cur} / {total}',
+    'tutorial.skipBtn': 'Skip',
+    'tutorial.prevBtn': '← Back',
+    'tutorial.nextBtn': 'Next →',
+    'tutorial.finishBtn': '🚀 Start Adventure!',
+    'tutorial.roleSelectedBadge': '✓ Selected',
+
+    'tutorial.step1.title': 'Welcome to PixelCompute Town! Pick Your Role',
+    'tutorial.step1.body': 'Hey there! I am Volt Kitty, your town guide! Just like a classic Kairosoft pixel sim, anyone can send cute pixel workers to build real products, earn Gold, and share dividends—coding or not! Choose your adventure style:',
+    'tutorial.step1.beginnerTitle': '🌱 Non-Coder / Creative Player',
+    'tutorial.step1.beginnerDesc': 'Zero coding needed! Pitch great ideas for a 5% lifetime royalty, write catchy slogans, give UX feedback, or vote to earn Gold & dividends!',
+    'tutorial.step1.beginnerTip': '✨ Task filters switched to "No-Code Friendly" — plain-language creative quests only!',
+    'tutorial.step1.devTitle': '💻 Developer / AI Builder',
+    'tutorial.step1.devDesc': 'Connect Gemini API (zero-trust BYOK) or your local monthly CLI subscription to ship PRs for the 70% Core Pool & bounties!',
+    'tutorial.step1.devTip': '⚡ Switched to "Dev Core" view — click "All" anytime to browse every open quest!',
+
+    'tutorial.step2.title': 'Dispatch Pixel Workers Like a Cozy Sim!',
+    'tutorial.step2.body': 'We just stepped into the Auto Factory! No API key or payment required—click the green "Dispatch Now" button right away to watch your pixel worker hop onto a PC, type away, and shower gold coins!',
+    'tutorial.step2.tip': '💡 Use the "All / No-Code Friendly / Dev Core" filter pills right above the list to find tasks that match your vibe!',
+
+    'tutorial.step3.title': 'Be a Town Referee: Catch Spam Bots & Win Gold!',
+    'tutorial.step3.body': 'Welcome to the Bounty Guild! Check the Peer Review Queue at the top—a spam bot named SlopBot-99 just submitted padded junk. Click red "Reject Slop" to catch it red-handed and pocket its 30G deposit!',
+    'tutorial.step3.tip': '⚖️ Approving clean work earns +15G too! Anyone—coder or not—can referee quality and earn rewards.',
+
+    'tutorial.step4.title': 'Ideas Come First: 5% Lifetime Royalty + 85% Merit Pool',
+    'tutorial.step4.body': 'In the Launchpad, anyone can pitch an idea or vote projects into production! The first spark mints a permanent SHA-256 Certificate PNG locking in a 5% lifetime royalty, while 85% goes fairly to whoever contributes the most!',
+    'tutorial.step4.tip': '📜 Click "Provenance Cert" on any project card to play with the live split calculator & download a retro pixel PNG certificate!',
+
+    'tutorial.step5.title': '🎓 Graduate & Claim Your +100G Starter Pack!',
+    'tutorial.step5.body': 'Congrats—you are officially a PixelCompute Town citizen! Tap the golden button below to claim your +100G Genesis Starter Pack, and turn on our original 8-bit chiptune soundtrack for full retro vibes!',
+    'tutorial.step5.claimBtn': '🎁 Claim +100G Starter Pack',
+    'tutorial.step5.claimingBtn': '⏳ Claiming...',
+    'tutorial.step5.claimedBtn': '✅ +100G Starter Pack Claimed!',
+    'tutorial.step5.bgmBtn': '🎵 Play Original 8-bit BGM',
+    'tutorial.step5.bgmPlayingBtn': '🎶 8-bit BGM Playing',
+    'tutorial.step5.tip': '🎓 Want a replay anytime? Click the "Tutorial" button in the top bar to summon Volt Kitty again!',
+
+    'toast.tutorialBonusClaimed': '🎉 Graduation complete! Claimed +{gold}G Genesis Starter Pack Gold!',
+    'toast.tutorialBonusAlready': '🎓 You already claimed your +100G Starter Pack—enjoy exploring the town!',
+    'toast.tutorialBonusFailed': 'Failed to claim starter pack: {err}',
+    'toast.tutorialRoleBeginner': '🌱 Switched to "No-Code Friendly" filter! Pitch ideas & earn Gold without coding!',
+    'toast.tutorialRoleDev': '💻 Switched to "Dev Core" filter—core PRs & high-value bounties unlocked!',
   },
 });
 
@@ -2123,6 +2297,43 @@ const TASK_I18N = Object.freeze({
       acceptanceCriteria: ['Safe workflow permissions + retry code or valid GitHub PR URL', 'Never exposes repository secrets to untrusted forks'],
     },
   },
+  'task-meta-slogan': {
+    'zh-TW': {
+      title: '🌱 [新手免程式] 為像素算力鎮寫一句最吸睛的宣傳標語',
+      description: '完全不用懂程式！用你最有創意的口吻，為像素算力鎮寫一句讓人一眼就想玩的黃金標語與簡短亮點說明。',
+      acceptanceCriteria: ['提供吸睛的原創核心標語（至少 1 句）', '附上簡短宣傳亮點說明，內容真誠不灌水'],
+    },
+    'zh-CN': {
+      title: '🌱 [新手免编程] 为像素算力镇写一句最吸睛的宣传标语',
+      description: '完全不用懂编程！用你最有创意的口吻，为像素算力镇写一句让人一眼就想玩的黄金标语与简短亮点说明。',
+      acceptanceCriteria: ['提供吸睛的原创核心标语（至少 1 句）', '附上简短宣传亮点说明，内容真诚不灌水'],
+    },
+    en: {
+      title: '🌱 [No-Code] Write a Catchy Launch Slogan for PixelCompute Town',
+      description: 'Zero coding required! Craft 1 memorable tagline and a short highlight blurb that makes anyone want to try PixelCompute Town.',
+      acceptanceCriteria: ['Includes at least 1 original, catchy tagline', 'Adds brief highlight bullets with zero filler'],
+    },
+  },
+  'task-meta-ux': {
+    'zh-TW': {
+      title: '🎨 [新手免程式] 體驗 6 大像素房間並提交 3 條玩家優化建議',
+      description: '零門檻、免押金、免寫代碼！逛逛自動工坊、懸賞工會、孵化廣場、算力宿舍與金庫，以玩家角度提出 3 條體驗改善點子。',
+      acceptanceCriteria: ['列出至少 3 條具體的介面或玩法優化建議', '說明每條建議如何讓新手或創作者玩得更開心'],
+      modelSuggestion: '人類玩家心得 / 任意 AI 助手',
+    },
+    'zh-CN': {
+      title: '🎨 [新手免编程] 体验 6 大像素房间并提交 3 条玩家优化建议',
+      description: '零门槛、免押金、免写代码！逛逛自动工坊、悬赏工会、孵化广场、算力宿舍与金库，以玩家角度提出 3 条体验改善点子。',
+      acceptanceCriteria: ['列出至少 3 条具体的界面或玩法优化建议', '说明每条建议如何让新手或创作者玩得更开心'],
+      modelSuggestion: '人类玩家心得 / 任意 AI 助手',
+    },
+    en: {
+      title: '🎨 [No-Code] Explore All 6 Pixel Rooms & Submit 3 Player UX Ideas',
+      description: 'Zero coding, zero deposit! Tour the Factory, Guild, Launchpad, Lounge, Vault & Town Map, then share 3 concrete ideas to improve the experience.',
+      acceptanceCriteria: ['Lists at least 3 specific UI or gameplay suggestions', 'Explains how each idea makes the town better for players'],
+      modelSuggestion: 'Human Player Feedback / Any AI Assistant',
+    },
+  },
 });
 
 const WORKER_NAME_I18N = Object.freeze({
@@ -2342,6 +2553,7 @@ const BADGE_I18N = Object.freeze({
   '新進開發者': { 'zh-TW': '新進開發者', 'zh-CN': '新进开发者', en: 'New Builder' },
   '社群開發者': { 'zh-TW': '社群開發者', 'zh-CN': '社区开发者', en: 'Community Dev' },
   'PRO 鎮長': { 'zh-TW': 'PRO 鎮長', 'zh-CN': 'PRO 镇长', en: 'PRO Mayor' },
+  '🎓 創世見習鎮民': { 'zh-TW': '🎓 創世見習鎮民', 'zh-CN': '🎓 创始见习镇民', en: '🎓 Genesis Citizen' },
 });
 
 const NAME_TEXT_MAP = Object.freeze({
@@ -2474,11 +2686,17 @@ export function localizeTask(task, locale) {
 
   const known = task.id && TASK_I18N[task.id]?.[loc];
   if (known) {
+    let modelSuggestion = known.modelSuggestion || task.modelSuggestion || '';
+    if (loc === 'en' && /[\u4e00-\u9fff]/.test(modelSuggestion)) {
+      modelSuggestion = 'Human Feedback / Any AI Assistant';
+    } else if (loc === 'zh-CN' && modelSuggestion) {
+      modelSuggestion = modelSuggestion.replaceAll('人類', '人类').replaceAll('免填', '免填');
+    }
     return {
       title: known.title,
       description: known.description,
       acceptanceCriteria: [...known.acceptanceCriteria],
-      modelSuggestion: task.modelSuggestion || '',
+      modelSuggestion,
     };
   }
 
@@ -3305,6 +3523,12 @@ export function localizeFeedMessage(msg, locale) {
     if (s.includes('反刷單冷卻') || s.includes('冷卻')) {
       return '⏳ Worker entered anti-slop cooldown after repeated rejected submissions.';
     }
+    if (s.includes('新手畢業禮包') || s.includes('新手毕业礼包') || s.includes('新手教學') || s.includes('新手教学')) {
+      return '🎓 Claimed +100G Genesis Tutorial Graduation Bonus!';
+    }
+    if (s.includes('正式營運模式') || s.includes('正式运营模式')) {
+      return '🟢 Mayor switched PixelCompute Town to Live Production Mode (demo bounties cleared).';
+    }
   }
 
   if (loc === 'zh-CN') {
@@ -3444,6 +3668,9 @@ export function localizeServerMessage(msg, locale) {
     }
     if ((s.includes('找不到') || s.includes('已處理') || s.includes('已处理')) && (s.includes('審閱') || s.includes('审阅'))) {
       return 'Review item not found or already decided.';
+    }
+    if ((s.includes('新手') || s.includes('畢業') || s.includes('毕业') || s.includes('禮包') || s.includes('礼包')) && (s.includes('領過') || s.includes('领过') || s.includes('已領取') || s.includes('已领取') || s.includes('重複') || s.includes('重复'))) {
+      return 'You have already claimed the +100G tutorial graduation bonus.';
     }
   }
 

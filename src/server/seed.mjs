@@ -216,6 +216,7 @@ export function generateTasksForProject(project) {
       id: `task-${slug}-i18n-${suffix}`,
       projectId: pid,
       track: 'api_auto',
+      audience: 'dev',
       category: 'i18n',
       title: `為《${short}》生成多語系介面文案 JSON（繁中／英文／日文）`,
       description: `將《${short}》核心介面按鈕、提示與歡迎語翻譯為結構化多語系 JSON，供前端直接載入。`,
@@ -254,6 +255,7 @@ export function generateTasksForProject(project) {
       id: `task-${slug}-spec-${suffix}`,
       projectId: pid,
       track: 'api_auto',
+      audience: 'dev',
       category: 'pixel_spec',
       title: `設計《${short}》像素視覺配色表與狀態圖示規格 JSON`,
       description: `產出《${short}》的主題色盤、按鈕狀態色與像素圖示規格 JSON，方便美術與前端快速套用。`,
@@ -292,6 +294,7 @@ export function generateTasksForProject(project) {
       id: `task-${slug}-test-${suffix}`,
       projectId: pid,
       track: 'api_auto',
+      audience: 'dev',
       category: 'unit_test',
       title: `撰寫《${short}》核心狀態機單元測試案例`,
       description: `使用 Node.js 原生 node:test 與 assert 撰寫《${short}》核心功能與邊界條件測試。`,
@@ -326,6 +329,7 @@ export function generateTasksForProject(project) {
       id: `task-${slug}-core-pr-${suffix}`,
       projectId: pid,
       track: 'guild_bounty',
+      audience: 'dev',
       category: 'feature_pr',
       title: `實作《${short}》核心互動模組與鍵盤操作支援 PR`,
       description: `適合使用 Gemini CLI / Claude Code / Codex CLI 在本機完成核心功能骨架、狀態持久化與鍵盤快捷鍵 PR。`,
@@ -360,6 +364,7 @@ export function generateTasksForProject(project) {
       id: `task-${slug}-qa-pr-${suffix}`,
       projectId: pid,
       track: 'guild_bounty',
+      audience: 'dev',
       category: 'bugfix',
       title: `完善《${short}》異常恢復機制與上線發佈腳本`,
       description: `檢查邊界狀態、修補潛在競態問題，並提供開箱即用的打包或一鍵啟動腳本。`,
@@ -618,6 +623,7 @@ export function ensureStateSchema(state) {
     state.settings = {
       strictDeviceReview: false,
       peerReviewRequired: false,
+      liveProductionMode: false,
       sessionSecret: crypto.randomBytes(32).toString('hex'),
     };
   } else {
@@ -626,6 +632,9 @@ export function ensureStateSchema(state) {
     }
     if (typeof state.settings.peerReviewRequired !== 'boolean') {
       state.settings.peerReviewRequired = false;
+    }
+    if (typeof state.settings.liveProductionMode !== 'boolean') {
+      state.settings.liveProductionMode = false;
     }
     if (!state.settings.sessionSecret) {
       state.settings.sessionSecret = crypto.randomBytes(32).toString('hex');
@@ -705,6 +714,9 @@ export function ensureStateSchema(state) {
     u.votedProjectIds = Array.isArray(u.votedProjectIds) ? u.votedProjectIds : [];
     u.walletAddress = typeof u.walletAddress === 'string' ? u.walletAddress : '';
     u.walletChain = typeof u.walletChain === 'string' ? u.walletChain : '';
+    if (typeof u.tutorialBonusClaimed !== 'boolean') u.tutorialBonusClaimed = false;
+    if (typeof u.title !== 'string') u.title = '';
+    if (!Array.isArray(u.unlockedTitles)) u.unlockedTitles = [];
     if (!Array.isArray(u.achievements) || u.achievements.length === 0) {
       u.achievements = createInitialAchievements();
     }
@@ -741,6 +753,8 @@ export function ensureStateSchema(state) {
     autoPilotEnabled: Boolean(founder.autoPilotEnabled),
     walletAddress: founder.walletAddress,
     walletChain: founder.walletChain,
+    tutorialBonusClaimed: Boolean(founder.tutorialBonusClaimed),
+    title: founder.title || '',
   };
   state.workers = founder.workers;
   state.achievements = founder.achievements;
@@ -758,6 +772,9 @@ export function ensureStateSchema(state) {
       t.poolBucket = getTaskBucket(t);
       t.stakeGold = getTaskStakeGold(t);
       t.minReputation = getTaskMinReputation(t);
+      if (t.audience !== 'beginner' && t.audience !== 'dev') {
+        t.audience = (t.category === 'docs' || t.category === 'qa_audit') ? 'beginner' : 'dev';
+      }
       if (!Number.isFinite(Number(t.stakedGold))) t.stakedGold = 0;
       if (t.stakedByUserId === undefined) t.stakedByUserId = null;
     }
@@ -1034,9 +1051,45 @@ export function createInitialState() {
 
   const tasks = [
     {
+      id: 'task-meta-slogan',
+      projectId: 'proj-meta',
+      track: 'api_auto',
+      audience: 'beginner',
+      category: 'docs',
+      title: '🌱 [新手免程式] 為像素算力鎮寫一句最吸睛的宣傳標語',
+      description: '完全不用寫程式！幫像素算力鎮想 3 句讓人一秒看懂「邊玩像素遊戲、邊用閒置算力賺分紅」的趣味宣傳標語與推薦理由。',
+      modelSuggestion: 'gemini-2.5-flash',
+      promptTemplate: '請為「PixelCompute Town 像素算力鎮」撰寫 3 句吸睛的繁體中文宣傳標語（適合社群分享、讓不懂程式的新手也能一眼看懂），並用條列說明每句標語的亮點。',
+      sampleInput: '產品特色：像素模擬經營小鎮 × 閒置 AI 算力協作 × 5/85/10 透明分紅\n目標受眾：喜歡開羅遊戲／星露谷的一般玩家與創意提案者',
+      acceptanceCriteria: [
+        '至少提供 3 句原創宣傳標語（使用標題或條列格式）',
+        '語氣親切自然，非技術玩家也能一眼看懂小鎮玩法',
+      ],
+      cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
+      contributionPoints: 20,
+      goldReward: 90,
+      xpReward: 30,
+      progressWeight: 5,
+      tokenCostEst: 8000,
+      staminaCost: 8,
+      status: 'open',
+      assignedWorkerId: null,
+      claimedBy: null,
+      claimedAt: null,
+      submittedAt: null,
+      submission: null,
+      verification: null,
+    },
+    {
       id: 'task-meta-i18n',
       projectId: 'proj-meta',
       track: 'api_auto',
+      audience: 'dev',
       category: 'i18n',
       title: '翻譯小鎮商店與公告介面為 en / ja 多語系 JSON',
       description: '將像素算力鎮核心 HUD 與商店按鈕文案翻譯為自然流暢的英文與日文，供全球開源社群遊玩。',
@@ -1077,6 +1130,7 @@ export function createInitialState() {
       id: 'task-meta-spec',
       projectId: 'proj-meta',
       track: 'api_auto',
+      audience: 'dev',
       category: 'pixel_spec',
       title: '制定夜市限定像素精靈與霓虹看板配色表 JSON',
       description: '設計「賽博夜市」活動主題色盤與 3 組霓虹招牌像素動畫規格，讓小鎮夜晚更吸睛。',
@@ -1115,6 +1169,7 @@ export function createInitialState() {
       id: 'task-meta-docs',
       projectId: 'proj-meta',
       track: 'api_auto',
+      audience: 'beginner',
       category: 'docs',
       title: '整理 BYOK 零信任安全架構與防刷單白皮書摘要',
       description: '為準備在 Show HN 與 Product Hunt 發布的創世版本撰寫精煉的安全與公平機制說明。',
@@ -1149,6 +1204,7 @@ export function createInitialState() {
       id: 'task-meta-pr',
       projectId: 'proj-meta',
       track: 'guild_bounty',
+      audience: 'dev',
       category: 'feature_pr',
       title: '實作小鎮鍵盤快捷鍵導覽與快速切換建築視角 PR',
       description: '使用本機 Gemini CLI 或 Claude Code 實作 1~5 分頁快捷鍵與建築高亮焦點切換，提升桌面端操作爽感。',
@@ -1183,6 +1239,7 @@ export function createInitialState() {
       id: 'task-meta-bugfix',
       projectId: 'proj-meta',
       track: 'guild_bounty',
+      audience: 'dev',
       category: 'bugfix',
       title: '修復 SSE 斷線重連後小人動畫狀態閃爍問題',
       description: '針對瀏覽器休眠喚醒後 EventSource 重連的邊界狀況，加入退避重試與狀態版本號去重。',
@@ -1214,9 +1271,45 @@ export function createInitialState() {
       verification: null,
     },
     {
+      id: 'task-meta-ux',
+      projectId: 'proj-meta',
+      track: 'guild_bounty',
+      audience: 'beginner',
+      category: 'docs',
+      title: '🎨 [新手免程式] 體驗 6 大像素房間並提交 3 條玩家優化建議',
+      description: '免押金、免寫代碼、零信譽門檻！逛一逛像素小鎮的 6 大房間（廣場、工坊、工會、孵化廳、宿舍、商店），寫下 3 條你覺得可以更好玩的介面或體驗建議即可拿金幣與分紅點數！',
+      modelSuggestion: '人類玩家心得 / 任意 AI 助手',
+      promptTemplate: '請以一般玩家的視角體驗像素算力鎮的 6 大像素房間（像素廣場、自動工坊、懸賞工會、孵化大廳、算力宿舍、道具商店），以條列方式整理 3 條具體好玩的體驗回饋或改善建議。',
+      sampleInput: '體驗房間：廣場 / 自動工坊 / 懸賞工會 / 孵化大廳 / 算力宿舍 / 商店\n提交格式：條列 3 點（發現什麼、為什麼、怎麼改更好玩）',
+      acceptanceCriteria: [
+        '使用標題或條列格式寫出 3 條具體體驗建議',
+        '免程式碼、免 GitHub PR，只要真誠具體即可通過驗收',
+      ],
+      cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
+      contributionPoints: 30,
+      goldReward: 120,
+      xpReward: 45,
+      progressWeight: 5,
+      tokenCostEst: 6,
+      staminaCost: 10,
+      status: 'open',
+      assignedWorkerId: null,
+      claimedBy: null,
+      claimedAt: null,
+      submittedAt: null,
+      submission: null,
+      verification: null,
+    },
+    {
       id: 'task-i18n-locales',
       projectId: 'proj-i18n',
       track: 'api_auto',
+      audience: 'dev',
       category: 'i18n',
       title: '[$10 懸賞] 批次翻譯 CLI 錯誤碼表（zh-TW / en / ja / ko）',
       description: '為 i18n-PixelBot 補齊 4 語系 CLI 診斷錯誤訊息，驗收通過直接入帳 $9（含 10% 平臺託管費）。',
@@ -1254,6 +1347,7 @@ export function createInitialState() {
       id: 'task-i18n-tests',
       projectId: 'proj-i18n',
       track: 'api_auto',
+      audience: 'dev',
       category: 'unit_test',
       title: '為 ICU 複數語法解析器撰寫邊界單元測試',
       description: '補足英文單複數、巢狀佔位符與跳脫字元的 node:test 測試組，提高開源插件可靠度。',
@@ -1288,6 +1382,7 @@ export function createInitialState() {
       id: 'task-i18n-qa',
       projectId: 'proj-i18n',
       track: 'api_auto',
+      audience: 'beginner',
       category: 'qa_audit',
       title: '巡檢開源範本語系檔佔位符一致性與缺漏報告',
       description: '自動比對基準語系與目標語系中的 `{name}`、`{count}` 佔位符是否遭誤翻或遺漏。',
@@ -1325,6 +1420,7 @@ export function createInitialState() {
       id: 'task-i18n-ast-pr',
       projectId: 'proj-i18n',
       track: 'guild_bounty',
+      audience: 'dev',
       category: 'feature_pr',
       title: '[$40 現金懸賞] 支援 TypeScript JSX AST 自動抽取翻譯鍵值',
       description: '高價值工會懸賞！為 i18n-PixelBot 加入靜態語法分析器，精準抽取 t("key") 與 <Trans> 節點並產出差異報表。',
@@ -1359,6 +1455,7 @@ export function createInitialState() {
       id: 'task-i18n-gh-action',
       projectId: 'proj-i18n',
       track: 'guild_bounty',
+      audience: 'dev',
       category: 'bugfix',
       title: '[$25 現金懸賞] 修復 GitHub Action PR Comment 權限與重試邏輯',
       description: '解決外部 Fork PR 觸發 Action 時因權限不足導致翻譯報表留言失敗的問題，補上 429 限流退避重試。',
@@ -1644,6 +1741,7 @@ export function createInitialState() {
     settings: {
       strictDeviceReview: false,
       peerReviewRequired: false,
+      liveProductionMode: false,
       sessionSecret: crypto.randomBytes(32).toString('hex'),
     },
   });

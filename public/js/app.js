@@ -8,6 +8,7 @@ import { PixelTownEngine } from './pixelEngine.js';
 import { renderWorkerPortrait } from './sprites.js';
 import { soundFX } from './sound.js';
 import { BGM_TRACKS, SCENE_TRACK_MAP, bgmPlayer } from './bgm.js';
+import { createTutorialController } from './tutorial.js';
 import {
   renderWorkCertificate,
   downloadWorkCertificate,
@@ -134,6 +135,9 @@ const app = {
     }
   })(),
   feedFilter: 'all',
+  apiAudienceFilter: 'all',
+  guildAudienceFilter: 'all',
+  tutorial: null,
   dayNight: 'night',
   autoPilotOn: false,
   autoPilotTimer: null,
@@ -305,6 +309,78 @@ function getTaskMinRepSafe(task) {
   return task?.track === 'guild_bounty' ? 60 : 0;
 }
 
+function isLiveProductionMode() {
+  return Boolean(
+    app.state?.settings?.liveProductionMode ??
+      app.authConfig?.liveProductionMode ??
+      app.config?.liveProductionMode ??
+      false,
+  );
+}
+
+function getTaskAudienceSafe(task) {
+  if (task?.audience === 'beginner' || task?.audience === 'dev') {
+    return task.audience;
+  }
+  if (task?.id === 'task-meta-slogan' || task?.id === 'task-meta-ux') {
+    return 'beginner';
+  }
+  if (task?.category === 'docs' && !(Number(task?.cashBountyUsd) > 0)) {
+    return 'beginner';
+  }
+  return 'dev';
+}
+
+function renderAudienceBadge(task) {
+  const aud = getTaskAudienceSafe(task);
+  if (aud === 'beginner') {
+    return `<span class="badge beginner-pill">${escapeHtml(t('audience.badgeBeginner'))}</span>`;
+  }
+  return `<span class="badge dev-pill">${escapeHtml(t('audience.badgeDev'))}</span>`;
+}
+
+function renderCashBountyBadge(grossUsd, variant = 'factory') {
+  const gross = Number(grossUsd) || 0;
+  if (gross <= 0) return '';
+  const live = isLiveProductionMode();
+  const modeLabel = live ? t('bounty.liveEscrowTag') : t('bounty.demoTag');
+  const cls = live ? 'bounty-live' : 'bounty-demo';
+  const net = Number((gross * 0.9).toFixed(2));
+  const fee = Number((gross * 0.1).toFixed(2));
+
+  let mainText = '';
+  if (variant === 'guild') {
+    mainText = t('guild.bountyNetFee', { gross, net, fee });
+  } else if (variant === 'modal') {
+    mainText = t('modal.guild.bountyBadge', { gross, net: net.toFixed(2) });
+  } else {
+    mainText = `💵 $${gross} ($${net.toFixed(2)} ${t('factory.netSuffix')})`;
+  }
+  return `<span class="badge ${cls}">${escapeHtml(mainText)} <span class="bounty-mode-chip">${escapeHtml(modeLabel)}</span></span>`;
+}
+
+function syncAudienceFilterButtons(containerId, activeValue) {
+  const bar = $(containerId);
+  if (!bar) return;
+  bar.querySelectorAll('[data-audience-filter]').forEach((btn) => {
+    const isActive = btn.dataset.audienceFilter === activeValue;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
+function setAudienceFilters(value) {
+  const normalized = value === 'beginner' || value === 'dev' ? value : 'all';
+  app.apiAudienceFilter = normalized;
+  app.guildAudienceFilter = normalized;
+  syncAudienceFilterButtons('filter-api-audience', normalized);
+  syncAudienceFilterButtons('filter-guild-audience', normalized);
+  if (app.state) {
+    renderFactoryTab();
+    renderGuildTab();
+  }
+}
+
 function showToast(message, type = 'info', durationMs = 3400) {
   const container = $('toast-container');
   if (!container) return;
@@ -454,6 +530,11 @@ function applyBootstrapPayload(data, { silentAchievements = false } = {}) {
   if (app.engine && app.state) {
     app.engine.syncState(app.state);
   }
+  if (app.tutorial) {
+    app.tutorial.setClaimed(
+      Boolean(app.state?.player?.tutorialBonusClaimed || app.user?.tutorialBonusClaimed),
+    );
+  }
   if (!silentAchievements && app.state) {
     checkNewAchievements(app.state);
   }
@@ -466,6 +547,9 @@ function applyNewState(nextState, { silentAchievements = false } = {}) {
   app.lastLocalMutationAt = Date.now();
   if (app.engine) {
     app.engine.syncState(app.state);
+  }
+  if (app.tutorial) {
+    app.tutorial.setClaimed(Boolean(app.state?.player?.tutorialBonusClaimed));
   }
   if (!silentAchievements) {
     checkNewAchievements(app.state);
@@ -1034,6 +1118,8 @@ function renderFactoryTab() {
 
   const selectedProj = projFilter?.value || 'all';
   const selectedStatus = statusFilter?.value || 'all';
+  const selectedAud = app.apiAudienceFilter || 'all';
+  syncAudienceFilterButtons('filter-api-audience', selectedAud);
   const projectMap = new Map((app.state.projects || []).map((p) => [p.id, p]));
   const workerMap = new Map((app.state.workers || []).map((w) => [w.id, w]));
 
@@ -1042,6 +1128,7 @@ function renderFactoryTab() {
     if (selectedProj !== 'all' && tk.projectId !== selectedProj) return false;
     if (selectedStatus === 'open' && tk.status !== 'open' && tk.status !== 'in_progress') return false;
     if (selectedStatus === 'completed' && tk.status !== 'completed') return false;
+    if (selectedAud !== 'all' && getTaskAudienceSafe(tk) !== selectedAud) return false;
     return true;
   });
 
@@ -1049,7 +1136,8 @@ function renderFactoryTab() {
   if (!listEl) return;
 
   if (tasks.length === 0) {
-    listEl.innerHTML = `<div class="empty-state">${escapeHtml(t('factory.empty'))}</div>`;
+    const emptyMsg = selectedAud === 'beginner' ? t('audience.emptyBeginner') : t('factory.empty');
+    listEl.innerHTML = `<div class="empty-state">${escapeHtml(emptyMsg)}</div>`;
     return;
   }
 
@@ -1097,15 +1185,16 @@ function renderFactoryTab() {
           </div>
           ${workerChipHtml}
           <div class="badge-row">
+            ${renderAudienceBadge(task)}
             ${bucketBadge}
             <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
-            <span class="badge cyan">🤖 ${escapeHtml(task.modelSuggestion || 'gemini-2.5-flash')}</span>
+            <span class="badge cyan">🤖 ${escapeHtml(lt.modelSuggestion || task.modelSuggestion || 'gemini-2.5-flash')}</span>
             <span class="badge">⚡ ${(task.tokenCostEst || 0).toLocaleString()} tok / -${task.staminaCost || 12}</span>
             <span class="badge gold">🪙 +${task.goldReward}G</span>
             <span class="badge pink">✨ +${task.contributionPoints} pt</span>
             ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
             ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
-            ${task.cashBountyUsd > 0 ? `<span class="badge green">💵 $${task.cashBountyUsd} ($${(task.cashBountyUsd * 0.9).toFixed(2)} ${escapeHtml(t('factory.netSuffix'))})</span>` : ''}
+            ${task.cashBountyUsd > 0 ? renderCashBountyBadge(task.cashBountyUsd, 'factory') : ''}
           </div>
           <div class="card-footer">
             <span class="mono" style="font-size: 11px; color: var(--text-muted);">
@@ -1370,12 +1459,15 @@ function renderGuildTab() {
   }
 
   const selectedProj = projFilter?.value || 'all';
+  const selectedAud = app.guildAudienceFilter || 'all';
+  syncAudienceFilterButtons('filter-guild-audience', selectedAud);
   const projectMap = new Map((app.state.projects || []).map((p) => [p.id, p]));
   const workerMap = new Map((app.state.workers || []).map((w) => [w.id, w]));
 
   const tasks = (app.state.tasks || []).filter((tk) => {
     if (tk.track !== 'guild_bounty') return false;
     if (selectedProj !== 'all' && tk.projectId !== selectedProj) return false;
+    if (selectedAud !== 'all' && getTaskAudienceSafe(tk) !== selectedAud) return false;
     return true;
   });
 
@@ -1383,7 +1475,8 @@ function renderGuildTab() {
   if (!listEl) return;
 
   if (tasks.length === 0) {
-    listEl.innerHTML = `<div class="empty-state">${escapeHtml(t('guild.empty'))}</div>`;
+    const emptyMsg = selectedAud === 'beginner' ? t('audience.emptyBeginner') : t('guild.empty');
+    listEl.innerHTML = `<div class="empty-state">${escapeHtml(emptyMsg)}</div>`;
     return;
   }
 
@@ -1432,16 +1525,17 @@ function renderGuildTab() {
           </div>
           ${workerChipHtml}
           <div class="badge-row">
+            ${renderAudienceBadge(task)}
             <span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>
             ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
             ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
             <span class="badge">📦 ${escapeHtml(lp?.shortName || task.projectId)}</span>
-            <span class="badge amber">🖥️ ${escapeHtml(task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
+            <span class="badge amber">🖥️ ${escapeHtml(lt.modelSuggestion || task.modelSuggestion || 'Gemini CLI / Claude Code')}</span>
             <span class="badge gold">🪙 +${task.goldReward}G</span>
             <span class="badge pink">✨ +${task.contributionPoints} pt</span>
             ${
               task.cashBountyUsd > 0
-                ? `<span class="badge green">${escapeHtml(t('guild.bountyNetFee', { gross: task.cashBountyUsd, net: netUsd, fee: feeUsd }))}</span>`
+                ? renderCashBountyBadge(task.cashBountyUsd, 'guild')
                 : `<span class="badge cyan">${escapeHtml(t('guild.poolBadge'))}</span>`
             }
           </div>
@@ -1580,7 +1674,11 @@ function renderIncubatorTab() {
                 ? t('incubator.myPointsSpark', { pts: myPts, pct: myTotalSharePct })
                 : t('incubator.myPoints', { pts: myPts, pct: myMeritSharePct.toFixed(1) }),
             )}</span>
-            ${p.bountyPoolUsd > 0 ? `<span class="badge gold">${escapeHtml(t('incubator.bountyPool', { amount: p.bountyPoolUsd }))}</span>` : ''}
+            ${
+              p.bountyPoolUsd > 0
+                ? `<span class="badge ${isLiveProductionMode() ? 'bounty-live' : 'bounty-demo'}">${escapeHtml(t('incubator.bountyPool', { amount: p.bountyPoolUsd }))} <span class="bounty-mode-chip">${escapeHtml(isLiveProductionMode() ? t('bounty.liveEscrowTag') : t('bounty.demoTag'))}</span></span>`
+                : ''
+            }
             ${p.totalRevenueUsd > 0 ? `<span class="badge green">${escapeHtml(t('incubator.totalRev', { amount: fmtUsd(p.totalRevenueUsd) }))}</span>` : ''}
           </div>
 
@@ -2476,6 +2574,7 @@ async function openGuildWorkbench(taskId) {
 
   $('guild-modal-title').textContent = t('modal.guild.titleWithTask', { title: lt.title });
   $('guild-modal-meta').innerHTML = `
+    ${renderAudienceBadge(freshTask)}
     <span class="badge ${bucket === 'core' ? 'core-pool' : 'periph-pool'}">${escapeHtml(bucket === 'core' ? t('gov.bucketCore') : t('gov.bucketPeripheral'))}</span>
     ${stakeGold > 0 ? `<span class="badge stake-pill">${escapeHtml(t('gov.stakeTag', { gold: stakeGold }))}</span>` : ''}
     ${minRep > 0 ? `<span class="badge">${escapeHtml(t('gov.minRepTag', { rep: minRep }))}</span>` : ''}
@@ -2483,7 +2582,7 @@ async function openGuildWorkbench(taskId) {
     <span class="badge cyan">${escapeHtml(t('modal.guild.workerBadge', { name: lw?.name || 'Worker' }))}</span>
     <span class="badge gold">🪙 +${freshTask.goldReward}G</span>
     <span class="badge pink">${escapeHtml(t('modal.guild.pointsBadge', { pts: freshTask.contributionPoints }))}</span>
-    ${freshTask.cashBountyUsd > 0 ? `<span class="badge green">${escapeHtml(t('modal.guild.bountyBadge', { gross: freshTask.cashBountyUsd, net: (freshTask.cashBountyUsd * 0.9).toFixed(2) }))}</span>` : ''}
+    ${freshTask.cashBountyUsd > 0 ? renderCashBountyBadge(freshTask.cashBountyUsd, 'modal') : ''}
   `;
 
   const criteriaArr = Array.isArray(lt.acceptanceCriteria) ? lt.acceptanceCriteria : [];
@@ -3261,6 +3360,11 @@ function bindEvents() {
   // HUD controls
   $('hud-user-badge').addEventListener('click', () => openAuthModal('login'));
 
+  $('btn-hud-tutorial').addEventListener('click', () => {
+    soundFX.playClick();
+    app.tutorial?.open(0);
+  });
+
   $('btn-day-night').addEventListener('click', () => {
     app.dayNight = app.dayNight === 'night' ? 'day' : 'night';
     document.body.dataset.theme = app.dayNight;
@@ -3345,7 +3449,10 @@ function bindEvents() {
     };
 
     if (typeof bgmPlayer.subscribe === 'function') {
-      bgmPlayer.subscribe((nextState) => app.renderBgmControls(nextState));
+      bgmPlayer.subscribe((nextState) => {
+        app.renderBgmControls(nextState);
+        app.tutorial?.setBgmPlaying(Boolean(nextState?.playing));
+      });
     }
 
     $('btn-bgm-toggle')?.addEventListener('click', () => {
@@ -3842,9 +3949,25 @@ function bindEvents() {
   $('factory-project-filter').addEventListener('change', renderFactoryTab);
   $('factory-status-filter').addEventListener('change', renderFactoryTab);
   $('toggle-autopilot').addEventListener('change', (e) => setAutoPilot(e.target.checked));
+  $('filter-api-audience').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-audience-filter]');
+    if (!btn) return;
+    soundFX.playClick();
+    app.apiAudienceFilter = btn.dataset.audienceFilter || 'all';
+    syncAudienceFilterButtons('filter-api-audience', app.apiAudienceFilter);
+    renderFactoryTab();
+  });
 
   // Guild filters & Workbench actions
   $('guild-project-filter').addEventListener('change', renderGuildTab);
+  $('filter-guild-audience').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-audience-filter]');
+    if (!btn) return;
+    soundFX.playClick();
+    app.guildAudienceFilter = btn.dataset.audienceFilter || 'all';
+    syncAudienceFilterButtons('filter-guild-audience', app.guildAudienceFilter);
+    renderGuildTab();
+  });
   $('btn-refresh-reviews').addEventListener('click', () => refreshReviewsNow({ showFeedback: true }));
   $('guild-submit-for-review').addEventListener('change', (e) => {
     $('guild-submit-review-label')?.classList.toggle('active', Boolean(e.target.checked));
@@ -4021,6 +4144,7 @@ function bindEvents() {
         app.renderBgmControls();
       }
       renderAll();
+      app.tutorial?.refreshLocale();
       if ($('provenance-modal')?.classList.contains('open') && app.provModal.projectId) {
         const proj = (app.state?.projects || []).find((p) => p.id === app.provModal.projectId);
         if (proj) renderProvenanceModalContent(proj);
@@ -4487,6 +4611,68 @@ async function init() {
   bindEvents();
   syncAutoFollowUi();
 
+  app.tutorial = createTutorialController({
+    getLocale,
+    selectTab: (tabName) => switchTab(tabName),
+    selectScene: (sceneId) => selectScene(sceneId, { syncTab: false, silent: true }),
+    onSelectRole: (role) => {
+      if (role === 'beginner') {
+        setAudienceFilters('beginner');
+        showToast(t('toast.tutorialRoleBeginner'), 'success', 3800);
+      } else if (role === 'dev') {
+        setAudienceFilters('dev');
+        showToast(t('toast.tutorialRoleDev'), 'info', 3400);
+      }
+    },
+    onClaimGraduationBonus: async () => {
+      try {
+        app.lastLocalMutationAt = Date.now();
+        const res = await apiFetch('/api/tutorial/claim-bonus', {
+          method: 'POST',
+          body: {},
+        });
+        if (res.state) {
+          applyNewState(res.state);
+        } else {
+          await refreshBootstrapNow();
+        }
+        const bonusGold = Number(res.bonusGold ?? res.goldAwarded ?? 100);
+        if (typeof soundFX.playLaunch === 'function') {
+          soundFX.playLaunch();
+        } else {
+          soundFX.playCoin();
+        }
+        showToast(t('toast.tutorialBonusClaimed', { gold: bonusGold }), 'achievement', 5200);
+        return { ok: true, bonusGold };
+      } catch (err) {
+        if (err.status === 409) {
+          soundFX.playCoin();
+          showToast(t('toast.tutorialBonusAlready'), 'info', 3800);
+          return { ok: false, alreadyClaimed: true };
+        }
+        soundFX.playReject();
+        showToast(t('toast.tutorialBonusFailed', { err: err.message }), 'error', 4200);
+        return { ok: false };
+      }
+    },
+    onOpenBgm: () => {
+      if (!bgmPlayer) return false;
+      const cur = bgmPlayer.getState?.();
+      if (!cur?.playing) {
+        bgmPlayer.play();
+      }
+      const next = bgmPlayer.getState?.();
+      app.renderBgmControls?.(next);
+      if (next?.playing) {
+        const trackId = next.track?.id || next.trackId || 'plaza';
+        const trackName = t(`bgm.track.${trackId}`);
+        showToast(t('bgm.toastPlay', { track: trackName }), 'info', 2400);
+      }
+      return Boolean(next?.playing);
+    },
+  });
+  app.tutorial.setBgmPlaying(Boolean(bgmPlayer?.getState?.()?.playing));
+
   const canvas = $('town-canvas');
   if (canvas) {
     app.engine = new PixelTownEngine(canvas, {
@@ -4554,8 +4740,12 @@ async function init() {
     const data = await apiFetch('/api/bootstrap');
     seedSeenAchievements(data.state);
     applyBootstrapPayload(data, { silentAchievements: true });
+    if (data?.state?.player?.tutorialBonusClaimed || data?.user?.tutorialBonusClaimed) {
+      app.tutorial?.setClaimed(true);
+    }
     connectSse();
     refreshMetricsNow();
+    app.tutorial?.maybeAutoStart();
 
     const params = new URLSearchParams(window.location.search);
     const projectParam = params.get('project');

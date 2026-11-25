@@ -254,6 +254,7 @@
       <a class="brand" href="/admin">
         <span>📊 PixelCompute Town · 鎮長數據後臺</span>
         <span class="pill green" id="admin-identity-pill">檢查權限中...</span>
+        <span class="pill gold" id="topbar-mode-pill" style="display:none;">🧪 示範體驗模式</span>
       </a>
       <div class="toolbar">
         <span class="mono" id="last-updated" style="font-size:11px;color:var(--muted);"></span>
@@ -407,6 +408,21 @@
 
       <!-- Tab 4: Governance & Devices -->
       <div class="panel" id="panel-governance">
+        <div class="subbox" id="launch-clean-mode-box" style="margin-bottom:16px;border-width:2px;border-color:rgba(250, 204, 21, 0.55);background:linear-gradient(135deg, rgba(25, 34, 64, 0.96), rgba(16, 42, 40, 0.72));">
+          <div class="panel-head" style="margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <h2 style="margin:0;font-size:16px;">🚀 一鍵切換正式營運模式（清空示範假懸賞與假營收）</h2>
+              <span class="pill gold" id="live-mode-badge">🧪 示範體驗模式</span>
+            </div>
+            <button type="button" class="btn gold" id="btn-launch-clean-mode" style="padding:9px 16px;font-size:13px;">🚀 一鍵切換正式營運模式（清空示範假懸賞與假營收）</button>
+          </div>
+          <div id="live-mode-desc" style="font-size:12.5px;color:var(--muted);line-height:1.65;">
+            準備對外正式推廣前點一下，系統將於 1 秒內自動清理所有示範假數據：<br />
+            • 清空尚未真實託管儲值的示範假現金懸賞（任務 <code>cashBountyUsd = 0</code>、項目 <code>bountyPoolUsd = 0</code>、<code>totalRevenueUsd = 0</code>），杜絕公網玩家誤以為可提領示範美金。<br />
+            • 歸零平臺 4 流示範營收與分紅帳本，清空預置測試審閱單（<code>rev-clean-01</code> / <code>rev-slop-01</code>）。<br />
+            • <strong style="color:var(--emerald);">100% 完整保留所有真實註冊用戶（GitHub / 信箱 / Google 帳號與玩家真實資料）</strong>，並寫入 SQLite 稽核日誌。
+          </div>
+        </div>
         <div class="grid-2">
           <div class="subbox">
             <div class="panel-head"><h2>⚙️ 全局防刷與安全治理開關</h2></div>
@@ -704,6 +720,34 @@
       function renderGovernance() {
         if (!cachedData) return;
         const st = cachedData.settings || {};
+        const isLive = Boolean(st.liveProductionMode);
+
+        const topbarModePill = document.getElementById('topbar-mode-pill');
+        if (topbarModePill) {
+          topbarModePill.style.display = 'inline-flex';
+          topbarModePill.textContent = isLive ? '🟢 正式營運模式運行中' : '🧪 示範體驗模式';
+          topbarModePill.className = isLive ? 'pill green' : 'pill gold';
+        }
+
+        const cleanBox = document.getElementById('launch-clean-mode-box');
+        const modeBadge = document.getElementById('live-mode-badge');
+        const btnLaunchClean = document.getElementById('btn-launch-clean-mode');
+        if (cleanBox && modeBadge && btnLaunchClean) {
+          if (isLive) {
+            cleanBox.style.borderColor = 'rgba(52, 211, 153, 0.75)';
+            modeBadge.textContent = '🟢 正式營運模式運行中';
+            modeBadge.className = 'pill green';
+            btnLaunchClean.textContent = '🟢 正式營運模式運行中（重新掃描清理）';
+            btnLaunchClean.className = 'btn green';
+          } else {
+            cleanBox.style.borderColor = 'rgba(250, 204, 21, 0.55)';
+            modeBadge.textContent = '🧪 示範體驗模式';
+            modeBadge.className = 'pill gold';
+            btnLaunchClean.textContent = '🚀 一鍵切換正式營運模式（清空示範假懸賞與假營收）';
+            btnLaunchClean.className = 'btn gold';
+          }
+        }
+
         const btnStrict = document.getElementById('btn-toggle-strict');
         btnStrict.textContent = st.strictDeviceReview ? '🔒 嚴格人工審核中（點此關閉）' : '🔓 自動放行中（點此開啟）';
         btnStrict.className = st.strictDeviceReview ? 'btn gold' : 'btn';
@@ -789,6 +833,36 @@
         showToast(`✅ 成功產生 ${data.codes.length} 組新卡密！`);
         document.getElementById('gen-note').value = '';
         await loadOverview();
+      });
+
+      document.getElementById('btn-launch-clean-mode').addEventListener('click', async () => {
+        if (!cachedData) return;
+        const confirmed = window.confirm(
+          '確定要切換至【🟢 正式營運模式】並清空所有示範假數據嗎？\n\n'
+          + '• 所有尚未真實託管的示範假現金懸賞與項目假營收將歸零\n'
+          + '• 平臺 4 流示範營收、分紅帳本與預置測試審閱單（rev-clean-01 / rev-slop-01）將清空\n'
+          + '• 所有真實註冊用戶（GitHub / 信箱 / Google 帳號）與玩家資料會 100% 保留\n\n'
+          + '按下「確定」立即生效！'
+        );
+        if (!confirmed) return;
+        const btn = document.getElementById('btn-launch-clean-mode');
+        btn.disabled = true;
+        try {
+          const res = await fetch('/api/admin/launch-clean-mode', {
+            method: 'POST',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            return showToast(data.error || '切換正式營運模式失敗', true);
+          }
+          showToast(`🟢 正式營運模式運行中！已清空 ${data.clearedBountiesCount || 0} 筆示範假懸賞，完整保留全部真實用戶！`);
+          await loadOverview();
+        } catch (err) {
+          showToast('連線失敗：' + err.message, true);
+        } finally {
+          btn.disabled = false;
+        }
       });
 
       document.getElementById('btn-toggle-strict').addEventListener('click', async () => {
