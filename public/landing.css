@@ -198,11 +198,12 @@ code {
 }
 
 .header-inner {
+  max-width: 1380px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  min-height: 68px;
+  gap: 10px;
+  min-height: 64px;
   flex-wrap: wrap;
   padding-top: 8px;
   padding-bottom: 8px;

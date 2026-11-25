@@ -167,7 +167,7 @@ $$
 \lim_{P_{\text{total}} \to \infty} \left( M_{\text{core}} \cdot \frac{c_u}{C_{\text{total}}} \right) = 0.595 \cdot R \cdot \frac{c_u}{C_{\text{total}}}
 $$
 
-### 4.3 三組極端情境精算表（皆以總營收 $R = \$1,000.00$ 為基準）
+### 4.3 三組極端情境精算表（皆以總營收 R = $1,000.00 為基準）
 
 #### 情境一：靈感點火者零實作 vs 實幹開發團隊
 - 參與者：Alice（首發提案人，0 核心點、0 週邊點）、Bob（核心架構 60 點）、Carol（核心功能 40 點、週邊測試 20 點）、Dave（週邊多語系與文件 80 點）。
