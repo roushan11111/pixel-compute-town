@@ -2047,7 +2047,7 @@ function renderIncubatorTab() {
   if (!listEl) return;
   const projects = app.state.projects || [];
   const playerId = app.state.player?.id || app.user?.id || 'founder-demo';
-  const billboardPrice = app.config?.billboardPriceUsd ?? 29;
+  const billboardPrice = app.config?.billboardPriceUsd ?? 0;
 
   const votingCnt = projects.filter((p) => p.status === 'voting').length;
   const buildingCnt = projects.filter((p) => p.status === 'building').length;
@@ -2067,8 +2067,8 @@ function renderIncubatorTab() {
       const canLaunch = isBuilding && (p.progressPct || 0) >= 100;
 
       const sparkPct = Number(p.sparkRoyaltyPct ?? 5);
-      const meritPct = Number(p.meritPoolPct ?? 85);
-      const platformPct = Number(p.platformSharePct ?? 10);
+      const meritPct = Number(p.meritPoolPct ?? 95);
+      const platformPct = Number(p.platformSharePct ?? 0);
 
       const myPts = Number(p.contributions?.[playerId] || 0);
       const totalPts = Object.values(p.contributions || {}).reduce((s, v) => s + Number(v || 0), 0);
@@ -3294,8 +3294,8 @@ function renderProvenanceCalculator() {
 
   const proj = (app.state?.projects || []).find((p) => p.id === app.provModal.projectId);
   const sparkRate = Number(proj?.sparkRoyaltyPct ?? 5);
-  const meritRate = Number(proj?.meritPoolPct ?? 85);
-  const platformRate = Number(proj?.platformSharePct ?? 10);
+  const meritRate = Number(proj?.meritPoolPct ?? 95);
+  const platformRate = Number(proj?.platformSharePct ?? 0);
 
   const sparkUsd = (gross * sparkRate) / 100;
   const meritPoolUsd = (gross * meritRate) / 100;
@@ -3365,7 +3365,7 @@ function renderProvenanceModalContent(project) {
     .filter(([, pts]) => Number(pts) > 0)
     .sort((a, b) => Number(b[1]) - Number(a[1]));
   const totalPts = entries.reduce((sum, [, pts]) => sum + Number(pts), 0);
-  const meritRate = Number(project.meritPoolPct ?? 85);
+  const meritRate = Number(project.meritPoolPct ?? 95);
   const sparkRate = Number(project.sparkRoyaltyPct ?? 5);
 
   if (contribListEl) {
@@ -3888,6 +3888,36 @@ function bindEvents() {
   $('btn-menu-feedback')?.addEventListener('click', () => {
     closeHudPopovers();
     window.openFeedbackModal?.();
+  });
+  const openVoluntaryTipModal = () => {
+    closeHudPopovers();
+    soundFX.playClick();
+    openPaymentModal({
+      productId: 'tip-coffee',
+      displayName: t('pay.tipTier3'),
+      priceUsd: 3,
+      initialTab: app.paymentConfig?.afdianEnabled ? 'redeem' : 'stablecoin',
+    });
+  };
+  $('btn-menu-tip')?.addEventListener('click', openVoluntaryTipModal);
+  $('btn-vault-tip')?.addEventListener('click', openVoluntaryTipModal);
+  $('pay-tip-tiers')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tip-tier]');
+    if (!btn) return;
+    soundFX.playClick();
+    const pid = btn.dataset.tipTier;
+    const price = Number(btn.dataset.tipPrice) || 3;
+    app.payModal.productId = pid;
+    app.payModal.displayName = btn.textContent.trim();
+    app.payModal.priceUsd = price;
+    const summaryEl = $('pay-product-summary');
+    if (summaryEl) {
+      summaryEl.textContent = t('pay.productSummary', {
+        name: app.payModal.displayName,
+        price: fmtUsd(price),
+      });
+    }
+    syncLiveModeSandboxControls();
   });
 
   // Track manual toggle on review queue details
@@ -5059,14 +5089,34 @@ function bindEvents() {
       return;
     }
 
-    // Billboard ad opens 3-in-1 Payment Modal ($29)
+    // Billboard spotlight: free when billboardPriceUsd === 0, otherwise opens payment modal
     const billboardBtn = e.target.closest('[data-billboard-project]');
     if (billboardBtn) {
       const pid = billboardBtn.dataset.billboardProject;
       const proj = (app.state?.projects || []).find((p) => p.id === pid);
       const lp = proj ? localizeProject(proj, loc) : null;
+      const price = Number(app.config?.billboardPriceUsd ?? 0);
+      if (price <= 0) {
+        try {
+          app.lastLocalMutationAt = Date.now();
+          const res = await apiFetch(`/api/projects/${encodeURIComponent(pid)}/billboard`, {
+            method: 'POST',
+            body: {},
+          });
+          applyNewState(res.state);
+          soundFX.playCoin();
+          showToast(
+            t('toast.billboardOk', { name: lp?.shortName || pid, fee: 0 }),
+            'success',
+            4500,
+          );
+        } catch (err) {
+          soundFX.playReject();
+          showToast(err.message, 'error');
+        }
+        return;
+      }
       const billItem = localizeShopItem({ id: 'billboard-ad' }, loc);
-      const price = app.config?.billboardPriceUsd ?? 29;
       openPaymentModal({
         productId: 'billboard-ad',
         targetProjectId: pid,

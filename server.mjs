@@ -2761,7 +2761,7 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'dividend',
             icon: '💰',
-            message: `鎮長錄入《${proj.shortName || proj.name}》真實入帳營收 $${dividend.grossRevenueUsd}（${note}）！系統已自動按 5/85/10（核心70%/週邊≤30%）發放分紅到各貢獻者帳戶！`,
+            message: `鎮長錄入《${proj.shortName || proj.name}》真實入帳營收 $${dividend.grossRevenueUsd}（${note}）！系統已自動按 5/95/0（核心70%/週邊≤30% · 平臺0抽成）發放分紅到各貢獻者帳戶！`,
             projectId: proj.id,
           });
           return { project: proj, dividend, user: ctx.user, note };
@@ -3077,7 +3077,7 @@ export function createAppServer(options = {}) {
             : 10;
           const bountyPoolUsd = Math.max(0, round2(Number(body.bountyPoolUsd) || 0));
           const shortName = name.length > 22 ? `${name.slice(0, 22)}` : name;
-          const finalTagline = tagline || '社群共創獨立開源產品，共享 5% 創意版稅 / 85% 實幹多勞多得 / 10% 平臺分紅！';
+          const finalTagline = tagline || '社群共創獨立開源產品，共享 5% 創意版稅 / 95% 實幹多勞多得（平臺 0% 抽成）！';
           const finalDescription = rawDescription
             || tagline
             || '由鎮民發起的孵化提案，投票達標後將自動生成雙軌算力任務。';
@@ -3159,7 +3159,7 @@ export function createAppServer(options = {}) {
             pushActivity(s, {
               type: 'co_build_join',
               icon: '🤝',
-              message: `${user.displayName} 加入原創項目《${proj.shortName || proj.name}》成為共建者！（共 ${proj.coBuilders.length} 位共建者，按 85% 實幹池多勞多得）`,
+              message: `${user.displayName} 加入原創項目《${proj.shortName || proj.name}》成為共建者！（共 ${proj.coBuilders.length} 位共建者，按 95% 實幹池多勞多得）`,
               projectId: proj.id,
             });
           }
@@ -3278,17 +3278,21 @@ export function createAppServer(options = {}) {
           proj.billboardText = customText;
           proj.billboardUpdatedAt = new Date().toISOString();
 
-          addFounderRevenueEntry(s, {
-            stream: 'billboard_ad',
-            label: `《${proj.shortName || proj.name}》租用像素廣場霓虹廣告位`,
-            amountUsd: BILLBOARD_PRICE_USD,
-            projectId: proj.id,
-          });
+          if (BILLBOARD_PRICE_USD > 0) {
+            addFounderRevenueEntry(s, {
+              stream: 'billboard_ad',
+              label: `《${proj.shortName || proj.name}》租用像素廣場霓虹廣告位`,
+              amountUsd: BILLBOARD_PRICE_USD,
+              projectId: proj.id,
+            });
+          }
 
           pushActivity(s, {
             type: 'billboard',
             icon: '📺',
-            message: `《${proj.shortName}》點亮像素廣場霓虹廣告牌（+$${BILLBOARD_PRICE_USD} 創作者廣告收入）`,
+            message: BILLBOARD_PRICE_USD > 0
+              ? `《${proj.shortName}》點亮像素廣場霓虹廣告牌（+$${BILLBOARD_PRICE_USD}）`
+              : `《${proj.shortName}》免費點亮像素廣場霓虹看板！`,
             projectId: proj.id,
           });
 
@@ -3338,7 +3342,7 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'launch',
             icon: '🚀',
-            message: `🎆 《${proj.name}》正式發布上線！首筆營收 $${dividend.grossRevenueUsd} 已按 5/85/10 結算分紅（首發創意 $${dividend.sparkRoyaltyUsd}、實幹池 $${dividend.meritPoolUsd}、你實得 $${dividend.playerTotalUsd}、平臺 $${dividend.platformCarryUsd}）`,
+            message: `🎆 《${proj.name}》正式發布上線！首筆營收 $${dividend.grossRevenueUsd} 已按 5/95/0（平臺 0% 抽成）結算分紅（首發創意 $${dividend.sparkRoyaltyUsd}、實幹池 $${dividend.meritPoolUsd}、你實得 $${dividend.playerTotalUsd}）`,
             projectId: proj.id,
           });
 
@@ -3463,7 +3467,7 @@ export function createAppServer(options = {}) {
           pushActivity(s, {
             type: 'dividend',
             icon: '💸',
-            message: `《${proj.shortName}》新增產品營收 $${dividend.grossRevenueUsd}！已按 5/85/10 即時分紅：你實得 +$${dividend.playerTotalUsd}（創意 $${dividend.playerSparkUsd} + 實幹 $${dividend.playerMeritUsd}），平臺 +$${dividend.platformCarryUsd}`,
+            message: `《${proj.shortName}》新增產品營收 $${dividend.grossRevenueUsd}！已按 5/95/0（平臺 0% 抽成）即時分紅：你實得 +$${dividend.playerTotalUsd}（創意 $${dividend.playerSparkUsd} + 實幹 $${dividend.playerMeritUsd}）`,
             projectId: proj.id,
           });
 
@@ -4778,7 +4782,7 @@ export function createAppServer(options = {}) {
                 id: uid('proj-gh'),
                 name: `${parsedRepo.fullName}（GitHub 匯入）`.slice(0, 64),
                 shortName,
-                tagline: `自 GitHub 倉庫 ${parsedRepo.fullName} 匯入的開源協作項目，共享 5/85/10 創意溯源與多勞多得分紅池！`,
+                tagline: `自 GitHub 倉庫 ${parsedRepo.fullName} 匯入的開源協作項目，共享 5/95/0（平臺 0% 抽成）創意溯源與多勞多得分紅池！`,
                 description: `已連結公開倉庫 ${parsedRepo.url}，社群算力小人可直接領取匯入的 Issue 任務開工！`,
                 status: 'building',
                 votes: 10,
@@ -5033,27 +5037,27 @@ export function createAppServer(options = {}) {
         const WHITEPAPER_LOCALES = {
           'zh-TW': {
             file: 'WHITEPAPER.md',
-            title: '📜 PixelCompute Town 白皮書 v1.0',
-            subtitle: 'AI 時代的閒置算力協作、Proof of First Spark 創意溯源、70/30 防稀釋與 5/85/10 多勞多得協議',
-            badge: 'WHITEPAPER · v1.0 · 繁中',
+            title: '📜 PixelCompute Town 白皮書 v1.1',
+            subtitle: '100% 免費 · 0% 抽成 · 自願打賞支持｜AI 閒置算力協作、Proof of First Spark 創意溯源、70/30 防稀釋與 5/95/0 多勞多得協議',
+            badge: 'WHITEPAPER · v1.1 · 繁中',
           },
           'zh-CN': {
             file: 'WHITEPAPER.zh-CN.md',
-            title: '📜 PixelCompute Town 白皮书 v1.0',
-            subtitle: 'AI 时代的闲置算力协作、Proof of First Spark 创意溯源、70/30 防稀释与 5/85/10 多劳多得协议',
-            badge: 'WHITEPAPER · v1.0 · 简中',
+            title: '📜 PixelCompute Town 白皮书 v1.1',
+            subtitle: '100% 免费 · 0% 抽成 · 自愿打赏支持｜AI 闲置算力协作、Proof of First Spark 创意溯源、70/30 防稀释与 5/95/0 多劳多得协议',
+            badge: 'WHITEPAPER · v1.1 · 简中',
           },
           en: {
             file: 'WHITEPAPER.en.md',
-            title: '📜 PixelCompute Town Whitepaper v1.0',
-            subtitle: 'Idle AI Compute Collaboration, Proof of First Spark Provenance, 70/30 Anti-Dilution & 5/85/10 Merit Protocol',
-            badge: 'WHITEPAPER · v1.0 · EN',
+            title: '📜 PixelCompute Town Whitepaper v1.1',
+            subtitle: '100% Free Forever · 0% Platform Fee · Tip-Supported | Idle AI Compute, Proof of First Spark, 70/30 Anti-Dilution & 5/95/0 Merit Protocol',
+            badge: 'WHITEPAPER · v1.1 · EN',
           },
           ja: {
             file: 'WHITEPAPER.ja.md',
-            title: '📜 PixelCompute Town ホワイトペーパー v1.0',
-            subtitle: 'AI時代の余剰計算資源コラボレーション・Proof of First Spark・70/30希薄化防止および5/85/10成果分配プロトコル',
-            badge: 'WHITEPAPER · v1.0 · 日本語',
+            title: '📜 PixelCompute Town ホワイトペーパー v1.1',
+            subtitle: '完全無料・手数料0%・任意チップ支援｜AI余剰計算資源コラボ・Proof of First Spark・70/30希薄化防止・5/95/0成果分配プロトコル',
+            badge: 'WHITEPAPER · v1.1 · 日本語',
           },
         };
         const pathLangMatch = decodedPath.match(/^\/whitepaper\/(zh-TW|zh-CN|en|ja)\/?$/i);

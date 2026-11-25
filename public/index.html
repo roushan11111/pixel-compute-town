@@ -80,6 +80,7 @@
             <button type="button" class="btn btn-sm btn-amber" id="btn-open-cert" data-i18n="hud.certBtn">🪪 打工證</button>
             <button type="button" class="btn btn-sm" id="btn-open-settings" data-i18n="hud.settingsBtn">⚙️ 設定</button>
             <button type="button" class="btn btn-sm btn-primary" id="btn-menu-feedback" data-i18n="hud.feedbackBtn">📮 鎮民意見箱</button>
+            <button type="button" class="btn btn-sm btn-green" id="btn-menu-tip" data-i18n="hud.tipBtn">☕ 隨喜打賞支持</button>
             <a class="btn btn-sm btn-primary" id="btn-github-login" href="/api/auth/github" style="display: none;" data-i18n="hud.githubLogin">GitHub 登入</a>
             <button type="button" class="btn btn-sm btn-danger" id="btn-logout" style="display: none;" data-i18n="hud.logout">登出</button>
           </div>
@@ -343,7 +344,7 @@
       <div class="tab-pane" id="tab-incubator" data-pane="incubator">
         <div class="section-toolbar">
           <div class="mono" style="font-size: 12px; color: var(--text-sub);" id="incubator-summary" data-i18n="incubator.summaryDefault">
-            SHA-256 創意溯源 → 雙軌共建 → 透明多勞多得（5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺）
+            SHA-256 創意溯源 → 雙軌共建 → 透明多勞多得（5% 首發創意版稅 / 95% 實幹多勞多得 / 0% 平臺抽成）
           </div>
           <div class="toolbar-group">
             <button type="button" class="btn btn-sm btn-primary" id="btn-incubator-jump-import" data-i18n="incubator.jumpImport">🔗 匯入 GitHub Issue</button>
@@ -432,26 +433,29 @@
             <div class="revenue-hero-amount" id="rev-total-usd">$0.00</div>
           </div>
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-            <span class="badge green" data-i18n="revenue.transparentBadge">透明帳本即時結算</span>
-            <button type="button" class="btn btn-sm btn-danger" id="btn-reset-world" data-i18n="revenue.resetBtn">🔄 重置示範世界</button>
+            <span class="badge green" data-i18n="revenue.transparentBadge">100% 全免 · 0% 抽成 · 自願打賞</span>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-sm btn-green" id="btn-vault-tip" data-i18n="revenue.tipBtn">☕ 請鎮長喝杯咖啡（隨喜打賞）</button>
+              <button type="button" class="btn btn-sm btn-danger" id="btn-reset-world" data-i18n="revenue.resetBtn">🔄 重置示範世界</button>
+            </div>
           </div>
         </div>
 
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label" data-i18n="revenue.kpiBounty">⚔️ 現金懸賞 10% 託管抽成</div>
+            <div class="kpi-label" data-i18n="revenue.kpiBounty">⚔️ 現金懸賞抽成（0% 全免）</div>
             <div class="kpi-value" id="rev-bounty-fees">$0.00</div>
             <div class="kpi-sub" data-i18n="revenue.kpiBountySub">每筆現金懸賞驗收自動結算</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label" data-i18n="revenue.kpiCarry">🚀 孵化分紅池 10% Carry</div>
+            <div class="kpi-label" data-i18n="revenue.kpiCarry">🚀 孵化分紅抽成（0% 全免）</div>
             <div class="kpi-value" id="rev-incubation-carry">$0.00</div>
             <div class="kpi-sub" data-i18n="revenue.kpiCarrySub">項目上線與後續營收自動入帳</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" data-i18n="revenue.kpiAds">📺 像素廣場霓虹廣告位</div>
             <div class="kpi-value" id="rev-billboard-ads">$0.00</div>
-            <div class="kpi-sub" data-i18n="revenue.kpiAdsSub">$29/位 · 同步點亮小鎮霓虹招牌</div>
+            <div class="kpi-sub" data-i18n="revenue.kpiAdsSub">$0 免費 · 社群項目自由點亮廣場看板</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" data-i18n="revenue.kpiPro">✨ 像素皮膚與 Pro 會員</div>
@@ -779,7 +783,7 @@
       <form id="propose-form">
         <div class="modal-body">
           <div class="info-banner pink">
-            <span data-i18n-html="modal.propose.banner">提案上牆即刻生成 <strong>SHA-256 創意首發哈希鏈憑證</strong>！達標後自動破土生成雙軌任務，上線營收按 <strong>5% 首發創意版稅 / 85% 實幹多勞多得 / 10% 平臺</strong> 透明分紅。</span>
+            <span data-i18n-html="modal.propose.banner">提案上牆即刻生成 <strong>SHA-256 創意首發哈希鏈憑證</strong>！達標後自動破土生成雙軌任務，上線營收按 <strong>5% 首發創意版稅 / 95% 實幹多勞多得 / 0% 平臺抽成</strong> 透明分紅。</span>
           </div>
           <div class="form-field">
             <label class="form-label" for="propose-name" data-i18n="modal.propose.nameLabel">項目名稱 *</label>
@@ -798,7 +802,7 @@
             <div class="copycat-alert-title" id="propose-copycat-title"></div>
             <div class="copycat-alert-meta mono" id="propose-copycat-meta"></div>
             <div class="copycat-alert-desc" id="propose-copycat-desc" data-i18n="modal.propose.copycatDesc">
-              像素算力鎮反對抄襲複製蒸餾——與其重複造輪子，不如直接加入原創意共建，靠實幹拿走 85% 多勞多得分紅池大頭！
+              像素算力鎮反對抄襲複製蒸餾——與其重複造輪子，不如直接加入原創意共建，靠實幹拿走 95% 多勞多得分紅池大頭！
             </div>
             <div class="copycat-alert-actions">
               <button type="button" class="btn btn-sm btn-green" id="btn-copycat-join" data-i18n="modal.propose.copycatJoinBtn">
@@ -1008,10 +1012,16 @@
   <div class="modal-backdrop" id="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
     <div class="modal-dialog" style="max-width: 600px;">
       <div class="modal-header">
-        <h2 class="modal-title" id="payment-modal-title" data-i18n="pay.title">💎 三合一透明結帳中心</h2>
+        <h2 class="modal-title" id="payment-modal-title" data-i18n="pay.title">☕ 100% 全免平臺 · 自願打賞支持中心</h2>
         <button type="button" class="btn btn-sm" data-close-modal="payment-modal" data-i18n="btn.close">✕ 關閉</button>
       </div>
       <div class="modal-body">
+        <div class="info-banner green" data-i18n="pay.tipBanner">🎉 本站 100% 全功能免費且 0% 抽成！打賞完全自願，每一筆心意都用於維持伺服器與開源開發。</div>
+        <div class="badge-row" id="pay-tip-tiers" style="margin-bottom: 6px;">
+          <button type="button" class="quick-chip" data-tip-tier="tip-coffee" data-tip-price="3" data-i18n="pay.tipTier3">☕ 請喝咖啡 $3</button>
+          <button type="button" class="quick-chip" data-tip-tier="tip-ramen" data-tip-price="9" data-i18n="pay.tipTier9">🍜 請吃拉麵 $9</button>
+          <button type="button" class="quick-chip" data-tip-tier="tip-server" data-tip-price="19" data-i18n="pay.tipTier19">🖥️ 贊助伺服器 $19</button>
+        </div>
         <div class="info-banner pink" id="pay-product-summary"></div>
 
         <div class="modal-tabs three-col" role="tablist">
@@ -1155,7 +1165,7 @@
         <!-- 實時多勞多得分紅試算表 -->
         <div class="prov-calc-box">
           <div class="subsection-title" style="margin-top: 0;">
-            <span data-i18n="modal.provenance.calcTitle">⚖️ 實時多勞多得分紅試算表（5% 首發版稅 / 85% 實幹池 / 10% 平臺）</span>
+            <span data-i18n="modal.provenance.calcTitle">⚖️ 實時多勞多得分紅試算表（5% 首發版稅 / 95% 實幹池 / 0% 平臺抽成）</span>
           </div>
           <div class="prov-calc-controls">
             <div class="form-field">

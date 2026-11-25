@@ -191,12 +191,12 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.ok(boot.json.state);
     assert.ok(Array.isArray(boot.json.shopItems) && boot.json.shopItems.length >= 5);
     assert.ok(Array.isArray(boot.json.workerTemplates) && boot.json.workerTemplates.length === 4);
-    assert.equal(boot.json.config.platformFeePct, 10);
-    assert.equal(boot.json.config.billboardPriceUsd, 29);
+    assert.equal(boot.json.config.platformFeePct, 0);
+    assert.equal(boot.json.config.billboardPriceUsd, 0);
     assert.deepEqual(boot.json.config.revenueSplit, {
       originatorSparkPct: 5,
-      meritPoolPct: 85,
-      platformPct: 10,
+      meritPoolPct: 95,
+      platformPct: 0,
     });
 
     const { state } = boot.json;
@@ -382,7 +382,7 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.ok(passSubmit.json.state.player.reputation > repBefore - 4);
   });
 
-  it('5. Cash bounty 10% platform fee math precision ($40 -> $4 fee / $36 net, $25 -> $2.50 fee / $22.50 net)', async () => {
+  it('5. Cash bounty 0% platform fee math precision ($40 -> $0 fee / $40 net, $25 -> $0 fee / $25 net)', async () => {
     const before = await apiJson(baseUrl, 'GET', '/api/bootstrap');
     const usdBefore = before.json.state.player.usdBalance;
     const feeBefore = before.json.state.founderRevenue.bountyFeesUsd;
@@ -413,11 +413,11 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(submit40.status, 200);
     assert.equal(submit40.json.passed, true);
     assert.equal(submit40.json.rewards.bountyGrossUsd, 40);
-    assert.equal(submit40.json.rewards.platformFeeUsd, 4);
-    assert.equal(submit40.json.rewards.bountyNetUsd, 36);
-    assert.equal(submit40.json.state.player.usdBalance, round2(usdBefore + 36));
-    assert.equal(submit40.json.state.founderRevenue.bountyFeesUsd, round2(feeBefore + 4));
-    assert.equal(submit40.json.state.founderRevenue.totalUsd, round2(totalRevBefore + 4));
+    assert.equal(submit40.json.rewards.platformFeeUsd, 0);
+    assert.equal(submit40.json.rewards.bountyNetUsd, 40);
+    assert.equal(submit40.json.state.player.usdBalance, round2(usdBefore + 40));
+    assert.equal(submit40.json.state.founderRevenue.bountyFeesUsd, round2(feeBefore));
+    assert.equal(submit40.json.state.founderRevenue.totalUsd, round2(totalRevBefore));
 
     // Recover stamina if needed and submit $25 guild bounty (task-i18n-gh-action)
     await apiJson(baseUrl, 'PATCH', '/api/workers/w-pro-01', { recoverStamina: true });
@@ -443,14 +443,14 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(submit25.status, 200);
     assert.equal(submit25.json.passed, true);
     assert.equal(submit25.json.rewards.bountyGrossUsd, 25);
-    assert.equal(submit25.json.rewards.platformFeeUsd, 2.5);
-    assert.equal(submit25.json.rewards.bountyNetUsd, 22.5);
-    assert.equal(submit25.json.state.player.usdBalance, round2(usdBefore + 36 + 22.5));
-    assert.equal(submit25.json.state.founderRevenue.bountyFeesUsd, round2(feeBefore + 4 + 2.5));
+    assert.equal(submit25.json.rewards.platformFeeUsd, 0);
+    assert.equal(submit25.json.rewards.bountyNetUsd, 25);
+    assert.equal(submit25.json.state.player.usdBalance, round2(usdBefore + 40 + 25));
+    assert.equal(submit25.json.state.founderRevenue.bountyFeesUsd, round2(feeBefore));
   });
 
-  it('6. Project launch at 100% & exact 5%/85%/10% Proof-of-First-Spark + Merit Split math (active & hands-off originator)', async () => {
-    // ── Scenario A: Originator ALSO contributes hands-on work (5% spark + proportional share of 85% merit pool) ──
+  it('6. Project launch at 100% & exact 5%/95%/0% Proof-of-First-Spark + Merit Split math (active & hands-off originator)', async () => {
+    // ── Scenario A: Originator ALSO contributes hands-on work (5% spark + proportional share of 95% merit pool) ──
     // proj-meta started at 60%, task-meta-i18n (+20%) pushed it to 80% -> launch must fail before 100%
     const earlyLaunch = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/launch', {});
     assert.equal(earlyLaunch.status, 400);
@@ -479,7 +479,7 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     const playerPoints = projMeta.contributions[playerId];
     assert.ok(playerPoints > 0, 'Originator must have hands-on contribution points in Scenario A');
 
-    // Launch with $200 initial revenue -> 5% ($10) spark + 85% ($170) merit pool + 10% ($20) platform
+    // Launch with $200 initial revenue -> 5% ($10) spark + 95% ($190) merit pool + 0% ($0) platform
     const launchRes = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/launch', {
       initialRevenueUsd: 200,
     });
@@ -489,26 +489,26 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     const div = launchRes.json.dividend;
     assert.equal(div.grossRevenueUsd, 200);
     assert.equal(div.sparkRoyaltyUsd, 10, 'Spark royalty must be 5% of $200 = $10');
-    assert.equal(div.meritPoolUsd, 170, 'Merit pool must be 85% of $200 = $170');
-    assert.equal(div.platformCarryUsd, 20, 'Platform carry must be 10% of $200 = $20');
+    assert.equal(div.meritPoolUsd, 190, 'Merit pool must be 95% of $200 = $190');
+    assert.equal(div.platformCarryUsd, 0, 'Platform carry must be 0% of $200 = $0');
     assert.equal(div.creatorShareUsd, 10, 'Legacy creatorShareUsd alias should match 5% = $10');
-    assert.equal(div.contributorsPoolUsd, 170, 'Legacy contributorsPoolUsd alias should match 85% = $170');
+    assert.equal(div.contributorsPoolUsd, 190, 'Legacy contributorsPoolUsd alias should match 95% = $190');
 
-    // Sum of all contributor payouts must equal meritPoolUsd ($170) exactly (no cent drift)
+    // Sum of all contributor payouts must equal meritPoolUsd ($190) exactly (no cent drift)
     const contribPayoutSum = round2(
       div.payouts.filter((p) => p.role === 'contributor').reduce((sum, p) => sum + p.amountUsd, 0),
     );
-    assert.equal(contribPayoutSum, 170);
+    assert.equal(contribPayoutSum, 190);
 
     const grandPayoutSum = round2(div.payouts.reduce((sum, p) => sum + p.amountUsd, 0));
     assert.equal(grandPayoutSum, 200);
 
-    // Check active originator's exact stacked payout (5% spark $10 + proportional share of 85% merit pool)
+    // Check active originator's exact stacked payout (5% spark $10 + proportional share of 95% merit pool)
     const playerContribPayout = div.payouts.find(
       (p) => p.role === 'contributor' && p.userId === playerId,
     );
     assert.ok(playerContribPayout);
-    const approxExpectedMerit = round2(170 * (playerPoints / totalPoints));
+    const approxExpectedMerit = round2(190 * (playerPoints / totalPoints));
     assert.ok(Math.abs(playerContribPayout.amountUsd - approxExpectedMerit) <= 0.02);
     assert.equal(div.playerSparkUsd, 10);
     assert.equal(div.playerMeritUsd, playerContribPayout.amountUsd);
@@ -520,13 +520,13 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(div.payoutsByUser[playerId].totalUsd, div.playerTotalUsd);
     assert.equal(div.payoutsByUser[playerId].isOriginator, true);
     assert.equal(launchRes.json.state.player.usdBalance, round2(usdBefore + div.playerTotalUsd));
-    assert.equal(launchRes.json.founderRevenue.incubationCarryUsd, round2(carryBefore + 20));
+    assert.equal(launchRes.json.founderRevenue.incubationCarryUsd, round2(carryBefore));
 
     // Re-launching an already launched project must fail
     const reLaunch = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/launch', {});
     assert.equal(reLaunch.status, 400);
 
-    // Simulate subsequent $100 revenue -> 5 ($5) / 85 ($85) / 10 ($10)
+    // Simulate subsequent $100 revenue -> 5 ($5) / 95 ($95) / 0 ($0)
     const usdBeforeSim = launchRes.json.state.player.usdBalance;
     const carryBeforeSim = launchRes.json.founderRevenue.incubationCarryUsd;
     const simRes = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/simulate-revenue', {
@@ -535,11 +535,11 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(simRes.status, 200);
     assert.equal(simRes.json.dividend.grossRevenueUsd, 100);
     assert.equal(simRes.json.dividend.sparkRoyaltyUsd, 5);
-    assert.equal(simRes.json.dividend.meritPoolUsd, 85);
-    assert.equal(simRes.json.dividend.platformCarryUsd, 10);
+    assert.equal(simRes.json.dividend.meritPoolUsd, 95);
+    assert.equal(simRes.json.dividend.platformCarryUsd, 0);
     const simTotal = round2(simRes.json.dividend.payouts.reduce((s, p) => s + p.amountUsd, 0));
     assert.equal(simTotal, 100);
-    assert.equal(simRes.json.founderRevenue.incubationCarryUsd, round2(carryBeforeSim + 10));
+    assert.equal(simRes.json.founderRevenue.incubationCarryUsd, round2(carryBeforeSim));
     assert.equal(
       simRes.json.state.player.usdBalance,
       round2(usdBeforeSim + simRes.json.dividend.playerTotalUsd),
@@ -666,7 +666,7 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       assert.equal(readyProj.contributions[origId] || 0, 0, 'Originator must have 0 hands-on points');
       assert.ok(readyProj.contributions[builderId] > 0, 'Builder must hold 100% of hands-on points');
 
-      // Launch with $200 initial revenue -> Originator: $10 (5%), Builder: $170 (85%), Platform: $20 (10%)
+      // Launch with $200 initial revenue -> Originator: $10 (5%), Builder: $190 (95%), Platform: $0 (0%)
       const isoLaunch = await apiJson(
         isoUrl,
         'POST',
@@ -678,31 +678,31 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       const isoDiv = isoLaunch.json.dividend;
       assert.equal(isoDiv.grossRevenueUsd, 200);
       assert.equal(isoDiv.sparkRoyaltyUsd, 10);
-      assert.equal(isoDiv.meritPoolUsd, 170);
-      assert.equal(isoDiv.platformCarryUsd, 20);
+      assert.equal(isoDiv.meritPoolUsd, 190);
+      assert.equal(isoDiv.platformCarryUsd, 0);
       assert.equal(isoDiv.originatorTotalUsd, 10, 'Hands-off originator must receive EXACTLY 5% ($10)');
       assert.equal(isoDiv.payoutsByUser[origId].sparkUsd, 10);
       assert.equal(isoDiv.payoutsByUser[origId].meritUsd, 0);
       assert.equal(isoDiv.payoutsByUser[origId].totalUsd, 10);
       assert.equal(isoDiv.payoutsByUser[origId].totalSharePct, 5);
       assert.equal(isoDiv.payoutsByUser[builderId].sparkUsd, 0);
-      assert.equal(isoDiv.payoutsByUser[builderId].meritUsd, 170);
-      assert.equal(isoDiv.payoutsByUser[builderId].totalUsd, 170, 'Sole hands-on builder must receive EXACTLY 85% ($170)');
+      assert.equal(isoDiv.payoutsByUser[builderId].meritUsd, 190);
+      assert.equal(isoDiv.payoutsByUser[builderId].totalUsd, 190, 'Sole hands-on builder must receive EXACTLY 95% ($190)');
       assert.equal(isoDiv.payoutsByUser[builderId].meritRatioPct, 100);
-      assert.equal(isoDiv.payoutsByUser[builderId].totalSharePct, 85);
+      assert.equal(isoDiv.payoutsByUser[builderId].totalSharePct, 95);
       assert.equal(isoDiv.playerSparkUsd, 0);
-      assert.equal(isoDiv.playerMeritUsd, 170);
-      assert.equal(isoDiv.playerTotalUsd, 170);
+      assert.equal(isoDiv.playerMeritUsd, 190);
+      assert.equal(isoDiv.playerTotalUsd, 190);
       assert.equal(round2(isoDiv.payouts.reduce((s, p) => s + p.amountUsd, 0)), 200);
-      assert.equal(isoLaunch.json.founderRevenue.incubationCarryUsd, round2(isoCarryBefore + 20));
+      assert.equal(isoLaunch.json.founderRevenue.incubationCarryUsd, round2(isoCarryBefore));
 
       // Verify persisted balances of both users down to the exact cent
       const origPost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, origCookie);
       const builderPost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, builderCookie);
       assert.equal(origPost.json.state.player.usdBalance, round2(origUsdBefore + 10));
-      assert.equal(builderPost.json.state.player.usdBalance, round2(builderUsdBefore + 170));
+      assert.equal(builderPost.json.state.player.usdBalance, round2(builderUsdBefore + 190));
 
-      // Simulate subsequent $100 revenue -> Originator +$5.00, Builder +$85.00, Platform +$10.00
+      // Simulate subsequent $100 revenue -> Originator +$5.00, Builder +$95.00, Platform +$0.00
       const isoSim = await apiJson(
         isoUrl,
         'POST',
@@ -712,12 +712,12 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       );
       assert.equal(isoSim.status, 200);
       assert.equal(isoSim.json.dividend.sparkRoyaltyUsd, 5);
-      assert.equal(isoSim.json.dividend.meritPoolUsd, 85);
-      assert.equal(isoSim.json.dividend.platformCarryUsd, 10);
+      assert.equal(isoSim.json.dividend.meritPoolUsd, 95);
+      assert.equal(isoSim.json.dividend.platformCarryUsd, 0);
       assert.equal(isoSim.json.dividend.playerSparkUsd, 5);
       assert.equal(isoSim.json.dividend.playerMeritUsd, 0);
       assert.equal(isoSim.json.dividend.playerTotalUsd, 5);
-      assert.equal(isoSim.json.dividend.payoutsByUser[builderId].totalUsd, 85);
+      assert.equal(isoSim.json.dividend.payoutsByUser[builderId].totalUsd, 95);
       assert.equal(isoSim.json.state.player.usdBalance, round2(origUsdBefore + 10 + 5));
     } finally {
       await stopServer(isoStarted.server);
@@ -725,20 +725,21 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     }
   });
 
-  it('7. Neon billboard ad ($29) and shop purchases accurately update founderRevenue & inventory', async () => {
+  it('7. Free neon billboard ($0) and Gold-only shop purchases (skin + Pro badge) charge $0 USD fees', async () => {
     const before = await apiJson(baseUrl, 'GET', '/api/bootstrap');
     const revBefore = before.json.state.founderRevenue;
     const goldBefore = before.json.state.player.gold;
 
-    // Rent neon billboard ($29)
+    // Light up neon billboard for FREE ($0)
     const bbRes = await apiJson(baseUrl, 'POST', '/api/projects/proj-meta/billboard', {
       text: '🚀 像素算力鎮 v1.0 創世上線狂歡中！',
     });
     assert.equal(bbRes.status, 200);
+    assert.equal(bbRes.json.feeUsd, 0);
     assert.equal(bbRes.json.project.sponsoredBillboard, true);
     assert.equal(bbRes.json.project.billboardText, '🚀 像素算力鎮 v1.0 創世上線狂歡中！');
-    assert.equal(bbRes.json.founderRevenue.billboardAdsUsd, round2(revBefore.billboardAdsUsd + 29));
-    assert.equal(bbRes.json.founderRevenue.totalUsd, round2(revBefore.totalUsd + 29));
+    assert.equal(bbRes.json.founderRevenue.billboardAdsUsd, round2(revBefore.billboardAdsUsd));
+    assert.equal(bbRes.json.founderRevenue.totalUsd, round2(revBefore.totalUsd));
 
     // Buy gold-priced skin (skin-cyber: 220G, $0 USD)
     const buySkin = await apiJson(baseUrl, 'POST', '/api/shop/buy', {
@@ -755,24 +756,25 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     const dupSkin = await apiJson(baseUrl, 'POST', '/api/shop/buy', { itemId: 'skin-cyber' });
     assert.equal(dupSkin.status, 409);
 
-    // Buy USD-priced Pro Pass ($9 USD)
+    // Unlock Pro Honor Badge FREE with earned game Gold (300G, $0 USD)
     const buyPro = await apiJson(baseUrl, 'POST', '/api/shop/buy', {
       itemId: 'pro-pass-monthly',
     });
     assert.equal(buyPro.status, 200);
     assert.equal(buyPro.json.state.player.isPro, true);
-    assert.equal(buyPro.json.founderRevenue.proSkinsUsd, round2(revBefore.proSkinsUsd + 9));
-    assert.equal(buyPro.json.founderRevenue.totalUsd, round2(revBefore.totalUsd + 29 + 9));
+    assert.equal(buyPro.json.state.player.gold, goldBefore - 220 - 300);
+    assert.equal(buyPro.json.founderRevenue.proSkinsUsd, round2(revBefore.proSkinsUsd));
+    assert.equal(buyPro.json.founderRevenue.totalUsd, round2(revBefore.totalUsd));
 
-    // Buy USD-priced Founder Skin Bundle ($15 USD)
+    // Unlock Founder Skin Bundle FREE with earned game Gold (600G, $0 USD)
     const buyBundle = await apiJson(baseUrl, 'POST', '/api/shop/buy', {
       itemId: 'founder-skin-bundle',
     });
     assert.equal(buyBundle.status, 200);
     assert.ok(buyBundle.json.state.player.ownedSkins.includes('skin-gold'));
     assert.ok(buyBundle.json.state.player.ownedSkins.includes('skin-cat'));
-    assert.equal(buyBundle.json.founderRevenue.proSkinsUsd, round2(revBefore.proSkinsUsd + 9 + 15));
-    assert.equal(buyBundle.json.founderRevenue.totalUsd, round2(revBefore.totalUsd + 29 + 9 + 15));
+    assert.equal(buyBundle.json.founderRevenue.proSkinsUsd, round2(revBefore.proSkinsUsd));
+    assert.equal(buyBundle.json.founderRevenue.totalUsd, round2(revBefore.totalUsd));
   });
 
   it('8. POST /api/cli/heartbeat and GET /api/events SSE real-time push', async () => {
@@ -1229,7 +1231,7 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     );
     assert.equal(dupConfirm.status, 409);
 
-    // Solana USDT billboard-ad ($29) with simulate: true
+    // Solana USDT billboard voluntary sponsorship ($5) with simulate: true
     const createAd = await apiJson(
       baseUrl,
       'POST',
@@ -1244,7 +1246,7 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       cookieA,
     );
     assert.equal(createAd.status, 201);
-    assert.equal(createAd.json.order.amountUsd, 29);
+    assert.equal(createAd.json.order.amountUsd, 5);
 
     const confirmAd = await apiJson(
       baseUrl,
@@ -1255,8 +1257,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     );
     assert.equal(confirmAd.status, 200);
     assert.equal(confirmAd.json.order.status, 'confirmed');
-    assert.equal(confirmAd.json.founderRevenue.billboardAdsUsd, round2(revBefore.billboardAdsUsd + 29));
-    assert.equal(confirmAd.json.founderRevenue.totalUsd, round2(revBefore.totalUsd + 9 + 29));
+    assert.equal(confirmAd.json.founderRevenue.billboardAdsUsd, round2(revBefore.billboardAdsUsd + 5));
+    assert.equal(confirmAd.json.founderRevenue.totalUsd, round2(revBefore.totalUsd + 9 + 5));
     const metaProj = confirmAd.json.state.projects.find((p) => p.id === 'proj-meta');
     assert.equal(metaProj.sponsoredBillboard, true);
   });
@@ -1617,8 +1619,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     assert.equal(createdProj.prevIdeaHash, chainBefore.json.headHash, 'New proposal must link to previous headHash');
     assert.equal(createdProj.provenanceIndex, chainBefore.json.chainLength);
     assert.equal(createdProj.sparkRoyaltyPct, 5);
-    assert.equal(createdProj.meritPoolPct, 85);
-    assert.equal(createdProj.platformSharePct, 10);
+    assert.equal(createdProj.meritPoolPct, 95);
+    assert.equal(createdProj.platformSharePct, 0);
     assert.ok(Array.isArray(createdProj.coBuilders) && createdProj.coBuilders.length === 1);
 
     // Chain length increments by 1 and remains valid === true
@@ -1937,8 +1939,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       const spamUsdBefore = spamPre.json.state.player.usdBalance;
       const carryBefore = corePre.json.state.founderRevenue.incubationCarryUsd;
 
-      // Launch with $1,000 initial revenue -> $50 spark (5%), $100 platform (10%), $850 merit pool (85%)
-      // Inside $850 merit pool: Core gets EXACTLY $595 (85% x 70% = 59.5%), Peripheral Farmer capped at $255 (85% x 30% = 25.5%)
+      // Launch with $1,000 initial revenue -> $50 spark (5%), $0 platform (0%), $950 merit pool (95%)
+      // Inside $950 merit pool: Core gets EXACTLY $665 (95% x 70% = 66.5%), Peripheral Farmer capped at $285 (95% x 30% = 28.5%)
       const launchRes = await apiJson(
         isoUrl,
         'POST',
@@ -1950,22 +1952,22 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       const div = launchRes.json.dividend;
       assert.equal(div.grossRevenueUsd, 1000);
       assert.equal(div.sparkRoyaltyUsd, 50, '5% First Spark royalty on $1,000 must be $50');
-      assert.equal(div.platformCarryUsd, 100, '10% Platform carry on $1,000 must be $100');
-      assert.equal(div.meritPoolUsd, 850, '85% Merit pool on $1,000 must be $850');
-      assert.equal(div.corePoolUsd, 595, 'Core pool (85% x 70%) must be EXACTLY $595');
-      assert.equal(div.peripheralPoolUsd, 255, 'Peripheral pool (85% x 30%) must be STRICTLY capped at $255');
+      assert.equal(div.platformCarryUsd, 0, '0% Platform fee on $1,000 must be $0');
+      assert.equal(div.meritPoolUsd, 950, '95% Merit pool on $1,000 must be $950');
+      assert.equal(div.corePoolUsd, 665, 'Core pool (95% x 70%) must be EXACTLY $665');
+      assert.equal(div.peripheralPoolUsd, 285, 'Peripheral pool (95% x 30%) must be STRICTLY capped at $285');
       assert.deepEqual(div.bucketCaps, { core: 70, peripheral: 30 });
 
       assert.equal(div.payoutsByUser[origId].sparkUsd, 50);
       assert.equal(div.payoutsByUser[origId].totalUsd, 50);
       assert.equal(div.payoutsByUser[coreId].corePoints, 100);
-      assert.equal(div.payoutsByUser[coreId].coreUsd, 595);
+      assert.equal(div.payoutsByUser[coreId].coreUsd, 665);
       assert.equal(div.payoutsByUser[coreId].peripheralUsd, 0);
-      assert.equal(div.payoutsByUser[coreId].totalUsd, 595, 'Core contributor must receive EXACTLY $595 (59.5%) with zero dilution');
+      assert.equal(div.payoutsByUser[coreId].totalUsd, 665, 'Core contributor must receive EXACTLY $665 (66.5%) with zero dilution');
       assert.equal(div.payoutsByUser[spamId].peripheralPoints, 10000);
       assert.equal(div.payoutsByUser[spamId].coreUsd, 0);
-      assert.equal(div.payoutsByUser[spamId].peripheralUsd, 255);
-      assert.equal(div.payoutsByUser[spamId].totalUsd, 255, '10,000-point peripheral spammer must be capped at $255 (25.5%)');
+      assert.equal(div.payoutsByUser[spamId].peripheralUsd, 285);
+      assert.equal(div.payoutsByUser[spamId].totalUsd, 285, '10,000-point peripheral spammer must be capped at $285 (28.5%)');
       assert.equal(round2(div.payouts.reduce((sum, p) => sum + p.amountUsd, 0)), 1000);
 
       // Confirm persisted USD balances & founderRevenue
@@ -1973,11 +1975,11 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       const corePost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, coreCookie);
       const spamPost = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, spamCookie);
       assert.equal(origPost.json.state.player.usdBalance, round2(origUsdBefore + 50));
-      assert.equal(corePost.json.state.player.usdBalance, round2(coreUsdBefore + 595));
-      assert.equal(spamPost.json.state.player.usdBalance, round2(spamUsdBefore + 255));
-      assert.equal(launchRes.json.founderRevenue.incubationCarryUsd, round2(carryBefore + 100));
+      assert.equal(corePost.json.state.player.usdBalance, round2(coreUsdBefore + 665));
+      assert.equal(spamPost.json.state.player.usdBalance, round2(spamUsdBefore + 285));
+      assert.equal(launchRes.json.founderRevenue.incubationCarryUsd, round2(carryBefore));
 
-      // Verify subsequent simulate-revenue ($1,000) enforces the exact same $50 / $595 / $255 / $100 split
+      // Verify subsequent simulate-revenue ($1,000) enforces the exact same $50 / $665 / $285 / $0 split
       const simRes = await apiJson(
         isoUrl,
         'POST',
@@ -1986,10 +1988,10 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
         coreCookie,
       );
       assert.equal(simRes.status, 200);
-      assert.equal(simRes.json.dividend.corePoolUsd, 595);
-      assert.equal(simRes.json.dividend.peripheralPoolUsd, 255);
-      assert.equal(simRes.json.dividend.payoutsByUser[coreId].totalUsd, 595);
-      assert.equal(simRes.json.dividend.payoutsByUser[spamId].totalUsd, 255);
+      assert.equal(simRes.json.dividend.corePoolUsd, 665);
+      assert.equal(simRes.json.dividend.peripheralPoolUsd, 285);
+      assert.equal(simRes.json.dividend.payoutsByUser[coreId].totalUsd, 665);
+      assert.equal(simRes.json.dividend.payoutsByUser[spamId].totalUsd, 285);
     } finally {
       await stopServer(isoServer);
       await fs.rm(isoDir, { recursive: true, force: true });
@@ -2150,8 +2152,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       assert.equal(approveQueued.json.decision, 'approve');
       assert.equal(approveQueued.json.task.status, 'completed');
       assert.equal(approveQueued.json.reviewerRewardGold, 15);
-      // Founder gets $36 net bounty ($40 - 10% platform fee $4)
-      assert.equal(approveQueued.json.state.player.usdBalance, round2(usdBeforeDynamicApprove + 36));
+      // Founder gets full $40 net bounty (0% platform fee)
+      assert.equal(approveQueued.json.state.player.usdBalance, round2(usdBeforeDynamicApprove + 40));
 
       // Verify PATCH /api/admin/settings supports peerReviewRequired toggle
       const toggleOn = await apiJson(isoUrl, 'PATCH', '/api/admin/settings', { peerReviewRequired: true });
@@ -2512,8 +2514,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       assert.equal(mergedRes.json.rewards.contributionPoints, taskTarget.contributionPoints);
       assert.equal(mergedRes.json.rewards.refundedStakeGold, 30, 'Frozen 30G stake must be refunded in full');
       assert.equal(mergedRes.json.rewards.bountyGrossUsd, 40);
-      assert.equal(mergedRes.json.rewards.platformFeeUsd, 4);
-      assert.equal(mergedRes.json.rewards.bountyNetUsd, 36);
+      assert.equal(mergedRes.json.rewards.platformFeeUsd, 0);
+      assert.equal(mergedRes.json.rewards.bountyNetUsd, 40);
 
       // Verify SSE broadcast fired for pixel office celebration
       const sseEvt = await sse.waitForEvent('task_completed', 4000, (d) => d?.source === 'github_webhook' && d?.task?.id === 'task-i18n-ast-pr');
@@ -2528,8 +2530,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
         goldBeforeClaim + taskTarget.goldReward + achGold,
         'Stake gold (30G) must be refunded alongside task gold reward',
       );
-      assert.equal(bootAfter.json.state.player.usdBalance, round2(usdBefore + 36));
-      assert.equal(bootAfter.json.state.founderRevenue.bountyFeesUsd, round2(bountyFeesBefore + 4));
+      assert.equal(bootAfter.json.state.player.usdBalance, round2(usdBefore + 40));
+      assert.equal(bootAfter.json.state.founderRevenue.bountyFeesUsd, round2(bountyFeesBefore));
       assert.equal(
         projAfter.bucketPoints.core[playerId],
         corePtsBefore + taskTarget.contributionPoints,
@@ -2687,8 +2689,8 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       'Proof of First Spark',
       'PCT-POFS-v1',
       '70/30',
-      '$595.00',
-      '$255.00',
+      '$665.00',
+      '$285.00',
       'Howey Test',
       'doc-table',
       'doc-code-block',
@@ -2741,11 +2743,11 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
 
   it('30. Multilingual Whitepaper editions (/whitepaper?lang=zh-TW|zh-CN|en|ja & /whitepaper/en) render cleanly with 0 CJK in EN', async () => {
     const cases = [
-      { url: '/whitepaper?lang=zh-TW', htmlLang: 'zh-Hant', mustInclude: ['白皮書 v1.0', '創意溯源', 'data-doc-lang="en"'] },
-      { url: '/whitepaper?lang=zh-CN', htmlLang: 'zh-Hans', mustInclude: ['白皮书 v1.0', '创意溯源', '$595.00', 'data-doc-lang="zh-CN"'] },
-      { url: '/whitepaper?lang=en', htmlLang: 'en', mustInclude: ['Whitepaper v1.0', 'Proof of First Spark', 'Anti-Dilution', '$595.00', 'Table of Contents'] },
-      { url: '/whitepaper/en', htmlLang: 'en', mustInclude: ['Whitepaper v1.0', 'Zero Native Token Policy', '$255.00'] },
-      { url: '/whitepaper?lang=ja', htmlLang: 'ja', mustInclude: ['ホワイトペーパー v1.0', '希薄化防止', '$595.00'] },
+      { url: '/whitepaper?lang=zh-TW', htmlLang: 'zh-Hant', mustInclude: ['白皮書 v1.1', '創意溯源', '$665.00', 'data-doc-lang="en"'] },
+      { url: '/whitepaper?lang=zh-CN', htmlLang: 'zh-Hans', mustInclude: ['白皮书 v1.1', '创意溯源', '$665.00', 'data-doc-lang="zh-CN"'] },
+      { url: '/whitepaper?lang=en', htmlLang: 'en', mustInclude: ['Whitepaper v1.1', 'Proof of First Spark', 'Anti-Dilution', '$665.00', 'Table of Contents'] },
+      { url: '/whitepaper/en', htmlLang: 'en', mustInclude: ['Whitepaper v1.1', 'Zero Native Token Policy', '$285.00'] },
+      { url: '/whitepaper?lang=ja', htmlLang: 'ja', mustInclude: ['ホワイトペーパー v1.1', '希薄化防止', '$665.00'] },
     ];
 
     for (const c of cases) {
@@ -3811,6 +3813,97 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
     } finally {
       if (prevGuildLease === undefined) delete process.env.CLAIM_LEASE_GUILD_MS;
       else process.env.CLAIM_LEASE_GUILD_MS = prevGuildLease;
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
+
+  it('39. 100% Free & Voluntary Tip-Supported model (0% fees, free Gold Pro/Skins, voluntary tip-coffee & tip-custom)', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-free-tips-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+    try {
+      const boot = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      assert.equal(boot.status, 200);
+      assert.equal(boot.json.config.platformFeePct, 0);
+      assert.equal(boot.json.config.billboardPriceUsd, 0);
+      assert.deepEqual(boot.json.config.revenueSplit, {
+        originatorSparkPct: 5,
+        meritPoolPct: 95,
+        platformPct: 0,
+      });
+
+      const payCfg = boot.json.paymentConfig;
+      assert.ok(payCfg, 'GET /api/bootstrap must expose paymentConfig');
+      assert.equal(payCfg.freeDonationOnly, true);
+      assert.equal(payCfg.platformFeePct, 0);
+      const tipCoffeeProd = payCfg.products.find((p) => p.id === 'tip-coffee');
+      const tipCustomProd = payCfg.products.find((p) => p.id === 'tip-custom');
+      assert.ok(tipCoffeeProd);
+      assert.equal(tipCoffeeProd.priceUsd, 3);
+      assert.ok(tipCustomProd);
+
+      // Shop items (pro-pass-monthly & founder-skin-bundle) are 100% Gold-unlockable ($0 USD)
+      const proItem = boot.json.shopItems.find((i) => i.id === 'pro-pass-monthly');
+      const packItem = boot.json.shopItems.find((i) => i.id === 'founder-skin-bundle');
+      assert.equal(proItem.priceUsd, 0);
+      assert.equal(proItem.priceGold, 300);
+      assert.equal(packItem.priceUsd, 0);
+      assert.equal(packItem.priceGold, 600);
+
+      // Register fresh supporter and test voluntary tip-coffee ($3) & tip-custom ($12)
+      const regRes = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'tip-angel@pixelcompute.test',
+        password: 'angel-password-123',
+        displayName: 'Coffee Angel',
+      });
+      assert.equal(regRes.status, 201);
+      const cookie = regRes.cookie;
+      const revBefore = regRes.json.state.founderRevenue.proSkinsUsd;
+
+      const tipCoffee = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/create',
+        { productId: 'tip-coffee', chain: 'base', token: 'USDC' },
+        cookie,
+      );
+      assert.equal(tipCoffee.status, 201);
+      assert.equal(tipCoffee.json.order.amountUsd, 3);
+
+      const confirmCoffee = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/confirm',
+        { orderId: tipCoffee.json.order.id, simulate: true },
+        cookie,
+      );
+      assert.equal(confirmCoffee.status, 200);
+      assert.equal(confirmCoffee.json.order.status, 'confirmed');
+      assert.equal(confirmCoffee.json.state.player.isPro, true);
+      assert.equal(confirmCoffee.json.state.player.title, '☕ 創世打賞天使');
+      assert.equal(confirmCoffee.json.founderRevenue.proSkinsUsd, round2(revBefore + 3));
+
+      const tipCustom = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/create',
+        { productId: 'tip-custom', amountUsd: 12, chain: 'solana', token: 'USDT' },
+        cookie,
+      );
+      assert.equal(tipCustom.status, 201);
+      assert.equal(tipCustom.json.order.amountUsd, 12);
+
+      const confirmCustom = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/payments/stablecoin/confirm',
+        { orderId: tipCustom.json.order.id, simulate: true },
+        cookie,
+      );
+      assert.equal(confirmCustom.status, 200);
+      assert.equal(confirmCustom.json.founderRevenue.proSkinsUsd, round2(revBefore + 15));
+    } finally {
       await stopServer(started.server);
       await fs.rm(isoDir, { recursive: true, force: true });
     }

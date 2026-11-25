@@ -204,6 +204,7 @@ export function sanitizeUserForClient(user) {
     isAuthenticated: !isDemo,
     isDemo,
     isPro: Boolean(user.isPro),
+    title: user.title || '',
     walletAddress: user.walletAddress || '',
     walletChain: user.walletChain || '',
   };
@@ -224,6 +225,7 @@ export function projectPlayerForClient(user) {
     completedTasks: Number(user.completedTasks || 0),
     totalContribution: Number(user.totalContribution || 0),
     isPro: Boolean(user.isPro),
+    title: user.title || '',
     ownedSkins: Array.isArray(user.ownedSkins) ? user.ownedSkins : ['default'],
     ownedDecor: Array.isArray(user.ownedDecor) ? user.ownedDecor : [],
     ownedItems: Array.isArray(user.ownedItems) ? user.ownedItems : [],

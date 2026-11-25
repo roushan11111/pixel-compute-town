@@ -18,12 +18,12 @@ import {
 
 export const REVENUE_SPLIT = Object.freeze({
   originatorSparkPct: 5,
-  meritPoolPct: 85,
-  platformPct: 10,
+  meritPoolPct: 95,
+  platformPct: 0,
 });
 
-export const PLATFORM_BOUNTY_FEE_PCT = 10;
-export const BILLBOARD_PRICE_USD = 29;
+export const PLATFORM_BOUNTY_FEE_PCT = 0;
+export const BILLBOARD_PRICE_USD = 0;
 
 export const ACHIEVEMENT_CATALOG = Object.freeze([
   {
@@ -179,25 +179,25 @@ export const SHOP_ITEMS = Object.freeze([
   },
   {
     id: 'pro-pass-monthly',
-    name: '像素鎮 Pro 通行證（月）',
+    name: '創世榮譽徽章（全免費）',
     type: 'pro',
-    priceGold: 0,
-    priceUsd: 9,
-    badge: 'PRO 會員',
+    priceGold: 300,
+    priceUsd: 0,
+    badge: '免費解鎖',
     icon: '💎',
-    description: '解鎖專屬金框《算力打工證》、創世 Pro 徽章與平臺開發贊助支持（不影響公平性）。',
+    description: '全站 100% 免費！用打工賺來的 300G 遊戲金幣即可免費解鎖金框《算力打工證》與榮譽徽章（或隨喜打賞免費獲贈）。',
   },
   {
     id: 'founder-skin-bundle',
-    name: '創世限定外觀大禮包',
+    name: '創世外觀全套大禮包（金幣免費換）',
     type: 'skin_bundle',
     skinId: 'skin-gold',
     unlockSkins: ['skin-cyber', 'skin-cat', 'skin-gold'],
-    priceGold: 0,
-    priceUsd: 15,
-    badge: '創世贊助',
+    priceGold: 600,
+    priceUsd: 0,
+    badge: '免費解鎖',
     icon: '🎁',
-    description: '一次收藏全部 3 款像素小人限定塗裝，100% 計入小鎮伺服器維護與創作者收入。',
+    description: '全站零付費牆！用 600G 遊戲金幣一次收藏全部 3 款像素小人限定塗裝，也歡迎自願打賞支持伺服器！',
   },
 ]);
 
@@ -754,6 +754,16 @@ export function ensureStateSchema(state) {
       updatedAt: f.updatedAt || f.createdAt || now,
     }));
 
+  for (const proj of state.projects || []) {
+    if (!proj || typeof proj !== 'object') continue;
+    if (Number(proj.platformSharePct) === 10 && Number(proj.meritPoolPct) === 85) {
+      proj.meritPoolPct = REVENUE_SPLIT.meritPoolPct;
+      proj.platformSharePct = REVENUE_SPLIT.platformPct;
+      proj.contributorsSharePct = REVENUE_SPLIT.meritPoolPct;
+      proj.revenueSplit = { ...REVENUE_SPLIT };
+    }
+  }
+
   // Keep legacy top-level mirrors synced to founder-demo for backward-compatible disk reads
   const founder = state.users[founderId];
   state.player = {
@@ -834,10 +844,10 @@ export function createInitialState() {
       repoUrl: 'https://github.com/pixel-compute-town/pixel-compute-town',
       bountyPoolUsd: 0,
       sparkRoyaltyPct: 5,
-      meritPoolPct: 85,
-      platformSharePct: 10,
+      meritPoolPct: 95,
+      platformSharePct: 0,
       creatorSharePct: 5,
-      contributorsSharePct: 85,
+      contributorsSharePct: 95,
       inspiredByHash: null,
       revenueSplit: { ...REVENUE_SPLIT },
       totalRevenueUsd: 0,
@@ -899,10 +909,10 @@ export function createInitialState() {
       repoUrl: 'https://github.com/pixel-compute-town/i18n-pixelbot',
       bountyPoolUsd: 75,
       sparkRoyaltyPct: 5,
-      meritPoolPct: 85,
-      platformSharePct: 10,
+      meritPoolPct: 95,
+      platformSharePct: 0,
       creatorSharePct: 5,
-      contributorsSharePct: 85,
+      contributorsSharePct: 95,
       inspiredByHash: null,
       revenueSplit: { ...REVENUE_SPLIT },
       totalRevenueUsd: 0,
@@ -959,10 +969,10 @@ export function createInitialState() {
       repoUrl: 'https://github.com/pixel-compute-town/pixel-pomo',
       bountyPoolUsd: 0,
       sparkRoyaltyPct: 5,
-      meritPoolPct: 85,
-      platformSharePct: 10,
+      meritPoolPct: 95,
+      platformSharePct: 0,
       creatorSharePct: 5,
-      contributorsSharePct: 85,
+      contributorsSharePct: 95,
       inspiredByHash: null,
       revenueSplit: { ...REVENUE_SPLIT },
       totalRevenueUsd: 0,

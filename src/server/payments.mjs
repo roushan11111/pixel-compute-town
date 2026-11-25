@@ -22,10 +22,52 @@ const TRON_TXHASH_RE = /^(?:0x)?[a-fA-F0-9]{64}$/;
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 export const PAYMENT_PRODUCTS = Object.freeze({
+  'tip-coffee': {
+    id: 'tip-coffee',
+    shopItemId: null,
+    name: '☕ 請鎮長喝杯咖啡（隨喜打賞）',
+    priceUsd: 3,
+    stream: 'pro_skin',
+    type: 'tip',
+    requiresProject: false,
+    customAmount: false,
+  },
+  'tip-ramen': {
+    id: 'tip-ramen',
+    shopItemId: null,
+    name: '🍜 請鎮長吃碗拉麵（自願打賞）',
+    priceUsd: 9,
+    stream: 'pro_skin',
+    type: 'tip',
+    requiresProject: false,
+    customAmount: false,
+  },
+  'tip-server': {
+    id: 'tip-server',
+    shopItemId: null,
+    name: '🖥️ 贊助小鎮伺服器月費（自願打賞）',
+    priceUsd: 19,
+    stream: 'pro_skin',
+    type: 'tip',
+    requiresProject: false,
+    customAmount: false,
+  },
+  'tip-custom': {
+    id: 'tip-custom',
+    shopItemId: null,
+    name: '💖 自訂金額隨喜打賞（100% 全免平臺）',
+    priceUsd: 5,
+    minUsd: 1,
+    maxUsd: 5000,
+    stream: 'pro_skin',
+    type: 'tip',
+    requiresProject: false,
+    customAmount: true,
+  },
   'shop-pro-pass': {
     id: 'shop-pro-pass',
     shopItemId: 'pro-pass-monthly',
-    name: '像素鎮 Pro 通行證（月）',
+    name: '☕ 創世打賞支持（贈榮譽徽章）',
     priceUsd: 9,
     stream: 'pro_skin',
     type: 'pro',
@@ -35,7 +77,7 @@ export const PAYMENT_PRODUCTS = Object.freeze({
   'shop-genesis-pack': {
     id: 'shop-genesis-pack',
     shopItemId: 'founder-skin-bundle',
-    name: '創世限定外觀大禮包',
+    name: '🎁 創世打賞禮遇（贈全套外觀）',
     priceUsd: 15,
     stream: 'pro_skin',
     type: 'skin_bundle',
@@ -46,8 +88,8 @@ export const PAYMENT_PRODUCTS = Object.freeze({
   'billboard-ad': {
     id: 'billboard-ad',
     shopItemId: null,
-    name: '像素廣場霓虹廣告位（7天）',
-    priceUsd: 29,
+    name: '📺 像素廣場看板（免費點亮／隨喜贊助）',
+    priceUsd: 5,
     stream: 'billboard_ad',
     type: 'billboard',
     requiresProject: true,
@@ -56,7 +98,7 @@ export const PAYMENT_PRODUCTS = Object.freeze({
   'bounty-topup': {
     id: 'bounty-topup',
     shopItemId: null,
-    name: '項目懸賞池美金充值',
+    name: '項目懸賞池美金充值（0% 平臺抽成）',
     priceUsd: 10,
     minUsd: 5,
     maxUsd: 5000,
@@ -71,6 +113,8 @@ const PRODUCT_ALIASES = Object.freeze({
   'pro-pass-monthly': 'shop-pro-pass',
   'founder-skin-bundle': 'shop-genesis-pack',
   'billboard': 'billboard-ad',
+  'tip': 'tip-coffee',
+  'donate': 'tip-coffee',
 });
 
 const REWARD_TYPE_PREFIX = Object.freeze({
@@ -170,6 +214,8 @@ export function getAfdianStoreUrl(productId = null) {
 export function getPaymentConfig() {
   const afdianStoreUrl = getAfdianStoreUrl();
   return {
+    freeDonationOnly: true,
+    platformFeePct: 0,
     polarEnabled: isPolarEnabled(),
     stripeEnabled: isStripeEnabled(),
     afdianEnabled: Boolean(afdianStoreUrl),
@@ -285,7 +331,27 @@ function fulfillProductForUser(state, user, { product, amountUsd, targetProjectI
   const now = new Date().toISOString();
   let summary = '';
 
-  if (product.type === 'pro') {
+  if (product.type === 'tip') {
+    const tipAmt = round2(amountUsd || product.priceUsd || 3);
+    user.isPro = true;
+    if (!Array.isArray(user.unlockedTitles)) user.unlockedTitles = [];
+    if (!user.unlockedTitles.some((t) => t && t.id === 'tip_angel')) {
+      user.unlockedTitles.push({ id: 'tip_angel', name: '☕ 創世打賞天使', unlockedAt: now });
+    }
+    if (!user.title) user.title = '☕ 創世打賞天使';
+    addRevenue(state, {
+      stream: 'pro_skin',
+      label: `${user.displayName} 透過 ${channelLabel} 隨喜打賞支持伺服器（${product.name}）`,
+      amountUsd: tipAmt,
+    });
+    syncUserLeaderboard(state, user);
+    summary = `感謝打賞 $${tipAmt.toFixed(2)}！已贈送【☕ 創世打賞天使】紀念徽章！`;
+    pushFeed(state, {
+      type: 'payment',
+      icon: '☕',
+      message: `💖 感謝 ${user.displayName} 透過 ${channelLabel} 隨喜打賞 $${tipAmt.toFixed(2)} 支持 100% 全免小鎮伺服器！`,
+    });
+  } else if (product.type === 'pro') {
     user.isPro = true;
     if (!user.ownedItems.includes('pro-pass-monthly')) {
       user.ownedItems.push('pro-pass-monthly');
@@ -417,9 +483,9 @@ export async function handleStablecoinCreate(req, res, body, store, sseHub) {
 
   let amountUsd = product.priceUsd;
   if (product.customAmount) {
-    const custom = round2(Number(body?.customAmountUsd));
+    const custom = round2(Number(body?.customAmountUsd ?? body?.amountUsd));
     if (!Number.isFinite(custom) || custom < (product.minUsd || 5) || custom > (product.maxUsd || 5000)) {
-      return sendJson(res, 400, { ok: false, error: `自訂充值金額需介於 $${product.minUsd || 5} 至 $${product.maxUsd || 5000} USD` });
+      return sendJson(res, 400, { ok: false, error: `自訂金額需介於 $${product.minUsd || 5} 至 $${product.maxUsd || 5000} USD` });
     }
     amountUsd = custom;
   }
@@ -768,9 +834,9 @@ export async function handleFiatCheckout(req, res, body, store, sseHub) {
 
   let amountUsd = product.priceUsd;
   if (product.customAmount) {
-    const custom = round2(Number(body?.customAmountUsd));
+    const custom = round2(Number(body?.customAmountUsd ?? body?.amountUsd));
     if (!Number.isFinite(custom) || custom < (product.minUsd || 5) || custom > (product.maxUsd || 5000)) {
-      return sendJson(res, 400, { ok: false, error: `自訂充值金額需介於 $${product.minUsd || 5} 至 $${product.maxUsd || 5000} USD` });
+      return sendJson(res, 400, { ok: false, error: `自訂金額需介於 $${product.minUsd || 5} 至 $${product.maxUsd || 5000} USD` });
     }
     amountUsd = custom;
   }

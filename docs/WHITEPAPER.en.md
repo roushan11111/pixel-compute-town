@@ -1,9 +1,9 @@
-# 📜 PixelCompute Town Whitepaper v1.0
-## Idle AI Compute Collaboration, Cryptographic Idea Provenance & Merit-Based Revenue Sharing
+# 📜 PixelCompute Town Whitepaper v1.1
+## 100% Free Forever · 0% Platform Fee · Tip-Supported | Idle AI Compute, Idea Provenance & Merit Sharing
 
-> **Version**: v1.0 (Engine v1.2)  
+> **Version**: v1.1 (Engine v1.3 · 100% Free Tip-Supported Edition)  
 > **Protocol Suite**: `PCT-POFS-v1` (Proof of First Spark) × `PoAW` (Proof of Accepted Work) × `Anti-Dilution 70/30`  
-> **Core Principles**: Zero External npm Dependencies · Zero-Trust BYOK/BYOT · 1:1 Stablecoin Settlement · Zero Speculative Tokens
+> **Core Pledge**: 100% Free Forever · **0% Platform Fee** · Voluntary Tip-Supported · Zero External npm Dependencies · Zero-Trust BYOK/BYOT · Zero Speculative Tokens
 
 ---
 
@@ -11,7 +11,7 @@
 
 As generative AI becomes ubiquitous, the global developer ecosystem faces three compounding structural imbalances. First, tens of millions of builders lose unused API grants and fixed-rate monthly or weekly AI CLI quotas every billing cycle when quotas reset to zero. Second, because AI accelerates implementation from months to hours, original product ideas are routinely copied, repackaged, or "distilled" within minutes of publication—leaving the first person who sparked the concept uncredited and unrewarded. Third, open-source repositories are increasingly flooded with low-effort AI Slop and automated micro-PR farming, diluting core engineers who actually design architectures and ship production code.
 
-**PixelCompute Town** introduces an open-source collaboration protocol combining **Dual-Track Compliant Compute (Zero-Trust BYOK + BYOT)**, a **SHA-256 Idea Provenance Chain (`Proof of First Spark`)**, a **5% / 85% / 10% Dynamic Merit Split with a 70/30 Anti-Dilution Bucket Invariant**, and a **4-Layer Anti-Slop Governance System**. Wrapped in a cozy 32×32 HD pixel-art town interface with original 8-bit music, PixelCompute Town settles global bounties and creator royalties strictly in **1:1 USD-pegged stablecoins (USDC / USDT)** alongside **Polar / Stripe fiat checkout and redeem codes**—with zero native speculative tokens—turning wasted global compute into verifiable, revenue-generating software.
+**PixelCompute Town** introduces a 100% free open-source collaboration protocol combining **Dual-Track Compliant Compute (Zero-Trust BYOK + BYOT)**, a **SHA-256 Idea Provenance Chain (`Proof of First Spark`)**, a **5% / 95% / 0% Zero-Fee Dynamic Merit Split with a 70/30 Anti-Dilution Bucket Invariant**, and a **4-Layer Anti-Slop & Senior Reviewer Governance System**. Every feature is permanently free with **0% platform fees**: builders keep 100% of cash bounties, teams keep 100% of project revenue (5% Originator + 95% Merit Pool), the Plaza Billboard is free, and all cosmetic skins & badges unlock free via in-game Gold. Infrastructure is sustained solely by **voluntary community tips (Afdian & 1:1 USDC / USDT)**—with zero paywalls and zero speculative tokens.
 
 ---
 
@@ -102,30 +102,30 @@ To detect cross-language clones, field shuffling, or stripped descriptions, the 
 
 ---
 
-## 4. The 5% / 85% / 10% Merit Split & 70/30 Anti-Dilution Mathematics
+## 4. The 5% / 95% / 0% Zero-Fee Merit Split & 70/30 Anti-Dilution Mathematics
 
-Our core economic ethic is simple: **Honor the first spark permanently, never allow passive squatting, reward builders strictly in proportion to verified work, and mathematically protect core engineers from micro-task spam.**
+Our core economic ethic is simple: **Honor the first spark permanently, take 0% platform cut, reward builders with the full 95% strictly in proportion to verified work, and mathematically protect core engineers from micro-task spam.**
 
-### 4.1 Top-Level Revenue Allocation (5% / 85% / 10%)
+### 4.1 Top-Level Revenue Allocation (5% / 95% / 0%)
 
-For any launched project receiving gross revenue `R > 0` (USD):
+For any launched project receiving gross revenue `R > 0` (USD), 100% goes to creators and builders:
 
 ```text
 R_spark    = round2(0.05 × R)                      // 5% Permanent Originator Spark Royalty
-R_platform = round2(0.10 × R)                      // 10% Platform Provenance & Ops Carry
-R_merit    = round2(R - R_spark - R_platform)      // 85% Builders Merit Pool
+R_platform = $0.00 (0%)                            // 0% Platform Fee (100% Free · Tip-Supported)
+R_merit    = round2(R - R_spark) = 0.95 × R        // 95% Builders Merit Pool
 ```
 
 - **5% Spark Royalty (`R_spark`)**: Permanently credited to the chain-verified `originatorId`, even if they write zero lines of code.
-- **85% Merit Pool (`R_merit`)**: Distributed strictly by verified Proof of Accepted Work (PoAW) under the 70/30 bucket rule. If the originator also builds, they earn **both** their 5% Spark Royalty **plus** their earned share of the 85% pool.
-- **10% Platform Carry (`R_platform`)**: Sustains provenance verification, review infrastructure, and payment rails.
+- **95% Merit Pool (`R_merit`)**: Distributed strictly by verified Proof of Accepted Work (PoAW) under the 70/30 bucket rule. If the originator also builds, they earn **both** their 5% Spark Royalty **plus** their earned share of the 95% pool.
+- **0% Platform Fee (`R_platform`)**: PixelCompute Town charges zero platform fees on bounties or revenue; server hosting is funded purely by voluntary tips.
 
-### 4.2 Inside the 85% Merit Pool: The 70/30 Anti-Dilution Invariant
+### 4.2 Inside the 95% Merit Pool: The 70/30 Anti-Dilution Invariant
 
 Every accepted task is assigned to one of two mutually exclusive buckets (`src/server/governance.mjs`):
 
-- **🔥 Core Bucket (`core`)**: Guild bounties, `feature_pr`, `architecture`, `bugfix`, and peer-review approval points (`+5`). Cap: **70%** of the Merit Pool (**59.5%** of gross revenue).
-- **⚙️ Peripheral Bucket (`peripheral`)**: API micro-tasks, `i18n`, `docs`, `pixel_spec`, `unit_test`, `qa_audit`. Cap: **30%** of the Merit Pool (**25.5%** of gross revenue).
+- **🔥 Core Bucket (`core`)**: Guild bounties, `feature_pr`, `architecture`, `bugfix`, and peer-review approval points (`+5`). Cap: **70%** of the Merit Pool (**66.5%** of gross revenue).
+- **⚙️ Peripheral Bucket (`peripheral`)**: API micro-tasks, `i18n`, `docs`, `pixel_spec`, `unit_test`, `qa_audit`. Cap: **30%** of the Merit Pool (**28.5%** of gross revenue).
 
 Let `C_total` be total core points and `P_total` be total peripheral points:
 
@@ -138,31 +138,31 @@ Contributor u total payout:
 D_u = I(u == originator) × R_spark + M_core × (c_u / C_total) + M_periph × (p_u / P_total)
 ```
 
-**Anti-Dilution Invariant**: Whenever `C_total > 0`, even as `P_total → ∞`, every core engineer's minimum share is mathematically locked at `0.595 × R × (c_u / C_total)`, reconciled to exact `$0.01` precision with zero floating-point drift.
+**Anti-Dilution Invariant**: Whenever `C_total > 0`, even as `P_total → ∞`, every core engineer's minimum share is mathematically locked at `0.665 × R × (c_u / C_total)`, reconciled to exact `$0.01` precision with zero floating-point drift.
 
 ### 4.3 Three Worked Stress-Test Scenarios (Gross Revenue R = $1,000.00)
 
 #### Scenario 1: Hands-Off Originator vs. Active Builder Team
 - Alice originates the idea (0 pts); Bob ships 60 core pts; Carol ships 40 core + 20 peripheral pts; Dave ships 80 peripheral pts.
 
-| Role | Core Pts | Periph Pts | Spark (5%) | Core Pool (59.5%) | Periph Pool (25.5%) | Total Payout | Share |
+| Role | Core Pts | Periph Pts | Spark (5%) | Core Pool (66.5%) | Periph Pool (28.5%) | Total Payout | Share |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Alice (Idea Only)** | 0 | 0 | `$50.00` | `$0.00` | `$0.00` | **`$50.00`** | **5.00%** |
-| **Bob (Core Architect)** | 60 (60%) | 0 | `$0.00` | `$357.00` | `$0.00` | **`$357.00`** | **35.70%** |
-| **Carol (Full-Stack)** | 40 (40%) | 20 (20%) | `$0.00` | `$238.00` | `$51.00` | **`$289.00`** | **28.90%** |
-| **Dave (i18n/Docs)** | 0 | 80 (80%) | `$0.00` | `$0.00` | `$204.00` | **`$204.00`** | **20.40%** |
-| **Platform Carry** | — | — | — | — | — | **`$100.00`** | **10.00%** |
-| **Total Reconciled** | **100** | **100** | **`$50.00`** | **`$595.00`** | **`$255.00`** | **`$1,000.00`** | **100.00%** |
+| **Bob (Core Architect)** | 60 (60%) | 0 | `$0.00` | `$399.00` | `$0.00` | **`$399.00`** | **39.90%** |
+| **Carol (Full-Stack)** | 40 (40%) | 20 (20%) | `$0.00` | `$266.00` | `$57.00` | **`$323.00`** | **32.30%** |
+| **Dave (i18n/Docs)** | 0 | 80 (80%) | `$0.00` | `$0.00` | `$228.00` | **`$228.00`** | **22.80%** |
+| **Platform Fee (Free)** | — | — | — | — | — | **`$0.00`** | **0.00%** |
+| **Total Reconciled** | **100** | **100** | **`$50.00`** | **`$665.00`** | **`$285.00`** | **`$1,000.00`** | **100.00%** |
 
 #### Scenario 2: Originator Who Also Builds 40% of the Product
 - Alice originates the idea AND delivers 40% of both buckets; Bob delivers 60% of both buckets.
 
-| Role | Core Share | Periph Share | Spark (5%) | Merit Pool (85%) | Total Payout | Share |
+| Role | Core Share | Periph Share | Spark (5%) | Merit Pool (95%) | Total Payout | Share |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Alice (Originator + 40% Build)** | 40% | 40% | `$50.00` | `$238.00 + $102.00 = $340.00` | **`$390.00`** | **39.00%** |
-| **Bob (60% Co-Builder)** | 60% | 60% | `$0.00` | `$357.00 + $153.00 = $510.00` | **`$510.00`** | **51.00%** |
-| **Platform Carry** | — | — | — | — | **`$100.00`** | **10.00%** |
-| **Total Reconciled** | **100%** | **100%** | **`$50.00`** | **`$850.00`** | **`$1,000.00`** | **100.00%** |
+| **Alice (Originator + 40% Build)** | 40% | 40% | `$50.00` | `$266.00 + $114.00 = $380.00` | **`$430.00`** | **43.00%** |
+| **Bob (60% Co-Builder)** | 60% | 60% | `$0.00` | `$399.00 + $171.00 = $570.00` | **`$570.00`** | **57.00%** |
+| **Platform Fee (Free)** | — | — | — | — | **`$0.00`** | **0.00%** |
+| **Total Reconciled** | **100%** | **100%** | **`$50.00`** | **`$950.00`** | **`$1,000.00`** | **100.00%** |
 
 #### Scenario 3: Extreme Spam Stress Test (100 Core Pts vs. 10,000 Peripheral Spam Pts)
 - Malloy farms 10,000 peripheral points with cheap scripts trying to dilute Bob's 100 core architecture points.
@@ -170,67 +170,68 @@ D_u = I(u == originator) × R_spark + M_core × (c_u / C_total) + M_periph × (p
 | Role | Points | Naive Flat Pool | **PixelCompute 70/30 Protocol** | Anti-Dilution Protection |
 | :--- | :---: | :---: | :---: | :--- |
 | **Alice (Originator)** | 0 pts | `$50.00` | **`$50.00`** | Permanent 5% intact |
-| **Bob (Core Architect)** | `100` core | `$8.42` (**98.6% diluted!**) | **`$595.00`** | **Locked at 59.5% — zero dilution!** |
-| **Malloy (Spammer)** | `10,000` periph | `$841.58` (drains pool) | **`$255.00`** | **Hard-capped at 25.5%!** |
-| **Platform Carry** | — | `$100.00` | **`$100.00`** | Fixed 10% transparent carry |
+| **Bob (Core Architect)** | `100` core | `$9.41` (**98.6% diluted!**) | **`$665.00`** | **Locked at 66.5% — zero dilution!** |
+| **Malloy (Spammer)** | `10,000` periph | `$940.59` (drains pool) | **`$285.00`** | **Hard-capped at 28.5%!** |
+| **Platform Fee (Free)** | — | `$0.00` | **`$0.00`** | Forever 0% platform fee |
 
 ---
 
-## 5. 4-Layer Anti-Slop Governance Moat
+## 5. 4-Layer Anti-Slop & Senior Reviewer Governance Moat
 
-To make submitting low-effort AI garbage have strictly **negative expected value**, every submission passes through four layers:
+To make submitting low-effort AI garbage or squatting on bounties have strictly **negative expected value**, every submission passes through four layers:
 
 1. **Layer 1 — Fixed Task Quotas & Machine PoAW Gates (`src/server/verifier.mjs`)**: Points are fixed per task (never per line or token). Automated checks block short fluff, repetitive slop, low lexical diversity, invalid JSON, and malformed PR links.
 2. **Layer 2 — Cross-Model AI Blind Review (`runAiBlindReview`)**: Computes `diffLinesAdded/Removed`, `bloatRatioPct` (flagging duplicate lines, excessive comments, empty stubs, placeholder comments, and bloated add-only diffs), `aiScore` (5–99), and Low/Medium/High risk badges.
-3. **Layer 3 — Merit-Weighted Peer Review Queue (`canUserReview`)**: Only verified project contributors, originators, and admins can approve or reject queued submissions (unqualified accounts receive HTTP `403`). Approving clean PRs rewards reviewers **`+15G` + `+5` core points + `+1` reputation**.
-4. **Layer 4 — Staking, Slashing & Cooldowns**: Core bounties require Reputation ≥ 60 and freeze **`25G–30G`** stake gold. Accepted work refunds 100% of stake; rejected AI slop **slashes the entire stake directly to the reviewer as a bug-catching bounty**, deducts `-5` reputation, and triggers an HTTP **`429 WORKER_COOLDOWN`** lockout after 2 strikes.
+3. **Layer 3 — 4-Tier Senior Reviewer Qualification (`evaluateReviewerEligibility`)**: Self-review is strictly blocked (`HTTP 403 SELF_REVIEW_FORBIDDEN`). Only verified senior engineers can approve or reject queued submissions: Admins, Founder-appointed Verified Reviewers (`verifiedReviewer`), the project Originator, Project Core Engineers (`>= 50` core points in that project + `>= 80` rep), or Town Senior Engineers (`>= 150` global core points + `>= 2` core tasks + `>= 85` rep — peripheral-only farming never grants review authority). Approving clean PRs rewards reviewers **`+15G` + `+5` core points + `+1` reputation**.
+4. **Layer 4 — Staking, Auto-Expiring Claim Leases & Slashing**: Core bounties require Reputation ≥ 60 and freeze **`25G–30G`** stake gold. Claim leases automatically expire after **30 minutes (API tasks)** or **24 hours (Guild bounties)**: ghosting forfeits 50% of stake and deducts `-3` rep while returning the task to open, whereas voluntary release refunds 100% with zero penalty. Rejected AI slop **slashes 100% of stake directly to the reviewer**, deducts `-5` reputation, and triggers an HTTP **`429 WORKER_COOLDOWN`** lockout after 2 strikes.
 
 ---
 
-## 6. Non-Custodial 3-in-1 Settlement & Stablecoin Micropayments
+## 6. Non-Custodial Stablecoin Payouts & Voluntary Tip Rails
 
 ### 6.1 Zero Native Token Policy (1:1 USDC / USDT Only)
 
 Speculative project tokens corrupt developer incentives into price speculation. PixelCompute Town commits to a strict **Zero Native Token Policy**:
-- All bounties, ads, Pro passes, and dividends are denominated in **USD** and settled on-chain solely in **1:1 USDC or USDT**.
+- All cash bounties and creator dividends are denominated in **USD** and settled on-chain solely in **1:1 USDC or USDT**.
 - Native support for **Base** (recommended, `< $0.01` gas), **Polygon**, **Arbitrum**, and **Solana** makes global micro-dividends down to **`$5.00 USD`** instant and economical—eliminating `$25–$40` wire fees and regional banking barriers.
-- Strictly **non-custodial**: the platform never holds user private keys, enforces 30-minute order windows with unique memo codes (`PCT-XXXXXX`), and blocks `TxHash` replay (`HTTP 409`).
+- Strictly **non-custodial**: the platform never holds user private keys, enforces unique memo codes (`PCT-XXXXXX`), and blocks `TxHash` replay (`HTTP 409`).
 
-### 6.2 Tri-Rail Payment Engine (`src/server/payments.mjs`)
-1. **Stablecoins**: 4-chain USDC / USDT pay-in and `$5+` wallet payout withdrawals.
-2. **Fiat Checkout**: **Polar.sh** (Merchant of Record with automated global tax handling) & **Stripe**, with HMAC-SHA256 webhook verification.
-3. **Redeem Codes**: Admin batch code generator (`PIXEL-PRO-XXXX`) for frictionless sales via Afdian, Ko-fi, or Gumroad.
+### 6.2 Voluntary Tip Jar Rails (`src/server/payments.mjs`)
+Every feature in PixelCompute Town is free. Builders who love the platform can optionally drop a tip to help cover hosting:
+1. **Afdian Voluntary Tips**: One-click coffee sponsorship via [`ifdian.net/a/pixelcompute`](https://ifdian.net/a/pixelcompute) (awards a cosmetic Genesis Tip Angel badge).
+2. **Direct USDC / USDT Tips**: Any voluntary amount (`$3` / `$9` / `$19` or custom) across Base, Polygon, Arbitrum, or Solana.
 
 ---
 
-## 7. Business Model & Legal Safety Boundaries
+## 7. 100% Free Sustainability Model & Legal Safety Boundaries
 
-### 7.1 Four Aligned Revenue Streams
-1. **10% Cash Bounty Escrow Fee** (builders keep 90%).
-2. **10% Incubation Platform Carry** (earned only when incubated projects generate real external revenue).
-3. **Pixel Plaza Neon Billboard (`$29` / 7 days)** for project visibility.
-4. **Cosmetic Skins & Pro Pass (`$9/mo`, Genesis Pack `$15`)** — strictly cosmetic and convenience perks; **never pay-to-win votes, reputation, or task quotas**.
+### 7.1 Forever Free · 0% Platform Fees · Tip-Supported
+1. **0% Cash Bounty Fee**: Builders keep **100%** of every verified cash bounty.
+2. **0% Incubation Carry (5% / 95% / 0%)**: Creators and builders keep **100%** of launched project revenue.
+3. **Free Pixel Plaza Billboard (`$0`)**: Community open-source projects can light up the Plaza Spotlight at zero cost.
+4. **Cosmetic Skins & Pro Honors Free via Game Gold**: Every skin and badge unlocks through earned in-game Gold—**zero paywalls, zero pay-to-win**.
+5. **Voluntary Community Tips**: Hosting and development are supported purely by voluntary tips logged openly in the transparent ledger.
 
 ### 7.2 Legal Positioning & Compliance Firewall
-- Explicitly structured as an **Open-Source Technical Bounty & Creator Royalty Agreement**—not equity issuance, crowdfunding, or passive investment contracts (distinct from securities under the Howey Test).
-- The 85% Merit Pool compensates active, verified engineering work (PoAW); the 5% Spark Royalty compensates original concept licensing.
-- Built-in safeguards include optional manual device review (`strictDeviceReview`), mandatory peer review, write rate limiting (`HTTP 429`), and persistent SQLite audit logs.
+- Explicitly structured as a **Free Open-Source Collaboration Tool & Voluntary Tip Community**—not equity issuance, crowdfunding, or passive investment contracts (distinct from securities under the Howey Test).
+- The 95% Merit Pool compensates active, verified engineering work (PoAW); the 5% Spark Royalty compensates original concept licensing; voluntary tips to the host grant zero equity, dividends, or governance privileges.
+- Built-in safeguards include optional manual device review (`strictDeviceReview`), senior peer review, write rate limiting (`HTTP 429`), and persistent SQLite audit logs.
 
 ---
 
 ## 8. Architecture & 3-Stage Roadmap
 
-### 8.1 Zero-Dependency Production Stack (v1.2)
+### 8.1 Zero-Dependency Production Stack (v1.3)
 PixelCompute Town runs with **`dependencies: 0`** (zero third-party npm packages), minimizing supply-chain attack surface:
 - **Runtime**: Node.js 24 native `node:http`, `node:crypto`, native ESM, SSE real-time push, and SSR public pages.
 - **Database**: Node 24 native `node:sqlite` (`DatabaseSync`) in **WAL mode** (`kv_state` + 500-entry `audit_log`) with 1-click JSON backup export.
-- **Security**: `scrypt` salted password hashing, HMAC-SHA256 signed cookies & GitHub/Polar/Stripe webhooks, `timingSafeEqual`, strict HTML entity escaping against XSS.
+- **Security**: `scrypt` salted password hashing, HMAC-SHA256 signed cookies & GitHub/Afdian webhooks, `timingSafeEqual`, strict HTML entity escaping against XSS.
 - **Experience**: 32×32 HD pixel-art 6-room Canvas engine, 4 original Web Audio 8-bit chiptunes, full `zh-TW / zh-CN / EN` localization, public `/p/:slug` & `/verify/:hash` pages, and online `/docs` & multilingual `/whitepaper`.
 
 ### 8.2 Roadmap
-- **Phase 1 — Genesis Core & Governance (v1.0–v1.2 · ✅ Shipped)**: 6 HD rooms, 100% i18n, BYOK/BYOT + `pixel-worker`, POFS SHA-256 chain, 5/85/10 + 70/30 governance, SQLite WAL, GitHub webhooks, 8-bit BGM, and multilingual whitepaper.
-- **Phase 2 — Automated On-Chain RPC & Multi-Town Federation (v1.3–v1.5 · 🚧 Planned)**: Lightweight read-only Base/Solana RPC verification for automatic zero-paste stablecoin confirmation, plus federated cross-town SHA-256 provenance syncing.
-- **Phase 3 — Open Public-Goods Incubation Fund & Open Standard (v2.0 · 🔭 Vision)**: Allocate a share of platform carry into a transparent community-voted open-source grant pool and publish `PCT-POFS-v1` and `Anti-Dilution 70/30` as standalone open specifications.
+- **Phase 1 — Genesis Core, Governance & 100% Free Pivot (v1.0–v1.3 · ✅ Shipped)**: 6 HD rooms, 100% i18n, BYOK/BYOT + `pixel-worker`, POFS SHA-256 chain, **5/95/0 zero-fee** + 70/30 governance, claim lease auto-reaper, 4-tier senior reviewer system, SQLite WAL, GitHub webhooks, and voluntary tip support.
+- **Phase 2 — Automated On-Chain RPC & Multi-Town Federation (v1.4–v1.5 · 🚧 Planned)**: Lightweight read-only Base/Solana RPC verification for automatic zero-paste stablecoin confirmation, plus federated cross-town SHA-256 provenance syncing.
+- **Phase 3 — Open Public-Goods Standard (v2.0 · 🔭 Vision)**: Publish `PCT-POFS-v1` and `Anti-Dilution 70/30` as standalone open specifications free for every hackathon and open-source community worldwide.
 
 ---
 

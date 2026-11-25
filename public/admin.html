@@ -355,7 +355,7 @@
         <!-- Founder Real Revenue Entry -->
         <div class="subbox" style="margin-bottom:16px;border-color:rgba(250, 204, 21, 0.45);">
           <div class="panel-head" style="margin-bottom:8px;">
-            <h2>💰 鎮長錄入項目真實營收並自動分紅（5% 原創 / 85% 實幹[核心70%·週邊≤30%] / 10% 平臺）</h2>
+            <h2>💰 鎮長錄入項目真實營收並自動分紅（5% 原創 / 95% 實幹[核心70%·週邊≤30%] / 0% 平臺抽成）</h2>
           </div>
           <form id="record-revenue-form" class="toolbar" style="justify-content:flex-start;">
             <select class="select" id="rev-project-id" style="min-width:220px;"></select>
@@ -455,7 +455,7 @@
             <select class="select" id="gen-reward-type">
               <option value="pro">💎 Pro 通行證（$9）</option>
               <option value="genesis_pack">🎁 創世限定禮包（$15）</option>
-              <option value="billboard">📺 霓虹廣告位（$29）</option>
+              <option value="billboard">📺 霓虹廣告位（免費 $0）</option>
               <option value="gold_500">🪙 500 遊戲金幣</option>
             </select>
             <input class="input mono" id="gen-count" type="number" min="1" max="20" value="3" style="width:70px;" />
@@ -670,7 +670,7 @@
           <div class="kpi-card" style="--accent: var(--gold);">
             <div class="kpi-label"><span>💰 累計平臺營收</span><span class="pill gold">4 流合計</span></div>
             <div class="kpi-value mono">$${Number(rev.totalUsd || 0).toFixed(2)}</div>
-            <div class="kpi-sub">懸賞費 $${Number(rev.bountyFeesUsd || 0).toFixed(2)} · 孵化 $${Number(rev.incubationCarryUsd || 0).toFixed(2)} · 廣告 $${Number(rev.billboardAdsUsd || 0).toFixed(2)} · Pro $${Number(rev.proSkinsUsd || 0).toFixed(2)}</div>
+            <div class="kpi-sub">懸賞費 $${Number(rev.bountyFeesUsd || 0).toFixed(2)} · 孵化 $${Number(rev.incubationCarryUsd || 0).toFixed(2)} · 廣告 $${Number(rev.billboardAdsUsd || 0).toFixed(2)} · 打賞/支持 $${Number(rev.proSkinsUsd || 0).toFixed(2)}</div>
           </div>
           <div class="kpi-card" style="--accent: var(--emerald);">
             <div class="kpi-label"><span>🤖 全鎮算力小人</span><span class="pill green">運作中 ${s.workingWorkers}</span></div>
@@ -1193,7 +1193,7 @@
         });
         const data = await res.json();
         if (!res.ok || !data.ok) return showToast(data.error || '錄入營收失敗', true);
-        showToast(`💰 已錄入 $${amountUsd.toFixed(2)} 真實營收，系統已按 5/85/10 自動分紅入帳！`);
+        showToast(`💰 已錄入 $${amountUsd.toFixed(2)} 真實營收，系統已按 5/95/0（0% 抽成）自動分紅入帳！`);
         document.getElementById('rev-amount-usd').value = '';
         document.getElementById('rev-note').value = '';
         await loadOverview();
