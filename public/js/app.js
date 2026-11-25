@@ -155,6 +155,10 @@ const app = {
     }
   })(),
   adminPanelCollapsed: true,
+  reviewerEligibility: null,
+  openTaskGroups: new Set(),
+  closedTaskGroups: new Set(),
+  expandedTaskGroups: new Set(),
   seenUnlockedAchievements: new Set(),
   // Auth modal runtime state
   authModalMode: 'login',
@@ -584,6 +588,7 @@ function applyBootstrapPayload(data, { silentAchievements = false } = {}) {
   if (data.authConfig) app.authConfig = data.authConfig;
   if (data.paymentConfig) app.paymentConfig = data.paymentConfig;
   if (data.adminData) app.adminData = data.adminData;
+  if (data.reviewerEligibility) app.reviewerEligibility = data.reviewerEligibility;
   if (app.engine && app.state) {
     app.engine.syncState(app.state);
   }
@@ -1472,6 +1477,85 @@ function populateWorkerSelect(selectEl, track) {
   }
 }
 
+function formatLeaseRemaining(iso) {
+  if (!iso) return '';
+  const diffMs = Date.parse(iso) - Date.now();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return '<1m';
+  const totalMin = Math.ceil(diffMs / 60_000);
+  if (totalMin < 60) return `${totalMin}m`;
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+}
+
+function renderGroupedTaskFolders(trackKey, tasks, projectMap, renderCardFn, loc) {
+  const MAX_INITIAL_PER_GROUP = 3;
+  const groups = new Map();
+  for (const tk of tasks) {
+    const pid = tk.projectId || 'misc';
+    if (!groups.has(pid)) groups.set(pid, []);
+    groups.get(pid).push(tk);
+  }
+
+  const statusOrder = { in_progress: 0, open: 1, pending_review: 2, completed: 3 };
+  const entries = [...groups.entries()];
+
+  return entries
+    .map(([pid, list], idx) => {
+      const sorted = [...list].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+      const proj = projectMap.get(pid);
+      const lp = proj ? localizeProject(proj, loc) : null;
+      const groupName = lp?.shortName || lp?.name || pid;
+      const gKey = `${trackKey}:${pid}`;
+
+      const openCnt = sorted.filter((x) => x.status === 'open').length;
+      const workingCnt = sorted.filter((x) => x.status === 'in_progress').length;
+      const doneCnt = sorted.filter((x) => x.status === 'completed').length;
+      const bountySum = sorted
+        .filter((x) => x.status !== 'completed')
+        .reduce((s, x) => s + (Number(x.cashBountyUsd) || 0), 0);
+
+      // Default: only 1st group open (or any group with an active in-progress task), honoring user's manual toggles
+      const defaultOpen = idx === 0 || workingCnt > 0;
+      const isOpen = app.openTaskGroups.has(gKey)
+        ? true
+        : app.closedTaskGroups.has(gKey)
+          ? false
+          : defaultOpen;
+      const isExpanded = app.expandedTaskGroups.has(gKey);
+      const visibleTasks = isExpanded ? sorted : sorted.slice(0, MAX_INITIAL_PER_GROUP);
+      const hiddenCount = Math.max(0, sorted.length - visibleTasks.length);
+
+      return `
+        <details class="task-group-folder" data-task-group="${escapeHtml(gKey)}" ${isOpen ? 'open' : ''}>
+          <summary class="task-group-summary">
+            <div class="task-group-left">
+              <span class="task-group-chevron">▸</span>
+              <span>📦 ${escapeHtml(groupName)}</span>
+            </div>
+            <div class="task-group-counts">
+              ${workingCnt > 0 ? `<span class="badge cyan">${escapeHtml(t('task.groupWorkingCount', { count: workingCnt }))}</span>` : ''}
+              ${openCnt > 0 ? `<span class="badge amber">${escapeHtml(t('task.groupOpenCount', { count: openCnt }))}</span>` : ''}
+              ${doneCnt > 0 ? `<span class="badge green">${escapeHtml(t('task.groupDoneCount', { count: doneCnt }))}</span>` : ''}
+              ${bountySum > 0 ? `<span class="badge gold">$${bountySum.toFixed(0)}</span>` : ''}
+            </div>
+          </summary>
+          <div class="task-group-body">
+            ${visibleTasks.map((tk) => renderCardFn(tk)).join('')}
+            ${
+              sorted.length > MAX_INITIAL_PER_GROUP
+                ? `<button type="button" class="btn btn-sm btn-expand-group" data-expand-group="${escapeHtml(gKey)}">
+                    ${escapeHtml(isExpanded ? t('task.collapseExtra') : t('task.expandMore', { count: hiddenCount }))}
+                  </button>`
+                : ''
+            }
+          </div>
+        </details>
+      `;
+    })
+    .join('');
+}
+
 function renderFactoryTab() {
   const loc = getLocale();
   const projFilter = $('factory-project-filter');
@@ -1505,8 +1589,7 @@ function renderFactoryTab() {
     return;
   }
 
-  listEl.innerHTML = tasks
-    .map((task) => {
+  const renderFactoryCard = (task) => {
       const lt = localizeTask(task, loc);
       const proj = projectMap.get(task.projectId);
       const lp = proj ? localizeProject(proj, loc) : null;
@@ -1572,6 +1655,8 @@ function renderFactoryTab() {
               <span style="color: var(--accent-pink);">✨ +${task.contributionPoints} pt</span>
             </span>
             <div class="toolbar-group">
+              ${isWorking && task.claimExpiresAt ? `<span class="lease-countdown-pill">${escapeHtml(t('task.leaseLeft', { time: formatLeaseRemaining(task.claimExpiresAt) }))}</span>` : ''}
+              ${isWorking ? `<button type="button" class="btn btn-sm" data-release-task="${escapeHtml(task.id)}">${escapeHtml(t('task.releaseBtn'))}</button>` : ''}
               ${
                 isCompleted
                   ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('factory.inspect'))} (${task.verification?.score ?? 90})</button>`
@@ -1583,8 +1668,8 @@ function renderFactoryTab() {
           </div>
         </article>
       `;
-    })
-    .join('');
+  };
+  listEl.innerHTML = renderGroupedTaskFolders('factory', tasks, projectMap, renderFactoryCard, loc);
   hydrateWorkerPortraits(listEl);
 }
 
@@ -1606,16 +1691,25 @@ function renderReviewQueuePanel() {
 
   const reviewDetailsEl = $('review-queue-details');
   if (reviewDetailsEl && !reviewDetailsEl.dataset.userToggled) {
-    reviewDetailsEl.open = pendingItems.length > 0;
+    // Keep collapsed by default so Guild bounties are visible immediately without clutter
+    reviewDetailsEl.open = false;
   }
 
+  const elig = app.reviewerEligibility;
+  const eligBarHtml = elig
+    ? `<div class="reviewer-elig-bar ${elig.eligible ? '' : 'locked'}">
+        <span><strong>${escapeHtml(t('review.eligPrefix'))}</strong> ${escapeHtml(elig.tierLabel || '')}</span>
+        ${!elig.eligible ? `<span class="mono" style="font-size:10.5px;">${escapeHtml(t('review.eligHintLocked'))}</span>` : ''}
+      </div>`
+    : '';
+
   if (pendingItems.length === 0) {
-    listEl.innerHTML = `<div class="empty-state">${escapeHtml(t('review.empty'))}</div>`;
+    listEl.innerHTML = `${eligBarHtml}<div class="empty-state">${escapeHtml(t('review.empty'))}</div>`;
   } else {
     const tasks = app.state?.tasks || [];
     const projects = app.state?.projects || [];
 
-    listEl.innerHTML = pendingItems
+    listEl.innerHTML = eligBarHtml + pendingItems
       .map((item) => {
         const lr = localizeReviewItem(item, loc, { tasks, projects });
         const ai = item.aiReview || item.aiReport || item.blindReview || {};
@@ -1856,8 +1950,7 @@ function renderGuildTab() {
     return;
   }
 
-  listEl.innerHTML = tasks
-    .map((task) => {
+  const renderGuildCard = (task) => {
       const lt = localizeTask(task, loc);
       const proj = projectMap.get(task.projectId);
       const lp = proj ? localizeProject(proj, loc) : null;
@@ -1928,6 +2021,8 @@ function renderGuildTab() {
               ${stakeGold > 0 ? `<span style="color: var(--accent-amber);">🔒 ${stakeGold}G</span>` : ''}
             </span>
             <div class="toolbar-group">
+              ${isWorking && task.claimExpiresAt ? `<span class="lease-countdown-pill">${escapeHtml(t('task.leaseLeft', { time: formatLeaseRemaining(task.claimExpiresAt) }))}</span>` : ''}
+              ${isWorking ? `<button type="button" class="btn btn-sm" data-release-task="${escapeHtml(task.id)}">${escapeHtml(t('task.releaseBtn'))}</button>` : ''}
               ${
                 isCompleted
                   ? `<button type="button" class="btn btn-sm btn-primary" data-inspect-task="${escapeHtml(task.id)}">${escapeHtml(t('factory.inspect'))} (${task.verification?.score ?? 90})</button>`
@@ -1941,8 +2036,8 @@ function renderGuildTab() {
           </div>
         </article>
       `;
-    })
-    .join('');
+  };
+  listEl.innerHTML = renderGroupedTaskFolders('guild', tasks, projectMap, renderGuildCard, loc);
   hydrateWorkerPortraits(listEl);
 }
 
@@ -3799,6 +3894,60 @@ function bindEvents() {
   $('review-queue-details')?.addEventListener('toggle', () => {
     const el = $('review-queue-details');
     if (el) el.dataset.userToggled = '1';
+  });
+
+  // Track collapsible project-grouped task folders & expand/cancel actions
+  document.addEventListener(
+    'toggle',
+    (e) => {
+      const folder = e.target;
+      if (folder?.matches?.('details.task-group-folder')) {
+        const key = folder.dataset.taskGroup;
+        if (!key) return;
+        if (folder.open) {
+          app.openTaskGroups.add(key);
+          app.closedTaskGroups.delete(key);
+        } else {
+          app.closedTaskGroups.add(key);
+          app.openTaskGroups.delete(key);
+        }
+      }
+    },
+    true,
+  );
+
+  document.addEventListener('click', async (e) => {
+    const expandBtn = e.target.closest('[data-expand-group]');
+    if (expandBtn) {
+      const gKey = expandBtn.dataset.expandGroup;
+      if (app.expandedTaskGroups.has(gKey)) app.expandedTaskGroups.delete(gKey);
+      else app.expandedTaskGroups.add(gKey);
+      soundFX.playClick();
+      if (gKey.startsWith('factory:')) renderFactoryTab();
+      else renderGuildTab();
+      return;
+    }
+
+    const releaseBtn = e.target.closest('[data-release-task]');
+    if (releaseBtn) {
+      const taskId = releaseBtn.dataset.releaseTask;
+      if (!window.confirm(t('task.releaseConfirm'))) return;
+      releaseBtn.disabled = true;
+      try {
+        const res = await apiFetch(`/api/tasks/${encodeURIComponent(taskId)}/release`, {
+          method: 'POST',
+          body: { reason: 'User voluntary cancellation' },
+        });
+        if (res.state) applyNewState(res.state);
+        soundFX.playClick();
+        showToast(t('task.releasedToast'), 'info');
+      } catch (err) {
+        soundFX.playReject();
+        showToast(err.message, 'error');
+      } finally {
+        releaseBtn.disabled = false;
+      }
+    }
   });
 
   // HUD controls: logged-in users open Personal Profile & Project History; Demo guests open Auth modal

@@ -748,6 +748,9 @@
                 : '<span class="pill muted">🎮 Demo</span>';
           const roleBadge = u.role === 'founder' ? '<span class="pill gold">👑 鎮長</span>' : '<span class="pill muted">一般</span>';
           const proBadge = u.isPro ? ' <span class="pill pink">💎 PRO</span>' : '';
+          const reviewerToggle = u.role !== 'founder'
+            ? ` <button type="button" class="btn" style="padding:2px 6px;font-size:10.5px;margin-top:3px;" data-toggle-reviewer="${esc(u.id)}" data-next-reviewer="${u.isVerifiedReviewer ? '0' : '1'}">${u.isVerifiedReviewer ? '🎓 已認證審閱官 (撤銷)' : '➕ 授與資深審閱官'}</button>`
+            : '';
           const walletHtml = u.walletAddress
             ? `<span class="mono" style="font-size:11px;">[${esc(u.walletChain)}] ${esc(u.walletAddress.slice(0, 8))}...${esc(u.walletAddress.slice(-6))}</span>`
             : '<span style="color:var(--muted);">未綁定</span>';
@@ -755,7 +758,7 @@
             <tr>
               <td><strong>${esc(u.displayName)}</strong><div class="mono" style="font-size:11px;color:var(--muted);">@${esc(u.username)}</div></td>
               <td>${modePill}</td>
-              <td>${roleBadge}${proBadge}</td>
+              <td><div>${roleBadge}${proBadge}</div>${reviewerToggle}</td>
               <td class="mono" style="font-size:11px;">${esc(u.email || '—')}</td>
               <td class="mono"><strong>${u.gold}G</strong> / <span style="color:var(--emerald);">$${Number(u.usdBalance).toFixed(2)}</span></td>
               <td class="mono">信譽 ${u.reputation} · ${u.completedTasks}單 · ${u.workersCount}小人</td>
@@ -1228,6 +1231,20 @@
           const data = await res.json();
           if (!res.ok || !data.ok) return showToast(data.error || '儲存備註失敗', true);
           showToast('💾 鎮長備註已儲存！');
+          return loadOverview();
+        }
+        const toggleRevBtn = ev.target.closest('[data-toggle-reviewer]');
+        if (toggleRevBtn) {
+          const uid = toggleRevBtn.getAttribute('data-toggle-reviewer');
+          const nextVal = toggleRevBtn.getAttribute('data-next-reviewer') === '1';
+          const res = await fetch(`/api/admin/users/${encodeURIComponent(uid)}/reviewer`, {
+            method: 'PATCH',
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ isVerifiedReviewer: nextVal }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) return showToast(data.error || '更新審閱官資格失敗', true);
+          showToast(nextVal ? '🎓 已授予認證資深審閱官資格！' : '🔒 已撤銷認證審閱官資格');
           return loadOverview();
         }
         const copyBtn = ev.target.closest('[data-copy]');

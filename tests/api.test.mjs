@@ -3634,4 +3634,185 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       await fs.rm(isoDir, { recursive: true, force: true });
     }
   });
+
+  it('38. Bounty claim auto-expiry reaper (50% stake forfeit, -3 rep), release ownership guard & Senior Reviewer qualification', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-lease-reviewer-'));
+    const prevGuildLease = process.env.CLAIM_LEASE_GUILD_MS;
+    process.env.CLAIM_LEASE_GUILD_MS = '120'; // 120ms lease for deterministic auto-expiry test
+
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      // 1. Register two real users: Squatter (Alice) and Bystander (Bob)
+      const regAlice = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'squatter@pixelcompute.test',
+        password: 'squatter-password-123',
+        displayName: 'Alice Squatter',
+      });
+      assert.equal(regAlice.status, 201);
+      const aliceCookie = regAlice.cookie;
+      const aliceId = regAlice.json.user.id;
+
+      const regBob = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'bystander@pixelcompute.test',
+        password: 'bystander-password-123',
+        displayName: 'Bob Engineer',
+      });
+      assert.equal(regBob.status, 201);
+      const bobCookie = regBob.cookie;
+      const bobId = regBob.json.user.id;
+
+      // 2. Give Alice a peripheral-only task completion (docs) -> MUST STILL BE BLOCKED from reviewing core PRs!
+      const aliceBoot0 = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, aliceCookie);
+      const aliceApiWorker = aliceBoot0.json.state.workers.find((w) => w.track === 'api');
+      await apiJson(isoUrl, 'POST', '/api/tasks/task-meta-slogan/claim', { workerId: aliceApiWorker.id }, aliceCookie);
+      const periphSub = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/tasks/task-meta-slogan/submit',
+        {
+          workerId: aliceApiWorker.id,
+          content: '# Slogans\n1. Build open source in 8-bit.\n2. Idle AI meets transparent merit.\n3. Every contributor shines.',
+        },
+        aliceCookie,
+      );
+      assert.equal(periphSub.status, 200);
+      assert.equal(periphSub.json.passed, true);
+
+      const periphReviewAttempt = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/reviews/rev-clean-01/decide',
+        { decision: 'approve', reason: 'Peripheral farmer trying to review core PR' },
+        aliceCookie,
+      );
+      assert.equal(periphReviewAttempt.status, 403);
+      assert.equal(periphReviewAttempt.json.code, 'REVIEWER_NOT_ELIGIBLE');
+
+      // 3. Founder appoints Bob as Verified Senior Reviewer via PATCH /api/admin/users/:id/reviewer
+      const appointBlocked = await apiJson(
+        isoUrl,
+        'PATCH',
+        `/api/admin/users/${bobId}/reviewer`,
+        { isVerifiedReviewer: true },
+        aliceCookie,
+      );
+      assert.equal(appointBlocked.status, 403);
+
+      const appointOk = await apiJson(
+        isoUrl,
+        'PATCH',
+        `/api/admin/users/${bobId}/reviewer`,
+        { isVerifiedReviewer: true },
+      );
+      assert.equal(appointOk.status, 200);
+      assert.equal(appointOk.json.isVerifiedReviewer, true);
+
+      const bobBoot = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, bobCookie);
+      assert.equal(bobBoot.json.reviewerEligibility.eligible, true);
+      assert.equal(bobBoot.json.reviewerEligibility.tier, 'verified_reviewer');
+
+      // Verified Senior Reviewer Bob can approve rev-clean-01 cleanly
+      const bobApprove = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/reviews/rev-clean-01/decide',
+        { decision: 'approve', reason: 'Verified Senior Reviewer inspected diff & tests' },
+        bobCookie,
+      );
+      assert.equal(bobApprove.status, 200);
+      assert.equal(bobApprove.json.ok, true);
+
+      // 4. Self-review ban: Bob submits his own guild PR for review -> attempting to approve his own PR MUST return 403 SELF_REVIEW_FORBIDDEN
+      const bobQuotaWorker = bobBoot.json.state.workers.find((w) => w.track === 'quota');
+      // Use a long lease briefly for Bob's self-review test
+      process.env.CLAIM_LEASE_GUILD_MS = '60000';
+      const bobClaim = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/tasks/task-meta-ux/claim',
+        { workerId: bobQuotaWorker.id },
+        bobCookie,
+      );
+      assert.equal(bobClaim.status, 200);
+      assert.ok(bobClaim.json.task.claimExpiresAt, 'Claimed task must set claimExpiresAt');
+
+      // Unrelated user (Alice) trying to cancel Bob's active claim MUST get 403 RELEASE_FORBIDDEN
+      const stealRelease = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/tasks/task-meta-ux/release',
+        { reason: 'Griefing another builder' },
+        aliceCookie,
+      );
+      assert.equal(stealRelease.status, 403);
+      assert.equal(stealRelease.json.code, 'RELEASE_FORBIDDEN');
+
+      const bobSubmitReview = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/tasks/task-meta-ux/submit',
+        {
+          workerId: bobQuotaWorker.id,
+          submitForReview: true,
+          content: '# UX Audit Report\n1. Grouped task folders cut visual clutter by 60%.\n2. Lease countdown prevents bounty squatting.\n3. Senior reviewer gate blocks peripheral farming.',
+        },
+        bobCookie,
+      );
+      assert.equal(bobSubmitReview.status, 200);
+      assert.equal(bobSubmitReview.json.pendingReview, true);
+      const bobRevId = bobSubmitReview.json.reviewItem.id;
+
+      const selfApprove = await apiJson(
+        isoUrl,
+        'POST',
+        `/api/reviews/${bobRevId}/decide`,
+        { decision: 'approve', reason: 'Trying to self-approve my own PR' },
+        bobCookie,
+      );
+      assert.equal(selfApprove.status, 403);
+      assert.equal(selfApprove.json.code, 'SELF_REVIEW_FORBIDDEN');
+
+      // 5. Bounty claim auto-expiry reaper: Alice claims a 30G-stake guild bounty with 100ms lease and ghosts -> auto-released with 50% stake forfeit & -3 rep!
+      process.env.CLAIM_LEASE_GUILD_MS = '100';
+      const aliceBoot1 = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, aliceCookie);
+      const aliceQuotaWorker = aliceBoot1.json.state.workers.find((w) => w.track === 'quota');
+      const aliceGoldBefore = aliceBoot1.json.state.player.gold;
+      const aliceRepBefore = aliceBoot1.json.state.player.reputation;
+
+      const aliceClaim = await apiJson(
+        isoUrl,
+        'POST',
+        '/api/tasks/task-i18n-ast-pr/claim',
+        { workerId: aliceQuotaWorker.id },
+        aliceCookie,
+      );
+      assert.equal(aliceClaim.status, 200);
+      assert.equal(aliceClaim.json.stakedGold, 30);
+      assert.equal(aliceClaim.json.state.player.gold, aliceGoldBefore - 30);
+
+      // Wait for lease to expire
+      await new Promise((r) => setTimeout(r, 160));
+
+      // Trigger fresh check via /api/bootstrap -> auto-reaps expired claim!
+      const aliceAfterExpire = await apiJson(isoUrl, 'GET', '/api/bootstrap', undefined, aliceCookie);
+      const expiredTask = aliceAfterExpire.json.state.tasks.find((t) => t.id === 'task-i18n-ast-pr');
+      assert.equal(expiredTask.status, 'open', 'Expired task must automatically revert to open');
+      assert.equal(expiredTask.claimedBy, null);
+      assert.equal(expiredTask.claimExpiresAt, null);
+      assert.equal(aliceAfterExpire.json.state.player.gold, aliceGoldBefore - 15, '50% stake (15G) refunded, 50% (15G) forfeited');
+      assert.equal(aliceAfterExpire.json.state.player.reputation, aliceRepBefore - 3, 'Squatter must lose 3 reputation points');
+
+      const overview = await apiJson(isoUrl, 'GET', '/api/admin/overview');
+      const auditTypes = new Set(overview.json.auditLog.map((a) => a.eventType));
+      assert.ok(auditTypes.has('task_claim_expired'), 'SQLite audit_log must record task_claim_expired');
+      assert.ok(auditTypes.has('reviewer_badge_updated'), 'SQLite audit_log must record reviewer_badge_updated');
+    } finally {
+      if (prevGuildLease === undefined) delete process.env.CLAIM_LEASE_GUILD_MS;
+      else process.env.CLAIM_LEASE_GUILD_MS = prevGuildLease;
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -4260,6 +4260,126 @@ body[data-theme='day'] .card-details {
   border-color: #b4a7db;
 }
 
+/* Collapsible Project-Grouped Task Folders */
+.task-group-folder {
+  border: 2px solid var(--border-pixel);
+  background: var(--bg-input);
+  box-shadow: var(--shadow-pixel-sm);
+}
+
+.task-group-folder[open] {
+  border-color: var(--border-bright);
+}
+
+.task-group-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  user-select: none;
+  background: var(--bg-card);
+  transition: background 0.14s ease;
+}
+
+.task-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-group-summary:hover {
+  background: var(--bg-card-hover);
+}
+
+.task-group-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.task-group-chevron {
+  color: var(--accent-cyan);
+  font-size: 11px;
+  transition: transform 0.14s ease;
+}
+
+.task-group-folder[open] .task-group-chevron {
+  transform: rotate(90deg);
+}
+
+.task-group-counts {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.task-group-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px dashed var(--border-pixel);
+}
+
+.btn-expand-group {
+  width: 100%;
+  justify-content: center;
+  border-style: dashed;
+}
+
+.lease-countdown-pill {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent-amber);
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 183, 77, 0.45);
+  background: rgba(255, 183, 77, 0.1);
+}
+
+.reviewer-elig-bar {
+  padding: 7px 10px;
+  font-size: 11.5px;
+  border: 1px dashed var(--accent-cyan);
+  background: rgba(77, 238, 234, 0.08);
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reviewer-elig-bar.locked {
+  border-color: var(--accent-amber);
+  background: rgba(255, 183, 77, 0.08);
+}
+
+body[data-theme='day'] .task-group-folder {
+  background: #f5f3ff;
+  border-color: #b4a7db;
+}
+
+body[data-theme='day'] .task-group-summary {
+  background: #ffffff;
+}
+
+body[data-theme='day'] .reviewer-elig-bar {
+  background: #ecfeff;
+  color: #164e63;
+}
+
+body[data-theme='day'] .reviewer-elig-bar.locked {
+  background: #fffbeb;
+  color: #92400e;
+}
+
 @media (max-width: 960px) {
   .hud-bar {
     height: auto;

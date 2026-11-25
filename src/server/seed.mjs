@@ -715,6 +715,7 @@ export function ensureStateSchema(state) {
     u.walletAddress = typeof u.walletAddress === 'string' ? u.walletAddress : '';
     u.walletChain = typeof u.walletChain === 'string' ? u.walletChain : '';
     if (typeof u.tutorialBonusClaimed !== 'boolean') u.tutorialBonusClaimed = false;
+    if (typeof u.isVerifiedReviewer !== 'boolean') u.isVerifiedReviewer = false;
     if (typeof u.title !== 'string') u.title = '';
     if (!Array.isArray(u.unlockedTitles)) u.unlockedTitles = [];
     if (!Array.isArray(u.achievements) || u.achievements.length === 0) {

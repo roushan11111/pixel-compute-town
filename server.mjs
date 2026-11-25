@@ -31,7 +31,10 @@ import {
   CORE_BUCKET_PCT,
   DEFAULT_COOLDOWN_SEC,
   DEFAULT_MIN_REPUTATION,
+  EXPIRED_CLAIM_REPUTATION_PENALTY,
   PERIPHERAL_BUCKET_PCT,
+  REVIEWER_MIN_CORE_POINTS,
+  REVIEWER_MIN_REPUTATION,
   REVIEWER_REWARD_GOLD,
   REVIEWER_REWARD_POINTS,
   REVIEW_REJECT_REPUTATION_PENALTY,
@@ -40,6 +43,8 @@ import {
   computeAntiDilutionMeritSplit,
   computeBucketStats,
   ensureProjectBuckets,
+  evaluateReviewerEligibility,
+  getClaimLeaseMs,
   getCooldownSeconds,
   getTaskBucket,
   getTaskMinReputation,
@@ -959,6 +964,90 @@ export function createAppServer(options = {}) {
     ? Number(options.rateLimitWindowMs)
     : 60_000;
   const rateBuckets = new Map();
+
+  function reapExpiredTaskClaimsInState(s, nowMs = Date.now()) {
+    const expired = [];
+    for (const task of s.tasks || []) {
+      if (!task || task.status !== 'in_progress' || !task.claimExpiresAt) continue;
+      const expMs = Date.parse(task.claimExpiresAt);
+      if (!Number.isFinite(expMs) || nowMs < expMs) continue;
+
+      const prevClaimerId = task.claimedBy || task.stakedByUserId || null;
+      const prevWorkerId = task.assignedWorkerId || null;
+      const staked = Number(task.stakedGold || 0);
+      const forfeitedStakeGold = staked > 0 ? Math.floor(staked / 2) : 0;
+      const refundedStakeGold = staked - forfeitedStakeGold;
+
+      if (forfeitedStakeGold > 0) {
+        s.antiSlopTreasuryGold = Number(s.antiSlopTreasuryGold || 0) + forfeitedStakeGold;
+      }
+      const claimer = prevClaimerId ? s.users?.[prevClaimerId] : null;
+      if (claimer) {
+        if (refundedStakeGold > 0) claimer.gold = Number(claimer.gold || 0) + refundedStakeGold;
+        claimer.reputation = Math.max(0, Number(claimer.reputation ?? 100) - EXPIRED_CLAIM_REPUTATION_PENALTY);
+        syncUserLeaderboard(s, claimer);
+      }
+
+      if (prevWorkerId) {
+        const cross = findWorkerAcrossUsers(s, prevWorkerId);
+        if (cross?.worker && cross.worker.currentTaskId === task.id) {
+          cross.worker.status = 'idle';
+          cross.worker.currentTaskId = null;
+          cross.worker.currentProjectId = null;
+          cross.worker.currentZone = 'lounge';
+          cross.worker.lastMessage = '認領超時已自動釋放任務，請記得及時交卷或主動放棄！';
+        }
+      }
+
+      task.status = 'open';
+      task.assignedWorkerId = null;
+      task.claimedBy = null;
+      task.claimedAt = null;
+      task.claimExpiresAt = null;
+      task.stakedGold = 0;
+      task.stakedByUserId = null;
+
+      pushActivity(s, {
+        type: 'release',
+        icon: '⏰',
+        message: `任務《${task.title}》認領逾時未交付，系統已自動釋放回任務板（${forfeitedStakeGold > 0 ? `扣除 50% 押金 ${forfeitedStakeGold}G、退還 ${refundedStakeGold}G，` : ''}信譽 -${EXPIRED_CLAIM_REPUTATION_PENALTY}）`,
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+
+      expired.push({
+        taskId: task.id,
+        title: task.title,
+        claimerId: prevClaimerId,
+        forfeitedStakeGold,
+        refundedStakeGold,
+      });
+    }
+    return expired;
+  }
+
+  async function ensureFreshTaskLeases() {
+    const snap = await store.load();
+    const nowMs = Date.now();
+    const hasExpired = (snap.tasks || []).some(
+      (t) => t && t.status === 'in_progress' && t.claimExpiresAt && nowMs >= Date.parse(t.claimExpiresAt),
+    );
+    if (!hasExpired) return [];
+    const { state, result } = await store.mutate((s) => {
+      ensureStateSchema(s);
+      return reapExpiredTaskClaimsInState(s, Date.now());
+    });
+    if (result && result.length > 0) {
+      for (const exp of result) {
+        store.appendAudit(
+          'task_claim_expired',
+          `Auto-released expired claim on ${exp.taskId} (claimer=${exp.claimerId || 'unknown'}, forfeited=${exp.forfeitedStakeGold}G)`,
+        );
+      }
+      sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+    }
+    return result || [];
+  }
   const feedbackRateBuckets = new Map();
   const feedbackRateMax = options.feedbackRateLimitMax !== undefined
     ? Number(options.feedbackRateLimitMax)
@@ -1187,6 +1276,7 @@ export function createAppServer(options = {}) {
             role: u.role || 'user',
             isDemo: u.id === FOUNDER_USER_ID && u.authMode === 'demo',
             isPro: Boolean(u.isPro),
+            isVerifiedReviewer: Boolean(u.isVerifiedReviewer),
             gold: Number(u.gold || 0),
             usdBalance: round2(u.usdBalance || 0),
             reputation: Number(u.reputation ?? 100),
@@ -1453,6 +1543,47 @@ export function createAppServer(options = {}) {
           playerGold: result.user.gold,
           state: projectClientState(state, result.user.id),
         });
+      }
+
+      // Founder Appoint / Revoke Verified Senior Reviewer: PATCH /api/admin/users/:id/reviewer
+      const adminReviewerMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/reviewer$/);
+      if (adminReviewerMatch && method === 'PATCH') {
+        const targetUserId = decodeURIComponent(adminReviewerMatch[1]);
+        const body = await parseJsonBody(req);
+        const nextVal = Boolean(body?.isVerifiedReviewer);
+
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          if (!isFounderAdmin(req, ctx)) {
+            throw new HttpError(403, '僅限創始鎮長授予或撤銷資深審閱官資格', { code: 'ADMIN_ONLY' });
+          }
+          const target = s.users?.[targetUserId];
+          if (!target) {
+            throw new HttpError(404, `找不到用戶：${targetUserId}`);
+          }
+          target.isVerifiedReviewer = nextVal;
+          pushActivity(s, {
+            type: 'admin',
+            icon: nextVal ? '🎓' : '🔒',
+            message: nextVal
+              ? `鎮長已授予 ${target.displayName}【🎓 認證資深審閱官】資格！`
+              : `鎮長已撤銷 ${target.displayName} 的認證審閱官資格。`,
+          });
+          return {
+            targetId: target.id,
+            targetName: target.displayName,
+            isVerifiedReviewer: nextVal,
+            adminName: ctx.user.displayName || ctx.user.username || 'Founder',
+          };
+        });
+
+        store.appendAudit(
+          'reviewer_badge_updated',
+          `Founder ${result.adminName} set isVerifiedReviewer=${result.isVerifiedReviewer} for ${result.targetName} (${result.targetId})`,
+        );
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+        return sendJson(res, 200, { ok: true, ...result });
       }
 
       // Admin SQLite Backup Export: GET /api/admin/export-backup
@@ -1777,11 +1908,22 @@ export function createAppServer(options = {}) {
 
       // Bootstrap payload (multi-user projected + v1.0 configs + adminData)
       if (pathname === '/api/bootstrap' && method === 'GET') {
+        await ensureFreshTaskLeases();
         const state = await store.load();
         const ctx = getActiveUserContext(req, state);
         const user = sanitizeUserForClient(ctx.user);
         const projected = projectClientState(state, ctx.userId);
         const isAdmin = isFounderAdmin(req, ctx);
+        const reviewerEligibility = isAdmin
+          ? {
+            eligible: true,
+            code: null,
+            tier: 'founder',
+            tierLabel: '👑 創始鎮長審閱權',
+            reason: '創始鎮長擁有全域最高審閱權限',
+            requirements: { minReputation: REVIEWER_MIN_REPUTATION, minCorePoints: REVIEWER_MIN_CORE_POINTS },
+          }
+          : evaluateReviewerEligibility(ctx.user, null, null, state.projects);
         const { pendingDevices, allDevices } = getAdminDevicesData(state);
         const peerReviewRequired = Boolean(state.settings?.peerReviewRequired);
         const liveProductionMode = Boolean(state.settings?.liveProductionMode);
@@ -1789,6 +1931,7 @@ export function createAppServer(options = {}) {
         return sendJson(res, 200, {
           ok: true,
           user,
+          reviewerEligibility,
           state: projected,
           settings: {
             strictDeviceReview: Boolean(state.settings?.strictDeviceReview),
@@ -3352,8 +3495,10 @@ export function createAppServer(options = {}) {
       if (claimMatch && method === 'POST') {
         const taskId = decodeURIComponent(claimMatch[1]);
         const body = await parseJsonBody(req);
+        await ensureFreshTaskLeases();
 
         const { state, result } = await store.mutate((s) => {
+          reapExpiredTaskClaimsInState(s, Date.now());
           const ctx = getActiveUserContext(req, s);
           const user = ctx.user;
           const task = s.tasks.find((t) => t.id === taskId);
@@ -3455,11 +3600,14 @@ export function createAppServer(options = {}) {
             }
           }
 
-          const now = new Date().toISOString();
+          const nowMs = Date.now();
+          const now = new Date(nowMs).toISOString();
+          const leaseMs = getClaimLeaseMs(task.track, options);
           task.status = 'in_progress';
           task.assignedWorkerId = worker.id;
           task.claimedBy = user.id;
           task.claimedAt = now;
+          task.claimExpiresAt = new Date(nowMs + leaseMs).toISOString();
 
           worker.status = 'working';
           worker.currentTaskId = task.id;
@@ -3518,6 +3666,17 @@ export function createAppServer(options = {}) {
           if (task.status === 'pending_review') {
             throw new HttpError(409, '此任務正在實幹審閱佇列中，無法直接釋放');
           }
+          const proj = s.projects.find((p) => p.id === task.projectId) || null;
+          const isMaintainer = Boolean(proj && (proj.originatorId === user.id || proj.creatorId === user.id));
+          if (
+            task.status === 'in_progress'
+            && task.claimedBy
+            && task.claimedBy !== user.id
+            && !isMaintainer
+            && !isFounderAdmin(req, ctx)
+          ) {
+            throw new HttpError(403, '僅限認領者本人、項目維護者或創始鎮長可取消此任務', { code: 'RELEASE_FORBIDDEN' });
+          }
 
           const targetWorkerId = body.workerId || task.assignedWorkerId;
           let worker = targetWorkerId
@@ -3543,6 +3702,7 @@ export function createAppServer(options = {}) {
           task.assignedWorkerId = null;
           task.claimedBy = null;
           task.claimedAt = null;
+          task.claimExpiresAt = null;
           task.stakedGold = 0;
           task.stakedByUserId = null;
 
@@ -4034,12 +4194,25 @@ export function createAppServer(options = {}) {
       if (pathname === '/api/reviews' && method === 'GET') {
         const state = await store.load();
         ensureStateSchema(state);
+        const ctx = getActiveUserContext(req, state);
+        const isAdmin = isFounderAdmin(req, ctx);
+        const reviewerEligibility = isAdmin
+          ? {
+            eligible: true,
+            code: null,
+            tier: 'founder',
+            tierLabel: '👑 創始鎮長審閱權',
+            reason: '創始鎮長擁有全域最高審閱權限',
+            requirements: { minReputation: REVIEWER_MIN_REPUTATION, minCorePoints: REVIEWER_MIN_CORE_POINTS },
+          }
+          : evaluateReviewerEligibility(ctx.user, null, null, state.projects);
         return sendJson(res, 200, {
           ok: true,
           reviewQueue: state.reviewQueue || [],
           reviewHistory: state.reviewHistory || [],
           peerReviewRequired: Boolean(state.settings?.peerReviewRequired),
           projectBuckets: buildProjectBucketsMap(state),
+          reviewerEligibility,
           reviewerRewards: {
             approveGold: REVIEWER_REWARD_GOLD,
             approvePoints: REVIEWER_REWARD_POINTS,
@@ -4071,11 +4244,14 @@ export function createAppServer(options = {}) {
           const item = s.reviewQueue[idx];
           const proj = s.projects.find((p) => p.id === item.projectId) || null;
 
-          if (!canUserReview(reviewer, proj)) {
+          const elig = isFounderAdmin(req, ctx)
+            ? { eligible: true, tier: 'founder', tierLabel: '👑 創始鎮長審閱權' }
+            : evaluateReviewerEligibility(reviewer, proj, item, s.projects);
+          if (!elig.eligible) {
             throw new HttpError(
               403,
-              '審閱權限不足：僅限創始鎮長、項目發起人或該項目既有貢獻者可參與實幹審閱，防止無關新小號亂審',
-              { code: 'REVIEWER_NOT_ELIGIBLE' },
+              elig.reason || '審閱權限不足：僅限資深核心工程師、項目維護者或鎮長認證審閱官可參與審閱',
+              { code: elig.code || 'REVIEWER_NOT_ELIGIBLE', eligibility: elig },
             );
           }
 
@@ -4948,8 +5124,16 @@ export function createAppServer(options = {}) {
   server.sseHub = sseHub;
   server.store = store;
 
+  const leaseReaperTimer = setInterval(() => {
+    ensureFreshTaskLeases().catch(() => {});
+  }, 60_000);
+  if (typeof leaseReaperTimer.unref === 'function') {
+    leaseReaperTimer.unref();
+  }
+
   const originalClose = server.close.bind(server);
   server.close = (cb) => {
+    clearInterval(leaseReaperTimer);
     sseHub.closeAll();
     return originalClose((err) => {
       try {

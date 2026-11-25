@@ -15,6 +15,27 @@ export const DEFAULT_MIN_REPUTATION = 60;
 export const DEFAULT_GUILD_STAKE_GOLD = 25;
 export const HIGH_BOUNTY_STAKE_GOLD = 30;
 export const REVIEW_REJECT_REPUTATION_PENALTY = 5;
+export const REVIEWER_MIN_REPUTATION = 95;
+export const REVIEWER_MIN_CORE_POINTS = 50;
+export const REVIEWER_MIN_COMPLETED_TASKS = 2;
+export const DEFAULT_API_CLAIM_LEASE_MS = 30 * 60 * 1000;
+export const DEFAULT_GUILD_CLAIM_LEASE_MS = 24 * 60 * 60 * 1000;
+export const EXPIRED_CLAIM_REPUTATION_PENALTY = 3;
+
+export function getClaimLeaseMs(track, overrides = {}) {
+  if (track === 'api_auto') {
+    const opt = Number(overrides.claimLeaseApiMs);
+    if (Number.isFinite(opt) && opt > 0) return opt;
+    const envVal = Number(process.env.CLAIM_LEASE_API_MS);
+    if (Number.isFinite(envVal) && envVal > 0) return envVal;
+    return DEFAULT_API_CLAIM_LEASE_MS;
+  }
+  const opt = Number(overrides.claimLeaseGuildMs);
+  if (Number.isFinite(opt) && opt > 0) return opt;
+  const envVal = Number(process.env.CLAIM_LEASE_GUILD_MS);
+  if (Number.isFinite(envVal) && envVal > 0) return envVal;
+  return DEFAULT_GUILD_CLAIM_LEASE_MS;
+}
 
 const CORE_CATEGORIES = new Set(['feature_pr', 'architecture', 'bugfix']);
 const PERIPHERAL_CATEGORIES = new Set(['i18n', 'docs', 'pixel_spec', 'unit_test', 'qa_audit']);
@@ -334,15 +355,128 @@ export function computeAntiDilutionMeritSplit(project, meritPoolUsd) {
   };
 }
 
-export function canUserReview(user, project) {
-  if (!user || typeof user !== 'object') return false;
-  if (user.role === 'founder') return true;
-  if (!project || typeof project !== 'object') return false;
-  if (project.originatorId === user.id || project.creatorId === user.id) return true;
-  if (Number(project.contributions?.[user.id] || 0) > 0) return true;
-  if (Number(project.bucketPoints?.core?.[user.id] || 0) > 0) return true;
-  if (Number(project.bucketPoints?.peripheral?.[user.id] || 0) > 0) return true;
-  return false;
+export function evaluateReviewerEligibility(user, project = null, reviewItem = null, allProjects = null) {
+  const requirements = {
+    minReputation: REVIEWER_MIN_REPUTATION,
+    minCorePoints: REVIEWER_MIN_CORE_POINTS,
+    minCompletedTasks: REVIEWER_MIN_COMPLETED_TASKS,
+  };
+
+  if (!user || typeof user !== 'object') {
+    return {
+      eligible: false,
+      code: 'REVIEWER_NOT_ELIGIBLE',
+      tier: 'none',
+      tierLabel: '未登入',
+      reason: '請先登入帳號',
+      requirements,
+    };
+  }
+
+  if (user.role === 'founder') {
+    return {
+      eligible: true,
+      code: null,
+      tier: 'founder',
+      tierLabel: '👑 創始鎮長審閱權',
+      reason: '創始鎮長擁有全域最高審閱權限',
+      requirements,
+    };
+  }
+
+  // Strict anti-collusion rule: nobody (other than founder emergency override) may approve/reject their own submission
+  if (reviewItem && reviewItem.submittedByUserId && reviewItem.submittedByUserId === user.id) {
+    return {
+      eligible: false,
+      code: 'SELF_REVIEW_FORBIDDEN',
+      tier: 'self',
+      tierLabel: '🚫 不可自審',
+      reason: '禁止審核自己提交的 PR！必須由其他資深核心工程師、項目維護者或鎮長認證審閱官進行盲審。',
+      requirements,
+    };
+  }
+
+  // Block accounts currently carrying anti-slop strikes or cooldowns
+  const hasSlopPenalty = Array.isArray(user.workers)
+    && user.workers.some((w) => w && ((Number(w.slopStrikes) || 0) > 0 || (w.cooldownUntil && Date.parse(w.cooldownUntil) > Date.now())));
+  if (hasSlopPenalty) {
+    return {
+      eligible: false,
+      code: 'REVIEWER_NOT_ELIGIBLE',
+      tier: 'restricted',
+      tierLabel: '⚠️ 違規限制中',
+      reason: '帳號目前存在未清除的反刷單違規紀錄，暫時停權審閱資格',
+      requirements,
+    };
+  }
+
+  // Tier A: Founder-appointed Verified Senior Reviewer
+  if (user.isVerifiedReviewer === true) {
+    return {
+      eligible: true,
+      code: null,
+      tier: 'verified_reviewer',
+      tierLabel: '🎓 鎮長認證資深審閱官',
+      reason: '經創始鎮長認證具備工程實戰背景之資深審閱官',
+      requirements,
+    };
+  }
+
+  // Tier B: Project Originator / Maintainer
+  if (project && typeof project === 'object' && (project.originatorId === user.id || project.creatorId === user.id)) {
+    return {
+      eligible: true,
+      code: null,
+      tier: 'maintainer',
+      tierLabel: '🛡️ 項目維護者',
+      reason: '該開源項目原創維護者擁有合併審閱權',
+      requirements,
+    };
+  }
+
+  // Tier C: Proven Senior Core Engineer (strictly core engineering points + high reputation — peripheral docs/translation points DO NOT qualify!)
+  const rep = Number(user.reputation ?? 0);
+  const projectCorePts = project && typeof project === 'object'
+    ? Number(project.bucketPoints?.core?.[user.id] || 0)
+    : 0;
+  let globalCorePts = projectCorePts;
+  if (Array.isArray(allProjects)) {
+    globalCorePts = allProjects.reduce((sum, p) => sum + Number(p?.bucketPoints?.core?.[user.id] || 0), 0);
+  }
+  const completedTasks = Number(user.completedTasks || 0);
+
+  if (
+    rep >= REVIEWER_MIN_REPUTATION
+    && (projectCorePts >= REVIEWER_MIN_CORE_POINTS || (globalCorePts >= REVIEWER_MIN_CORE_POINTS && completedTasks >= REVIEWER_MIN_COMPLETED_TASKS))
+  ) {
+    return {
+      eligible: true,
+      code: null,
+      tier: 'senior_core_engineer',
+      tierLabel: '⚡ 實戰核心工程師',
+      reason: `已通過核心工程實戰認證（核心池 ${Math.max(projectCorePts, globalCorePts)} pt · 信譽 ${rep}）`,
+      requirements,
+    };
+  }
+
+  return {
+    eligible: false,
+    code: 'REVIEWER_NOT_ELIGIBLE',
+    tier: 'unqualified',
+    tierLabel: '🔒 尚未具備審閱資格',
+    reason: `審閱權限僅開放給資深工程師：需「核心工程池實戰 ≥ ${REVIEWER_MIN_CORE_POINTS} pt 且信譽 ≥ ${REVIEWER_MIN_REPUTATION}」（週邊文件/翻譯分不計入）、項目維護者，或由鎮長於後臺授予認證審閱官！`,
+    stats: {
+      reputation: rep,
+      projectCorePoints: projectCorePts,
+      globalCorePoints: globalCorePts,
+      completedTasks,
+    },
+    requirements,
+  };
+}
+
+export function canUserReview(user, project, reviewItem = null, allProjects = null) {
+  return evaluateReviewerEligibility(user, project, reviewItem, allProjects).eligible;
 }
 
 export function runAiBlindReview(task, content = '', prUrl = '') {
