@@ -8,3 +8,4 @@ data/
 Thumbs.db
 *.log
 node_modules/
+launch-assets/
