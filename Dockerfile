@@ -1,5 +1,5 @@
-# PixelCompute Town (像素算力鎮) — Zero-Dependency Production Container
-FROM node:22-alpine
+# PixelCompute Town (像素算力鎮) — Zero-Dependency Production Container (Node 24 + Native SQLite WAL)
+FROM node:24-alpine
 
 WORKDIR /app
 
