@@ -54,6 +54,8 @@ const I18N = {
     'step1.tabRegister': '✨ 免費信箱註冊',
     'step1.tabLogin': '🔑 已有帳號登入',
     'step1.nameLabel': '鎮長暱稱',
+    'step1.namePlaceholder': '例如：CyberBuilder',
+    'step1.demoDisplayName': '創始鎮長 (Demo)',
     'step1.emailLabel': '電子信箱',
     'step1.passwordLabel': '密碼（至少 6 字元）',
     'step1.registerSubmit': '✨ 立即註冊並使用此帳號',
@@ -69,6 +71,7 @@ const I18N = {
     'step2.title': '挑選本機裝置的 32×32 HD 像素小人化身',
     'step2.desc': '您的本機終端將化身這位像素小人進駐小鎮工位，即時敲碼直播心跳。',
     'step2.nicknameLabel': '自訂像素小人暱稱',
+    'step2.nicknamePlaceholder': '例如：本機架構師 Pro-01',
     'step3.title': '最終核准與裝置綁定',
     'step3.desc': '確認上方權限清單、帳號與像素小人無誤後，點擊下方按鈕完成核准。',
     'step3.sumAccount': '綁定帳號',
@@ -138,6 +141,8 @@ const I18N = {
     'step1.tabRegister': '✨ 免费邮箱注册',
     'step1.tabLogin': '🔑 已有账号登录',
     'step1.nameLabel': '镇长昵称',
+    'step1.namePlaceholder': '例如：CyberBuilder',
+    'step1.demoDisplayName': '创始镇长 (Demo)',
     'step1.emailLabel': '电子邮箱',
     'step1.passwordLabel': '密码（至少 6 位）',
     'step1.registerSubmit': '✨ 立即注册并使用此账号',
@@ -153,6 +158,7 @@ const I18N = {
     'step2.title': '挑选本机设备的 32×32 HD 像素小人化身',
     'step2.desc': '您的本机终端将化身这位像素小人进驻小镇工位，实时敲码直播心跳。',
     'step2.nicknameLabel': '自定义像素小人昵称',
+    'step2.nicknamePlaceholder': '例如：本机架构师 Pro-01',
     'step3.title': '最终批准与设备绑定',
     'step3.desc': '确认上方权限清单、账号与像素小人无误后，点击下方按钮完成批准。',
     'step3.sumAccount': '绑定账号',
@@ -222,6 +228,8 @@ const I18N = {
     'step1.tabRegister': '✨ Free Email Sign Up',
     'step1.tabLogin': '🔑 Sign In',
     'step1.nameLabel': 'Mayor Nickname',
+    'step1.namePlaceholder': 'e.g. CyberBuilder',
+    'step1.demoDisplayName': 'Founding Mayor (Demo)',
     'step1.emailLabel': 'Email Address',
     'step1.passwordLabel': 'Password (6+ characters)',
     'step1.registerSubmit': '✨ Create Account & Continue',
@@ -237,6 +245,7 @@ const I18N = {
     'step2.title': 'Choose Your 32×32 HD Pixel Worker Avatar',
     'step2.desc': 'Your local CLI machine will appear as this HD pixel worker typing live inside PixelCompute Town.',
     'step2.nicknameLabel': 'Custom Worker Nickname',
+    'step2.nicknamePlaceholder': 'e.g. Local Architect Pro-01',
     'step3.title': 'Final Approval & Device Binding',
     'step3.desc': 'Verify the permission checklist, account, and pixel worker above, then click approve.',
     'step3.sumAccount': 'Target Account',
@@ -343,9 +352,21 @@ function setLocale(locale, silent = false) {
     if (key) el.textContent = t(key);
   });
 
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (key) el.setAttribute('placeholder', t(key));
+  });
+
   document.querySelectorAll('#onboard-lang-switch .lang-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.lang === state.locale);
   });
+
+  if (!state.workerNameEdited) {
+    const nickInput = document.getElementById('onboard-worker-name');
+    if (nickInput && (state.device || nickInput.value)) {
+      nickInput.value = getDefaultWorkerNickname(state.selectedRole);
+    }
+  }
 
   updateAuthFormUI();
   renderAccountStatus();
@@ -541,6 +562,22 @@ function isFormalUser(user) {
   return Boolean(user.email || user.authMode === 'email' || user.authMode === 'github' || user.authMode === 'google');
 }
 
+function getLocalizedUserDisplayName(user) {
+  if (!user) return t('step1.demoDisplayName');
+  const raw = String(user.displayName || user.username || user.email || '').trim();
+  if (
+    !isFormalUser(user) ||
+    user.id === 'founder-demo' ||
+    raw === '創始鎮長 (Demo)' ||
+    raw === '创始镇长 (Demo)' ||
+    raw === 'Founder Mayor (Demo)' ||
+    raw === 'Founding Mayor (Demo)'
+  ) {
+    return t('step1.demoDisplayName');
+  }
+  return raw || t('step1.demoDisplayName');
+}
+
 function renderAccountStatus() {
   const card = document.getElementById('account-status-card');
   const avatarEl = document.getElementById('account-avatar');
@@ -555,8 +592,7 @@ function renderAccountStatus() {
   if (card) card.classList.toggle('verified', formal);
   if (avatarEl) avatarEl.textContent = formal ? '🛡️' : '🧑‍💻';
   if (nameEl) {
-    nameEl.textContent =
-      (user && (user.displayName || user.username || user.email)) || 'Founder Mayor (Demo)';
+    nameEl.textContent = getLocalizedUserDisplayName(user);
   }
   if (modeEl) {
     modeEl.className = `account-mode-tag ${formal ? 'live' : ''}`;
@@ -633,13 +669,37 @@ async function handleLogout() {
 // 6. STEP 2: 32x32 HD PIXEL WORKER SELECTOR (renderWorkerPortrait)
 // ============================================================================
 
+function fitPrefixOnWordBoundary(rawName, maxChars) {
+  const clean = String(rawName || '')
+    .replace(/\s*\(Demo\)\s*/gi, '')
+    .trim();
+  if (!clean || maxChars <= 0) return '';
+  if (clean.length <= maxChars) return clean;
+  const tokens = clean.split(/[\s._-]+/).filter(Boolean);
+  let result = '';
+  for (const tok of tokens) {
+    const candidate = result ? `${result}-${tok}` : tok;
+    if (candidate.length <= maxChars) {
+      result = candidate;
+    } else {
+      break;
+    }
+  }
+  if (result) return result;
+  return maxChars >= 3 ? 'CLI' : '';
+}
+
 function getDefaultWorkerNickname(roleClass) {
+  const MAX_NICK_LEN = 32;
   const roleLabel = t(`role.${roleClass}.name`);
-  const devPrefix =
-    state.device && state.device.deviceName
-      ? state.device.deviceName.replace(/\s*\(Demo\)\s*/i, '').slice(0, 14)
-      : 'CLI';
-  return `${roleLabel} · ${devPrefix}`;
+  const sep = ' · ';
+  const budget = MAX_NICK_LEN - roleLabel.length - sep.length;
+  const rawDev = state.device && state.device.deviceName ? state.device.deviceName : 'CLI';
+  const devPrefix = fitPrefixOnWordBoundary(rawDev, budget);
+  if (!devPrefix) {
+    return roleLabel.slice(0, MAX_NICK_LEN).trim();
+  }
+  return `${roleLabel}${sep}${devPrefix}`;
 }
 
 function renderWorkerCards() {
@@ -746,9 +806,7 @@ function updateSummary() {
   const wrkEl = document.getElementById('summary-worker');
 
   if (accEl) {
-    accEl.textContent =
-      (state.user && (state.user.displayName || state.user.username || state.user.email)) ||
-      'Founder Mayor (Demo)';
+    accEl.textContent = getLocalizedUserDisplayName(state.user);
   }
   if (devEl) {
     devEl.textContent =

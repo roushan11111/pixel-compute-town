@@ -14,7 +14,7 @@
       <div class="brand-titles">
         <div class="brand-name">
           <span data-i18n="brand.name">像素算力鎮</span>
-          <span class="alpha-pill">v1.0</span>
+          <span class="alpha-pill">v1.2</span>
         </div>
         <div class="brand-sub" data-i18n="brand.sub">PixelCompute Town · BYOK + BYOT 雙軌孵化</div>
       </div>
@@ -531,6 +531,41 @@
             <div class="ledger-list" id="admin-codes-list">
               <div class="empty-state" data-i18n="admin.codesEmpty">尚未生成卡密。</div>
             </div>
+
+            <!-- 📊 系統運維與 SQLite 備份 (v1.2) -->
+            <div class="ops-metrics-box" id="ops-metrics-section">
+              <div class="ops-metrics-head">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <strong class="ops-metrics-title" data-i18n="ops.sectionTitle">📊 系統運維與 SQLite 備份</strong>
+                  <span class="badge green" id="metric-db-driver">SQLite WAL</span>
+                </div>
+                <div class="toolbar-group">
+                  <button type="button" class="btn btn-sm" id="btn-refresh-metrics" data-i18n="ops.refreshBtn">🔄 刷新指標</button>
+                  <button type="button" class="btn btn-sm btn-primary" id="btn-export-backup" data-i18n="ops.exportBtn">📦 一鍵下載完整備份 (JSON)</button>
+                </div>
+              </div>
+              <div class="ops-metrics-grid" id="ops-metrics-grid">
+                <div class="ops-metric-tile">
+                  <span class="ops-metric-label" data-i18n="ops.memoryLabel">記憶體佔用</span>
+                  <strong class="ops-metric-val mono" id="metric-memory">— MB</strong>
+                </div>
+                <div class="ops-metric-tile">
+                  <span class="ops-metric-label" data-i18n="ops.uptimeLabel">運行時長</span>
+                  <strong class="ops-metric-val mono" id="metric-uptime">—</strong>
+                </div>
+                <div class="ops-metric-tile">
+                  <span class="ops-metric-label" data-i18n="ops.chainLabel">溯源哈希鏈</span>
+                  <strong class="ops-metric-val mono" id="metric-chain-health">—</strong>
+                </div>
+                <div class="ops-metric-tile">
+                  <span class="ops-metric-label" data-i18n="ops.sseLabel">即時連線 / 待審</span>
+                  <strong class="ops-metric-val mono" id="metric-sse-reviews">—</strong>
+                </div>
+              </div>
+              <div class="ops-metrics-sub mono" id="ops-metrics-extra" data-i18n="ops.loading">
+                正在載入系統運維指標...
+              </div>
+            </div>
           </div>
         </section>
       </div>
@@ -998,6 +1033,10 @@
         </div>
       </div>
       <div class="modal-footer">
+        <div class="toolbar-group" style="margin-right: auto;">
+          <a class="btn btn-sm btn-primary" id="btn-prov-public-page" href="/p/proj-meta" target="_blank" rel="noopener noreferrer" data-i18n="incubator.publicPageBtn">🔗 公開項目頁</a>
+          <a class="btn btn-sm btn-amber" id="btn-prov-public-verify" href="/verify/" target="_blank" rel="noopener noreferrer" data-i18n="incubator.publicVerifyBtn">🔍 公開查驗</a>
+        </div>
         <button type="button" class="btn" data-close-modal="provenance-modal" data-i18n="btn.closeSimple">關閉</button>
         <button type="button" class="btn btn-green" id="btn-prov-download-cert" data-i18n="modal.provenance.downloadCertBtn">⬇️ 下載創意首發證書 PNG</button>
       </div>

@@ -117,6 +117,8 @@ const app = {
     redeemCodes: [],
     payouts: [],
   },
+  metrics: null,
+  metricsError: false,
   cooldownTimer: null,
   engine: null,
   sse: null,
@@ -221,6 +223,16 @@ function shortHash(str, head = 8, tail = 6) {
   if (!str) return '';
   const s = String(str);
   return s.length > head + tail + 3 ? `${s.slice(0, head)}...${s.slice(-tail)}` : s;
+}
+
+function fmtUptime(totalSec) {
+  const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+  const hrs = Math.floor(sec / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  const rem = sec % 60;
+  if (hrs > 0) return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+  if (mins > 0) return `${mins}m ${String(rem).padStart(2, '0')}s`;
+  return `${rem}s`;
 }
 
 function getWorkerCooldownRemainingSec(worker) {
@@ -639,9 +651,11 @@ function switchTab(tabName, { skipSceneSync = false } = {}) {
     const mappedScene = TAB_TO_SCENE[tabName];
     if (mappedScene) {
       selectScene(mappedScene, { syncTab: false, silent: true });
+      if (tabName === 'revenue') refreshMetricsNow();
       return;
     }
   }
+  if (tabName === 'revenue') refreshMetricsNow();
   syncSceneChipsUI(app.activeScene);
 }
 
@@ -1285,23 +1299,33 @@ async function decideReviewItem(reviewId, decision, triggerBtn = null) {
     }
 
     if (decision === 'approve') {
-      soundFX.playVerify();
-      setTimeout(() => soundFX.playCoin(), 200);
       const rewardGold = Number(res.reviewerRewardGold ?? res.reviewerReward?.gold ?? 15);
       const rewardPts = Number(res.reviewerRewardPoints ?? res.reviewerReward?.points ?? 5);
+      if (typeof soundFX.playApproveFanfare === 'function') {
+        soundFX.playApproveFanfare();
+      } else {
+        soundFX.playVerify();
+        setTimeout(() => soundFX.playCoin(), 200);
+      }
+      app.engine?.triggerReviewDecision?.('approve', rewardGold);
       showToast(
         t('toast.reviewApproved', { gold: rewardGold, pts: rewardPts }),
         'success',
         5000,
       );
     } else {
-      soundFX.playCoin();
-      const slashed = Number(
+      const seizedGold = Number(
         res.slashedStakeGold ?? res.stakeSlashedGold ?? res.seizedGold ?? res.reviewItem?.stakeGold ?? 0,
       );
+      if (typeof soundFX.playSlash === 'function') {
+        soundFX.playSlash();
+      } else {
+        soundFX.playCoin();
+      }
+      app.engine?.triggerReviewDecision?.('reject', seizedGold);
       showToast(
-        slashed > 0
-          ? t('toast.reviewRejected', { stake: slashed })
+        seizedGold > 0
+          ? t('toast.reviewRejected', { stake: seizedGold })
           : t('toast.reviewRejectedNoStake'),
         'achievement',
         5200,
@@ -1480,6 +1504,8 @@ function renderIncubatorTab() {
 
       const ideaHashShort = p.ideaHash ? p.ideaHash.slice(0, 10) : 'GENESIS';
       const originatedStr = fmtUtcShort(p.originatedAt || p.createdAt);
+      const publicPageHref = `/p/${encodeURIComponent(p.slug || p.id)}`;
+      const publicVerifyHref = `/verify/${encodeURIComponent(p.ideaHash || p.id)}`;
 
       const coreCapPct = Number(p.poolCaps?.coreSharePct ?? 70);
       const periphCapPct = Number(p.poolCaps?.peripheralSharePct ?? 30);
@@ -1575,6 +1601,29 @@ function renderIncubatorTab() {
                 </div>`
           }
 
+          ${
+            isBuilding
+              ? `<div class="auto-split-box" data-auto-split-wrap="${escapeHtml(p.id)}">
+                  <div class="auto-split-head">
+                    <span>${escapeHtml(t('incubator.autoSplitTitle'))}</span>
+                    <span class="badge cyan">${escapeHtml(t('incubator.autoSplitBadge'))}</span>
+                  </div>
+                  <div class="auto-split-row">
+                    <input
+                      type="text"
+                      class="input auto-split-input"
+                      data-auto-split-input="${escapeHtml(p.id)}"
+                      maxlength="160"
+                      placeholder="${escapeHtml(t('incubator.autoSplitPlaceholder'))}"
+                    />
+                    <button type="button" class="btn btn-sm btn-primary" data-auto-split-btn="${escapeHtml(p.id)}">
+                      ${escapeHtml(t('incubator.autoSplitBtn'))}
+                    </button>
+                  </div>
+                </div>`
+              : ''
+          }
+
           <div class="card-footer">
             <div class="toolbar-group">
               <button
@@ -1588,6 +1637,12 @@ function renderIncubatorTab() {
               <button type="button" class="btn btn-sm btn-amber" data-open-provenance="${escapeHtml(p.id)}">
                 ${escapeHtml(t('incubator.certBtn'))}
               </button>
+              <a class="btn btn-sm" href="${publicPageHref}" target="_blank" rel="noopener noreferrer">
+                ${escapeHtml(t('incubator.publicPageBtn'))}
+              </a>
+              <a class="btn btn-sm" href="${publicVerifyHref}" target="_blank" rel="noopener noreferrer">
+                ${escapeHtml(t('incubator.publicVerifyBtn'))}
+              </a>
               ${
                 !p.sponsoredBillboard
                   ? `<button type="button" class="btn btn-sm" data-billboard-project="${escapeHtml(p.id)}">${escapeHtml(t('incubator.billboardBtn', { price: billboardPrice }))}</button>`
@@ -2032,6 +2087,184 @@ function renderMayorAdminSection() {
           `;
         })
         .join('');
+    }
+  }
+
+  renderOpsMetricsSection();
+}
+
+function renderOpsMetricsSection() {
+  const driverEl = $('metric-db-driver');
+  const memEl = $('metric-memory');
+  const uptimeEl = $('metric-uptime');
+  const chainEl = $('metric-chain-health');
+  const sseEl = $('metric-sse-reviews');
+  const extraEl = $('ops-metrics-extra');
+  if (!driverEl && !extraEl) return;
+
+  const m = app.metrics;
+  if (!m) {
+    if (extraEl) {
+      extraEl.textContent = app.metricsError ? t('ops.unavailable') : t('ops.loading');
+    }
+    return;
+  }
+
+  const isSqlite = String(m.dbDriver || '').toLowerCase().includes('sqlite');
+  if (driverEl) {
+    driverEl.className = `badge ${isSqlite ? 'green' : 'amber'}`;
+    driverEl.textContent = isSqlite ? t('ops.driverSqlite') : t('ops.driverJson');
+  }
+  if (memEl) {
+    const mb = Number(m.memoryMb ?? 0);
+    memEl.textContent = `${Number.isFinite(mb) ? mb.toFixed(1) : '0.0'} MB`;
+  }
+  if (uptimeEl) {
+    uptimeEl.textContent = fmtUptime(m.uptimeSec);
+  }
+  if (chainEl) {
+    const valid = m.provenanceChainValid !== false;
+    chainEl.className = `ops-metric-val mono ${valid ? 'healthy' : 'warn'}`;
+    chainEl.textContent = valid ? t('ops.chainHealthy') : t('ops.chainInvalid');
+  }
+  if (sseEl) {
+    sseEl.textContent = `${Number(m.sseClients ?? 0)} SSE / ${Number(m.pendingReviewsCount ?? 0)}`;
+  }
+  if (extraEl) {
+    extraEl.textContent = t('ops.extraSummary', {
+      version: String(m.version || '1.2').replace(/^v/i, ''),
+      users: Number(m.usersCount ?? 0),
+      projects: Number(m.projectsCount ?? 0),
+      open: Number(m.tasksOpen ?? 0),
+      done: Number(m.tasksCompleted ?? 0),
+      blocked: Number(m.rateLimitBlockedCount ?? 0),
+    });
+  }
+}
+
+async function refreshMetricsNow({ showFeedback = false } = {}) {
+  try {
+    const data = await apiFetch('/api/metrics');
+    app.metrics = data;
+    app.metricsError = false;
+    renderOpsMetricsSection();
+    if (showFeedback) {
+      soundFX.playClick();
+      showToast(t('toast.metricsRefreshed'), 'info', 2200);
+    }
+  } catch (err) {
+    app.metricsError = true;
+    renderOpsMetricsSection();
+    if (showFeedback) {
+      showToast(err.message, 'error');
+    }
+  }
+}
+
+async function downloadFullBackup() {
+  const btn = $('btn-export-backup');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('ops.exportingBtn');
+  }
+  try {
+    const res = await fetch('/api/admin/export-backup', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `HTTP ${res.status}`);
+    }
+    const rawText = await res.text();
+    let prettyJson = rawText;
+    try {
+      prettyJson = JSON.stringify(JSON.parse(rawText), null, 2);
+    } catch {
+      // keep rawText
+    }
+    const cd = res.headers.get('content-disposition') || '';
+    const match = cd.match(/filename="?([^";\n]+)"?/i);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = (match && match[1]) || `pixelcompute-backup-${stamp}.json`;
+
+    const blob = new Blob([prettyJson], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    soundFX.playCoin();
+    showToast(t('toast.backupDownloaded', { filename }), 'success', 4600);
+  } catch (err) {
+    soundFX.playReject();
+    showToast(t('toast.backupFailed', { err: err.message }), 'error', 4600);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = t('ops.exportBtn');
+    }
+  }
+}
+
+async function triggerAutoSplit(projectId, triggerBtn = null) {
+  if (!projectId) return;
+  const input = document.querySelector(`[data-auto-split-input="${CSS.escape(projectId)}"]`);
+  const featureBrief = (input?.value || '').trim();
+  if (!featureBrief) {
+    soundFX.playReject();
+    showToast(t('toast.autoSplitNeedBrief'), 'warn', 3200);
+    input?.focus();
+    return;
+  }
+
+  const btn = triggerBtn || document.querySelector(`[data-auto-split-btn="${CSS.escape(projectId)}"]`);
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('incubator.autoSplitWorking');
+  }
+
+  try {
+    app.lastLocalMutationAt = Date.now();
+    const res = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/auto-split`, {
+      method: 'POST',
+      body: { featureBrief },
+    });
+    if (res.state) {
+      applyNewState(res.state);
+    } else {
+      await refreshBootstrapNow();
+    }
+    if (input) input.value = '';
+    const loc = getLocale();
+    const proj =
+      res.project || (app.state?.projects || []).find((p) => p.id === projectId);
+    const lp = proj ? localizeProject(proj, loc) : null;
+    const createdCount = Array.isArray(res.tasks)
+      ? res.tasks.length
+      : Number(res.createdCount ?? 3);
+    soundFX.playVerify();
+    showToast(
+      t('toast.autoSplitOk', {
+        name: lp?.shortName || lp?.name || projectId,
+        count: createdCount,
+      }),
+      'success',
+      5000,
+    );
+  } catch (err) {
+    soundFX.playReject();
+    showToast(t('toast.autoSplitFailed', { err: err.message }), 'error', 4600);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origLabel || t('incubator.autoSplitBtn');
     }
   }
 }
@@ -2526,6 +2759,15 @@ function renderProvenanceModalContent(project) {
   if (coCountEl) coCountEl.textContent = t('incubator.coBuildersCount', { count: Math.max(1, coBuilders.length) });
   if (hashEl) hashEl.textContent = project.ideaHash || '-';
   if (prevEl) prevEl.textContent = project.prevIdeaHash || '0000000000000000000000000000000000000000000000000000000000000000';
+
+  const pubPageBtn = $('btn-prov-public-page');
+  const pubVerifyBtn = $('btn-prov-public-verify');
+  if (pubPageBtn) {
+    pubPageBtn.setAttribute('href', `/p/${encodeURIComponent(project.slug || project.id)}`);
+  }
+  if (pubVerifyBtn) {
+    pubVerifyBtn.setAttribute('href', `/verify/${encodeURIComponent(project.ideaHash || project.id)}`);
+  }
 
   const origCheck = $('prov-calc-is-originator');
   if (origCheck) origCheck.checked = isPlayerOrig;
@@ -3360,6 +3602,9 @@ function bindEvents() {
     soundFX.playClick();
   });
 
+  $('btn-refresh-metrics').addEventListener('click', () => refreshMetricsNow({ showFeedback: true }));
+  $('btn-export-backup').addEventListener('click', downloadFullBackup);
+
   $('toggle-strict-device-review').addEventListener('change', async (e) => {
     const strictDeviceReview = Boolean(e.target.checked);
     try {
@@ -3836,6 +4081,13 @@ function bindEvents() {
       return;
     }
 
+    const autoSplitBtn = e.target.closest('[data-auto-split-btn]');
+    if (autoSplitBtn) {
+      const pid = autoSplitBtn.dataset.autoSplitBtn;
+      await triggerAutoSplit(pid, autoSplitBtn);
+      return;
+    }
+
     const voteBtn = e.target.closest('[data-vote-project]');
     if (voteBtn) {
       const pid = voteBtn.dataset.voteProject;
@@ -4063,6 +4315,16 @@ function bindEvents() {
     }
   });
 
+  // Delegated Enter key handler for AI Smart Auto-Split inputs
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const splitInput = e.target.closest?.('[data-auto-split-input]');
+    if (!splitInput) return;
+    e.preventDefault();
+    const pid = splitInput.dataset.autoSplitInput;
+    if (pid) triggerAutoSplit(pid);
+  });
+
   // Delegated change handler for worker skin selector
   document.addEventListener('change', async (e) => {
     const skinSelect = e.target.closest('[data-skin-select]');
@@ -4161,8 +4423,21 @@ async function init() {
     seedSeenAchievements(data.state);
     applyBootstrapPayload(data, { silentAchievements: true });
     connectSse();
+    refreshMetricsNow();
 
     const params = new URLSearchParams(window.location.search);
+    const projectParam = params.get('project');
+    if (projectParam) {
+      switchTab('incubator');
+      setTimeout(() => {
+        const card = document.querySelector(`[data-project-card="${CSS.escape(projectParam)}"]`);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('highlight-flash');
+          setTimeout(() => card.classList.remove('highlight-flash'), 2600);
+        }
+      }, 150);
+    }
     const authParam = params.get('auth');
     if (authParam) {
       const locUser = localizeUser(app.user, getLocale());

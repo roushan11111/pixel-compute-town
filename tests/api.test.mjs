@@ -3,6 +3,7 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,8 +16,8 @@ function round2(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
-async function startServer(dataDir) {
-  const server = createAppServer({ dataDir });
+async function startServer(dataDir, extraOptions = {}) {
+  const server = createAppServer({ dataDir, ...extraOptions });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -2197,6 +2198,431 @@ describe('PixelCompute Town API & Economic Ledger E2E Suite', () => {
       assert.equal(blockedClaim.json.ok, false);
       assert.equal(blockedClaim.json.code, 'WORKER_COOLDOWN');
       assert.ok(blockedClaim.json.cooldownRemainingSec >= 1);
+    } finally {
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
+
+  it('25. Native SQLite (node:sqlite) WAL persistence across restart, audit_log, GET /api/admin/export-backup & GET /api/metrics', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-sqlite-ops-'));
+    let isoServer = null;
+    try {
+      let started = await startServer(isoDir);
+      isoServer = started.server;
+      let isoUrl = started.baseUrl;
+
+      // 1. /api/health must report dbDriver === 'sqlite' & version 1.2.x
+      const health = await apiJson(isoUrl, 'GET', '/api/health');
+      assert.equal(health.status, 200);
+      assert.equal(health.json.ok, true);
+      assert.equal(health.json.dbDriver, 'sqlite', 'Node 24 native SQLite driver must be active');
+      assert.match(String(health.json.version || ''), /^1\.2\./);
+
+      // Trigger mutations that persist state & append audit_log rows
+      const propRes = await apiJson(isoUrl, 'POST', '/api/projects', {
+        name: 'SQLite WAL Ledger Probe',
+        tagline: 'Verifies zero-dependency node:sqlite persistence across full server restarts',
+        votesRequired: 4,
+      });
+      assert.equal(propRes.status, 201);
+      const createdProjId = propRes.json.project.id;
+
+      const recruitRes = await apiJson(isoUrl, 'POST', '/api/workers', {
+        name: 'SQLite-Keeper-Bot',
+        roleClass: 'flash_worker',
+        providerLabel: 'Gemini 2.5 Flash',
+        dailyTokenCap: 550000,
+      });
+      assert.equal(recruitRes.status, 201);
+      const goldBeforeRestart = recruitRes.json.state.player.gold;
+
+      // Verify pixelcompute.db exists on disk
+      const dbStat = await fs.stat(path.join(isoDir, 'pixelcompute.db'));
+      assert.ok(dbStat.size > 0, 'data/pixelcompute.db must exist and be non-empty');
+
+      // 2. Non-founder user MUST be denied GET /api/admin/export-backup (HTTP 403)
+      const regMember = await apiJson(isoUrl, 'POST', '/api/auth/register', {
+        email: 'member-backup@pixelcompute.test',
+        password: 'member-password-123',
+        displayName: 'Regular Citizen',
+      });
+      assert.equal(regMember.status, 201);
+      const forbiddenBackup = await apiJson(isoUrl, 'GET', '/api/admin/export-backup', undefined, regMember.cookie);
+      assert.equal(forbiddenBackup.status, 403);
+      assert.equal(forbiddenBackup.json.ok, false);
+
+      // 3. Stop server, remove mirror state.json to prove pure SQLite recovery, and restart
+      await stopServer(isoServer);
+      isoServer = null;
+      await fs.rm(path.join(isoDir, 'state.json'), { force: true });
+
+      started = await startServer(isoDir);
+      isoServer = started.server;
+      isoUrl = started.baseUrl;
+
+      const afterRestart = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      assert.equal(afterRestart.status, 200);
+      assert.equal(afterRestart.json.state.player.gold, goldBeforeRestart, 'Player gold must survive restart from SQLite');
+      assert.ok(
+        afterRestart.json.state.projects.some((p) => p.id === createdProjId),
+        'Proposed project must survive restart from SQLite even without state.json',
+      );
+      assert.ok(
+        afterRestart.json.state.workers.some((w) => w.name === 'SQLite-Keeper-Bot'),
+        'Recruited worker must survive restart from SQLite',
+      );
+
+      // 4. GET /api/admin/export-backup (founder) returns downloadable valid backup with recentAudit & state
+      const backupRes = await apiJson(isoUrl, 'GET', '/api/admin/export-backup');
+      assert.equal(backupRes.status, 200);
+      assert.match(backupRes.headers.get('content-disposition') || '', /attachment; filename="pixelcompute-backup-/i);
+      assert.equal(backupRes.json.ok, true);
+      assert.equal(backupRes.json.driver, 'sqlite');
+      assert.ok(backupRes.json.exportedAt && !Number.isNaN(Date.parse(backupRes.json.exportedAt)));
+      assert.ok(backupRes.json.auditCount >= 2, `Expected auditCount >= 2, got ${backupRes.json.auditCount}`);
+      assert.ok(Array.isArray(backupRes.json.recentAudit) && backupRes.json.recentAudit.length >= 2);
+      assert.ok(
+        backupRes.json.recentAudit.some((a) => a.eventType === 'project_proposed'),
+        'recentAudit must record project_proposed event',
+      );
+      assert.ok(
+        backupRes.json.recentAudit.some((a) => a.eventType === 'backup_export'),
+        'recentAudit must record backup_export event',
+      );
+      assert.ok(backupRes.json.state && Array.isArray(backupRes.json.state.projects));
+      assert.ok(backupRes.json.state.projects.some((p) => p.id === createdProjId));
+
+      // 5. GET /api/metrics returns full production ops telemetry
+      const metricsRes = await apiJson(isoUrl, 'GET', '/api/metrics');
+      assert.equal(metricsRes.status, 200);
+      const m = metricsRes.json;
+      assert.equal(m.ok, true);
+      assert.match(String(m.version || ''), /^1\.2\./);
+      assert.equal(m.dbDriver, 'sqlite');
+      assert.equal(typeof m.uptimeSec, 'number');
+      assert.ok(typeof m.memoryMb === 'number' && m.memoryMb > 0);
+      assert.equal(typeof m.sseClients, 'number');
+      assert.ok(typeof m.usersCount === 'number' && m.usersCount >= 2);
+      assert.ok(typeof m.projectsCount === 'number' && m.projectsCount >= 4);
+      assert.equal(typeof m.tasksOpen, 'number');
+      assert.equal(typeof m.tasksCompleted, 'number');
+      assert.equal(typeof m.pendingReviewsCount, 'number');
+      assert.equal(m.provenanceChainValid, true);
+      assert.equal(typeof m.rateLimitBlockedCount, 'number');
+      assert.ok(typeof m.auditCount === 'number' && m.auditCount >= 2);
+      assert.ok(m.timestamp && !Number.isNaN(Date.parse(m.timestamp)));
+    } finally {
+      await stopServer(isoServer);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
+
+  it('26. Public SSR share page /p/:slug & cryptographic verify page /verify/:hash (Open Graph tags & XSS escaping)', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-public-pages-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      // Fetch seeded project ideaHash
+      const boot = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      const projMeta = boot.json.state.projects.find((p) => p.id === 'proj-meta');
+      assert.ok(projMeta && /^[a-f0-9]{64}$/.test(projMeta.ideaHash));
+
+      // 1. Valid project share page via exact ID (/p/proj-meta) and shorthand slug (/p/meta)
+      for (const slugRoute of ['/p/proj-meta', '/p/meta']) {
+        const res = await fetch(`${isoUrl}${slugRoute}`);
+        assert.equal(res.status, 200, `GET ${slugRoute} must return 200`);
+        assert.match(res.headers.get('content-type') || '', /^text\/html/i);
+        const html = await res.text();
+        assert.match(html, /<meta\s+property="og:title"/i, `${slugRoute} must contain og:title`);
+        assert.match(html, /<meta\s+property="og:description"/i, `${slugRoute} must contain og:description`);
+        assert.match(html, /<meta\s+name="twitter:card"/i, `${slugRoute} must contain twitter:card`);
+        assert.ok(html.includes(projMeta.ideaHash), `${slugRoute} must include full 64-char SHA-256 ideaHash`);
+        assert.ok(html.includes(`/verify/${projMeta.ideaHash}`), `${slugRoute} must link to /verify/<hash>`);
+        assert.ok(html.includes('/app?project=proj-meta'), `${slugRoute} must link to /app?project=proj-meta`);
+      }
+
+      // 2. Non-existent project slug returns 404 friendly HTML page
+      const missingProjRes = await fetch(`${isoUrl}/p/non-existent-project-slug-404`);
+      assert.equal(missingProjRes.status, 404);
+      assert.match(missingProjRes.headers.get('content-type') || '', /^text\/html/i);
+
+      // 3. XSS safety check: propose project with malicious HTML/script payloads and verify strict entity escaping
+      const xssProp = await apiJson(isoUrl, 'POST', '/api/projects', {
+        name: 'CyberXSS <script>alert("pwn")</script>',
+        tagline: 'Tagline with "><img src=x onerror=alert(1)> payload',
+        description: 'Desc with <svg onload=alert(2)> & "quotes"',
+      });
+      assert.equal(xssProp.status, 201);
+      const xssProj = xssProp.json.project;
+
+      const xssPageRes = await fetch(`${isoUrl}/p/${encodeURIComponent(xssProj.id)}`);
+      assert.equal(xssPageRes.status, 200);
+      const xssHtml = await xssPageRes.text();
+      assert.ok(!xssHtml.includes('<script>alert("pwn")</script>'), 'Raw <script> tag MUST be escaped in /p/:slug');
+      assert.ok(!xssHtml.includes('<img src=x onerror=alert(1)>'), 'Raw <img> onerror payload MUST be escaped in /p/:slug');
+      assert.ok(!xssHtml.includes('<svg onload=alert(2)>'), 'Raw <svg onload> payload MUST be escaped in /p/:slug');
+      assert.ok(xssHtml.includes('&lt;script&gt;alert(&quot;pwn&quot;)&lt;/script&gt;'), 'Escaped script entity should render safely');
+
+      // 4. Cryptographic verify page /verify/:hash — full 64-char hash returns 200 with VERIFIED stamp
+      const verifyFullRes = await fetch(`${isoUrl}/verify/${projMeta.ideaHash}`);
+      assert.equal(verifyFullRes.status, 200);
+      assert.match(verifyFullRes.headers.get('content-type') || '', /^text\/html/i);
+      const verifyFullHtml = await verifyFullRes.text();
+      assert.ok(verifyFullHtml.includes('VERIFIED ON PIXELCOMPUTE PROVENANCE CHAIN'), 'Valid full hash must render VERIFIED stamp');
+      assert.ok(verifyFullHtml.includes(projMeta.ideaHash), 'Verify page must display full 64-char SHA-256 fingerprint');
+      assert.match(verifyFullHtml, /<meta\s+property="og:title"/i, 'Verify page must include OG title');
+
+      // 5. Prefix lookup (first 12 hex chars) also returns 200 with VERIFIED stamp
+      const verifyPrefixRes = await fetch(`${isoUrl}/verify/${projMeta.ideaHash.slice(0, 12)}`);
+      assert.equal(verifyPrefixRes.status, 200);
+      const verifyPrefixHtml = await verifyPrefixRes.text();
+      assert.ok(verifyPrefixHtml.includes('VERIFIED'), 'Valid hash prefix must render VERIFIED stamp');
+      assert.ok(verifyPrefixHtml.includes(projMeta.ideaHash));
+
+      // 6. Verify page escapes XSS project fields too
+      const verifyXssRes = await fetch(`${isoUrl}/verify/${xssProj.ideaHash}`);
+      assert.equal(verifyXssRes.status, 200);
+      const verifyXssHtml = await verifyXssRes.text();
+      assert.ok(!verifyXssHtml.includes('<script>alert("pwn")</script>'), 'Raw <script> tag MUST be escaped in /verify/:hash');
+
+      // 7. Forged 64-char hex hash and malformed hash MUST return 404 without VERIFIED stamp
+      const fakeHash = 'deadbeef'.repeat(8);
+      const forgedRes = await fetch(`${isoUrl}/verify/${fakeHash}`);
+      assert.equal(forgedRes.status, 404, 'Forged hash must return HTTP 404');
+      const forgedHtml = await forgedRes.text();
+      assert.ok(!forgedHtml.includes('VERIFIED ON PIXELCOMPUTE PROVENANCE CHAIN'), 'Forged hash page must NOT claim verified');
+
+      const badFormatRes = await fetch(`${isoUrl}/verify/${encodeURIComponent('not-a-valid-hash<img src=x onerror=alert(9)>')}`);
+      assert.equal(badFormatRes.status, 404);
+      const badFormatHtml = await badFormatRes.text();
+      assert.ok(!badFormatHtml.includes('<img src=x onerror=alert(9)>'), 'Malformed queriedHash in 404 verify page must be escaped');
+      assert.ok(badFormatHtml.includes('&lt;img src=x onerror=alert(9)&gt;'), 'Escaped queriedHash must appear safely');
+    } finally {
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
+
+  it('27. GitHub Webhook (POST /api/webhooks/github) HMAC-SHA256 verification & merged PR auto-settlement', async () => {
+    const webhookSecret = 'pct-v12-super-secret-hmac-key';
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-gh-webhook-'));
+    const started = await startServer(isoDir, { githubWebhookSecret: webhookSecret });
+    const isoUrl = started.baseUrl;
+
+    function signGitHubBody(rawBody, secret = webhookSecret) {
+      const digest = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+      return `sha256=${digest}`;
+    }
+
+    async function postWebhook(payloadObj, { event = 'pull_request', signature = undefined } = {}) {
+      const rawBody = JSON.stringify(payloadObj);
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': event,
+      };
+      if (signature !== null) {
+        headers['X-Hub-Signature-256'] = signature === undefined ? signGitHubBody(rawBody) : signature;
+      }
+      const res = await fetch(`${isoUrl}/api/webhooks/github`, {
+        method: 'POST',
+        headers,
+        body: rawBody,
+      });
+      return { status: res.status, json: await res.json() };
+    }
+
+    const sse = openSseClient(started.port);
+    try {
+      await sse.connectedPromise;
+      await sse.waitForEvent('connected');
+
+      // 1. Wrong HMAC signature and missing signature MUST return HTTP 401
+      const wrongSig = await postWebhook(
+        { action: 'closed', pull_request: { merged: true, number: 99, title: 'Fixes #task-i18n-ast-pr' } },
+        { signature: 'sha256=' + '0'.repeat(64) },
+      );
+      assert.equal(wrongSig.status, 401, 'Invalid HMAC-SHA256 signature must be rejected with 401');
+      assert.equal(wrongSig.json.ok, false);
+
+      const missingSig = await postWebhook(
+        { action: 'closed', pull_request: { merged: true, number: 99 } },
+        { signature: null },
+      );
+      assert.equal(missingSig.status, 401, 'Missing X-Hub-Signature-256 must be rejected with 401');
+
+      // 2. Valid signed ping event returns 200 pong
+      const pingRes = await postWebhook({ zen: 'Keep it logically awesome.' }, { event: 'ping' });
+      assert.equal(pingRes.status, 200);
+      assert.equal(pingRes.json.ok, true);
+      assert.equal(pingRes.json.pong, true);
+
+      // 3. Claim task-i18n-ast-pr ($40 cash bounty, 30G stake) so we verify stake refund + core points + progress + 10% fee
+      const bootBefore = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      const playerId = bootBefore.json.state.player.id;
+      const goldBeforeClaim = bootBefore.json.state.player.gold;
+      const usdBefore = bootBefore.json.state.player.usdBalance;
+      const bountyFeesBefore = bootBefore.json.state.founderRevenue.bountyFeesUsd;
+      const projBefore = bootBefore.json.state.projects.find((p) => p.id === 'proj-i18n');
+      const taskTarget = bootBefore.json.state.tasks.find((t) => t.id === 'task-i18n-ast-pr');
+      const corePtsBefore = projBefore.bucketPoints?.core?.[playerId] || 0;
+      const progressBefore = projBefore.progressPct;
+
+      const claimRes = await apiJson(isoUrl, 'POST', '/api/tasks/task-i18n-ast-pr/claim', { workerId: 'w-pro-01' });
+      assert.equal(claimRes.status, 200);
+      assert.equal(claimRes.json.stakedGold, 30);
+      assert.equal(claimRes.json.state.player.gold, goldBeforeClaim - 30);
+
+      // Unmerged PR closed event should be ignored safely (settled: false)
+      const unmergedRes = await postWebhook({
+        action: 'closed',
+        pull_request: {
+          number: 77,
+          merged: false,
+          title: 'WIP Fixes #task-i18n-ast-pr',
+          body: 'Closed without merging',
+          html_url: 'https://github.com/pixel-compute-town/i18n-pixelbot/pull/77',
+          user: { login: 'founder-dev' },
+        },
+      });
+      assert.equal(unmergedRes.status, 200);
+      assert.equal(unmergedRes.json.settled, false);
+      assert.equal(unmergedRes.json.ignored, true);
+
+      // 4. Valid HMAC-SHA256 signed merged pull_request with "Fixes #task-i18n-ast-pr" auto-settles everything!
+      const mergedRes = await postWebhook({
+        action: 'closed',
+        pull_request: {
+          number: 88,
+          merged: true,
+          title: 'feat(ast): extract TSX i18n keys',
+          body: 'Completed AST scanner with unit tests.\n\nFixes #task-i18n-ast-pr',
+          html_url: 'https://github.com/pixel-compute-town/i18n-pixelbot/pull/88',
+          user: { login: 'founder-dev' },
+        },
+      });
+      assert.equal(mergedRes.status, 200);
+      assert.equal(mergedRes.json.ok, true);
+      assert.equal(mergedRes.json.settled, true);
+      assert.equal(mergedRes.json.taskId, 'task-i18n-ast-pr');
+      assert.equal(mergedRes.json.task.status, 'completed');
+      assert.equal(mergedRes.json.rewards.poolBucket, 'core');
+      assert.equal(mergedRes.json.rewards.contributionPoints, taskTarget.contributionPoints);
+      assert.equal(mergedRes.json.rewards.refundedStakeGold, 30, 'Frozen 30G stake must be refunded in full');
+      assert.equal(mergedRes.json.rewards.bountyGrossUsd, 40);
+      assert.equal(mergedRes.json.rewards.platformFeeUsd, 4);
+      assert.equal(mergedRes.json.rewards.bountyNetUsd, 36);
+
+      // Verify SSE broadcast fired for pixel office celebration
+      const sseEvt = await sse.waitForEvent('task_completed', 4000, (d) => d?.source === 'github_webhook' && d?.task?.id === 'task-i18n-ast-pr');
+      assert.equal(sseEvt.data.rewards.poolBucket, 'core');
+
+      // Verify persisted state: gold (stake refunded + task gold + achievements), USD net bounty, core points, project progress
+      const achGold = (mergedRes.json.unlockedAchievements || []).reduce((s, a) => s + (a.rewardGold || 0), 0);
+      const bootAfter = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      const projAfter = bootAfter.json.state.projects.find((p) => p.id === 'proj-i18n');
+      assert.equal(
+        bootAfter.json.state.player.gold,
+        goldBeforeClaim + taskTarget.goldReward + achGold,
+        'Stake gold (30G) must be refunded alongside task gold reward',
+      );
+      assert.equal(bootAfter.json.state.player.usdBalance, round2(usdBefore + 36));
+      assert.equal(bootAfter.json.state.founderRevenue.bountyFeesUsd, round2(bountyFeesBefore + 4));
+      assert.equal(
+        projAfter.bucketPoints.core[playerId],
+        corePtsBefore + taskTarget.contributionPoints,
+        'Core bucket points must increase by task contributionPoints',
+      );
+      assert.ok(projAfter.progressPct > progressBefore, 'Project progressPct must advance after PR merge');
+
+      // Verify SQLite audit_log recorded github_webhook_settled
+      const backupAfter = await apiJson(isoUrl, 'GET', '/api/admin/export-backup');
+      assert.ok(
+        backupAfter.json.recentAudit.some((a) => a.eventType === 'github_webhook_settled' && a.summary.includes('task-i18n-ast-pr')),
+        'SQLite audit_log must record github_webhook_settled',
+      );
+
+      // 5. Re-delivering the same merged webhook is idempotent (alreadyCompleted: true, no double payout)
+      const duplicateRes = await postWebhook({
+        action: 'closed',
+        pull_request: {
+          number: 88,
+          merged: true,
+          title: 'feat(ast): extract TSX i18n keys',
+          body: 'Fixes #task-i18n-ast-pr',
+          html_url: 'https://github.com/pixel-compute-town/i18n-pixelbot/pull/88',
+          user: { login: 'founder-dev' },
+        },
+      });
+      assert.equal(duplicateRes.status, 200);
+      assert.equal(duplicateRes.json.settled, false);
+      assert.equal(duplicateRes.json.alreadyCompleted, true);
+    } finally {
+      sse.close();
+      await stopServer(started.server);
+      await fs.rm(isoDir, { recursive: true, force: true });
+    }
+  });
+
+  it('28. Smart Auto-Split (POST /api/projects/:id/auto-split) generates balanced 70/30 core guild bounty + 2 peripheral API tasks', async () => {
+    const isoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pct-auto-split-'));
+    const started = await startServer(isoDir);
+    const isoUrl = started.baseUrl;
+
+    try {
+      // 1. Validation: missing/short featureBrief returns 400; unknown project returns 404
+      const badBrief = await apiJson(isoUrl, 'POST', '/api/projects/proj-i18n/auto-split', { featureBrief: 'x' });
+      assert.equal(badBrief.status, 400);
+
+      const missingProj = await apiJson(isoUrl, 'POST', '/api/projects/proj-does-not-exist/auto-split', {
+        featureBrief: 'Add dark mode keyboard command palette',
+      });
+      assert.equal(missingProj.status, 404);
+
+      // 2. Valid auto-split request on proj-i18n
+      const bootBefore = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      const taskCountBefore = bootBefore.json.state.tasks.length;
+      const featureBrief = 'Add real-time Markdown diff viewer with keyboard navigation';
+
+      const splitRes = await apiJson(isoUrl, 'POST', '/api/projects/proj-i18n/auto-split', { featureBrief });
+      assert.equal(splitRes.status, 200);
+      assert.equal(splitRes.json.ok, true);
+      assert.equal(splitRes.json.featureBrief, featureBrief);
+      assert.equal(splitRes.json.createdCount, 3);
+      assert.deepEqual(splitRes.json.breakdown, { core: 1, peripheral: 2 });
+      assert.equal(splitRes.json.tasks.length, 3);
+
+      const coreTasks = splitRes.json.tasks.filter((t) => t.poolBucket === 'core');
+      const peripheralTasks = splitRes.json.tasks.filter((t) => t.poolBucket === 'peripheral');
+      assert.equal(coreTasks.length, 1, 'Must generate exactly 1 core pool guild task');
+      assert.equal(peripheralTasks.length, 2, 'Must generate exactly 2 peripheral pool API tasks');
+
+      const [coreTask] = coreTasks;
+      assert.equal(coreTask.track, 'guild_bounty');
+      assert.equal(coreTask.projectId, 'proj-i18n');
+      assert.ok(coreTask.stakeGold >= 25, `Core auto-split task must require stakeGold >= 25, got ${coreTask.stakeGold}`);
+      assert.ok(coreTask.contributionPoints >= 60, 'Core task must hold majority contribution weight');
+
+      for (const pt of peripheralTasks) {
+        assert.equal(pt.track, 'api_auto');
+        assert.equal(pt.projectId, 'proj-i18n');
+        assert.equal(pt.poolBucket, 'peripheral');
+      }
+
+      // 70/30 anti-dilution weighting check across generated points (70 vs 15+15 = 30)
+      const totalCorePts = coreTasks.reduce((s, t) => s + (t.contributionPoints || 0), 0);
+      const totalPeriphPts = peripheralTasks.reduce((s, t) => s + (t.contributionPoints || 0), 0);
+      assert.ok(totalCorePts > totalPeriphPts, `Core points (${totalCorePts}) should outweigh peripheral points (${totalPeriphPts})`);
+
+      // 3. Confirm all 3 tasks are persisted in live state
+      const bootAfter = await apiJson(isoUrl, 'GET', '/api/bootstrap');
+      assert.equal(bootAfter.json.state.tasks.length, taskCountBefore + 3);
+      for (const genTask of splitRes.json.tasks) {
+        const persistedTask = bootAfter.json.state.tasks.find((t) => t.id === genTask.id);
+        assert.ok(persistedTask, `Generated task ${genTask.id} must be persisted in state.tasks`);
+        assert.equal(persistedTask.poolBucket, genTask.poolBucket);
+      }
     } finally {
       await stopServer(started.server);
       await fs.rm(isoDir, { recursive: true, force: true });

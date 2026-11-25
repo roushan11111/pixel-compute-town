@@ -1,4 +1,4 @@
-// PixelCompute Town v1.0 — Static, DOM Integrity, MIME, Trilingual i18n & CLI E2E Smoke Test Suite
+// PixelCompute Town v1.2 — Static, DOM Integrity, MIME, Trilingual i18n, Public SSR, SFX & CLI E2E Smoke Test Suite
 // Zero-dependency Node.js runner (`npm run smoke` or `node tests/smoke.mjs`)
 
 import assert from 'node:assert/strict';
@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import vm from 'node:vm';
 
 import { createAppServer } from '../server.mjs';
 import { createInitialState, generateTasksForProject, SHOP_ITEMS } from '../src/server/seed.mjs';
@@ -102,7 +103,7 @@ function resolveRelativeFrontendImport(fromFile, spec) {
 }
 
 async function main() {
-  console.log('\n🔍 PixelCompute Town v1.0 — Smoke & Contract Verification Suite\n');
+  console.log('\n🔍 PixelCompute Town v1.2 — Smoke & Contract Verification Suite\n');
 
   // 1. Syntax check all .mjs and .js files
   await runCheck('1. All backend (.mjs) and frontend (.js) files parse with zero syntax errors', async () => {
@@ -230,9 +231,11 @@ async function main() {
       return queried.size;
     }
 
-    // Check onboard.html for duplicate IDs
+    // Check onboard.html + onboard.js (0 duplicates & 0 missing)
     const onboardHtml = await fs.readFile(path.join(ROOT_DIR, 'public', 'onboard.html'), 'utf8');
-    collectHtmlIds(onboardHtml, 'onboard.html');
+    const onboardJs = await fs.readFile(path.join(ROOT_DIR, 'public', 'js', 'onboard.js'), 'utf8');
+    const onboardIds = collectHtmlIds(onboardHtml, 'onboard.html');
+    const onboardQueriedCount = verifyJsQueriesAgainstHtml(onboardJs, onboardIds, 'onboard.js', 'onboard.html');
 
     // Check landing.html + landing.js (0 duplicates & 0 missing)
     const landingHtml = await fs.readFile(path.join(ROOT_DIR, 'public', 'landing.html'), 'utf8');
@@ -261,7 +264,7 @@ async function main() {
 
     const appQueriedCount = verifyJsQueriesAgainstHtml(appSrc, htmlIds, 'app.js', 'index.html');
 
-    // Explicitly verify all Anti-Dilution Governance DOM IDs exist in index.html & landing.html
+    // Explicitly verify all Anti-Dilution Governance & v1.2 Ops/Public-Share DOM IDs exist in index.html & landing.html
     const requiredGovAppIds = [
       'review-queue-panel',
       'review-queue-badge',
@@ -275,12 +278,29 @@ async function main() {
     for (const gid of requiredGovAppIds) {
       assert.ok(htmlIds.has(gid), `Missing required Anti-Dilution Governance DOM ID #${gid} in public/index.html`);
     }
+    const requiredV12AppIds = [
+      'ops-metrics-section',
+      'ops-metrics-grid',
+      'metric-db-driver',
+      'metric-memory',
+      'metric-uptime',
+      'metric-chain-health',
+      'metric-sse-reviews',
+      'ops-metrics-extra',
+      'btn-refresh-metrics',
+      'btn-export-backup',
+      'btn-prov-public-page',
+      'btn-prov-public-verify',
+    ];
+    for (const v12id of requiredV12AppIds) {
+      assert.ok(htmlIds.has(v12id), `Missing required v1.2 DOM ID #${v12id} in public/index.html`);
+    }
     assert.ok(
       landingIds.has('anti-dilution-moat'),
       'Missing required Anti-Dilution 4-layer moat DOM ID #anti-dilution-moat in public/landing.html',
     );
 
-    return `index.html (${htmlIds.size} IDs / ${appQueriedCount} queries), landing.html (${landingIds.size} IDs / ${landingQueriedCount} queries) & onboard.html — 0 dups, 0 missing (+ ${requiredGovAppIds.length + 1} governance IDs)`;
+    return `index.html (${htmlIds.size} IDs / ${appQueriedCount} queries), landing.html (${landingIds.size} IDs / ${landingQueriedCount} queries) & onboard.html (${onboardIds.size} IDs / ${onboardQueriedCount} queries) — 0 dups, 0 missing (+ ${requiredGovAppIds.length + 1} gov & ${requiredV12AppIds.length} v1.2 IDs)`;
   });
 
   // Start isolated temporary server for static MIME, install script & CLI E2E checks
@@ -573,11 +593,59 @@ async function main() {
         `Chinese leaked in EN dynamic localizers:\n  ${dynamicViolations.slice(0, 12).join('\n  ')}`,
       );
 
-      return `${baseKeys.length} keys × 3 locales, ${totalHtmlI18n} HTML bindings & all ${requiredLocalizers.length} dynamic localizers verified (0 CJK in EN)`;
+      // Verify public/js/onboard.js trilingual I18N dictionary alignment & ZERO CJK in EN
+      const onboardSrc = await fs.readFile(path.join(ROOT_DIR, 'public', 'js', 'onboard.js'), 'utf8');
+      const onboardDictMatch = onboardSrc.match(/const\s+I18N\s*=\s*(\{[\s\S]*?\n\});/);
+      assert.ok(onboardDictMatch, 'Could not locate `const I18N = { ... };` dictionary in public/js/onboard.js');
+      const onboardDict = vm.runInNewContext(`(${onboardDictMatch[1]})`);
+      const onboardBaseKeys = Object.keys(onboardDict['zh-TW']).sort();
+      assert.ok(onboardBaseKeys.length >= 75, `Expected >= 75 onboard.js i18n keys, found ${onboardBaseKeys.length}`);
+      for (const lang of ['zh-TW', 'zh-CN', 'en']) {
+        assert.ok(onboardDict[lang], `Missing onboard.js dictionary for locale ${lang}`);
+        assert.deepEqual(
+          Object.keys(onboardDict[lang]).sort(),
+          onboardBaseKeys,
+          `onboard.js key mismatch between zh-TW and ${lang}`,
+        );
+        for (const k of onboardBaseKeys) {
+          assert.ok(
+            typeof onboardDict[lang][k] === 'string' && onboardDict[lang][k].trim().length > 0,
+            `Empty onboard.js translation for ${lang}.${k}`,
+          );
+        }
+      }
+      const onboardEnViolations = [];
+      for (const [k, v] of Object.entries(onboardDict.en)) {
+        if (CJK_RE.test(v)) onboardEnViolations.push(`onboard.en.${k}: "${v}"`);
+      }
+      assert.deepEqual(
+        onboardEnViolations,
+        [],
+        `Chinese leaked in onboard.js EN dictionary: ${onboardEnViolations.slice(0, 8).join('; ')}`,
+      );
+      assert.equal(onboardDict.en['step1.demoDisplayName'], 'Founding Mayor (Demo)');
+
+      // Check all data-i18n* attributes in public/onboard.html exist in onboard.js I18N
+      const onboardHtml = await fs.readFile(path.join(ROOT_DIR, 'public', 'onboard.html'), 'utf8');
+      const onboardMissingKeys = [];
+      const onboardAttrRx = /data-i18n(?:-[a-z]+)?\s*=\s*["']([^"']+)["']/g;
+      let oam;
+      while ((oam = onboardAttrRx.exec(onboardHtml)) !== null) {
+        if (!(oam[1] in onboardDict['zh-TW'])) {
+          onboardMissingKeys.push(oam[1]);
+        }
+      }
+      assert.deepEqual(
+        onboardMissingKeys,
+        [],
+        `Missing i18n keys referenced in onboard.html: ${onboardMissingKeys.join(', ')}`,
+      );
+
+      return `${baseKeys.length} app keys + ${onboardBaseKeys.length} onboard keys × 3 locales, ${totalHtmlI18n} HTML bindings & all ${requiredLocalizers.length} dynamic localizers verified (0 CJK in EN)`;
     });
 
-    // 7. Deployment, CI workflow & v1.0 documentation assets check
-    await runCheck('7. Deployment configs, GitHub Actions CI, .env.example & v1.0 docs verified', async () => {
+    // 7. Deployment, CI workflow & v1.2 documentation assets check
+    await runCheck('7. Deployment configs, GitHub Actions CI, .env.example & v1.2 docs verified', async () => {
       const requiredFiles = [
         '.env.example',
         'Dockerfile',
@@ -598,6 +666,7 @@ async function main() {
       for (const envVar of [
         'GITHUB_CLIENT_ID',
         'GOOGLE_CLIENT_ID',
+        'GITHUB_WEBHOOK_SECRET',
         'TREASURY_EVM_ADDRESS',
         'TREASURY_SOL_ADDRESS',
         'POLAR_CHECKOUT_URL',
@@ -616,6 +685,16 @@ async function main() {
       assert.match(readme, /AI 盲審/);
       assert.match(readme, /實幹審閱/);
       assert.match(readme, /押金/);
+      assert.match(readme, /SQLite/i);
+      assert.match(readme, /\/p\/:slug/);
+      assert.match(readme, /\/verify\/:hash/);
+      assert.match(readme, /GITHUB_WEBHOOK_SECRET/);
+
+      const deployDoc = await fs.readFile(path.join(ROOT_DIR, 'docs', 'DEPLOY_AND_PROMOTE.md'), 'utf8');
+      assert.match(deployDoc, /SQLite/i);
+      assert.match(deployDoc, /\/p\/:slug|\/p\//);
+      assert.match(deployDoc, /\/verify\/:hash|\/verify\//);
+      assert.match(deployDoc, /GITHUB_WEBHOOK_SECRET/);
 
       const prd = await fs.readFile(path.join(ROOT_DIR, 'docs', 'PRD.md'), 'utf8');
       assert.match(prd, /Proof of First Spark/);
@@ -630,7 +709,7 @@ async function main() {
       assert.match(ciYaml, /npm test/);
       assert.match(ciYaml, /npm run smoke/);
 
-      return `${requiredFiles.length} deployment, CI, .env.example & Proof-of-First-Spark docs verified`;
+      return `${requiredFiles.length} deployment, CI, .env.example (incl. GITHUB_WEBHOOK_SECRET) & v1.2 docs verified`;
     });
 
     // 8. src/server/provenance.mjs exports, SHA-256 chain integrity & bilingual anti-copycat engine check
@@ -731,6 +810,79 @@ async function main() {
       assert.ok(slopReport.bloatRatioPct >= 55, `Slop PR should have high bloat ratio, got ${slopReport.bloatRatioPct}`);
 
       return `9 exports + 7 constants verified; 70/30 cap ($595/$255) & AI blind review (clean ${cleanReport.aiScore} vs slop ${slopReport.aiScore}) active`;
+    });
+
+    // 10. v1.2 publicPages.mjs, sound.js new SFX methods & pixelEngine.js triggerReviewDecision contract check
+    await runCheck('10. v1.2 publicPages.mjs exports, sound.js (playSlash/playApproveFanfare) & pixelEngine.js contract verified', async () => {
+      // 10a. src/server/publicPages.mjs syntax & exports
+      const publicPagesPath = path.join(ROOT_DIR, 'src', 'server', 'publicPages.mjs');
+      await execFileAsync(process.execPath, ['--check', publicPagesPath]);
+      const pagesMod = await import('../src/server/publicPages.mjs');
+      const requiredPageExports = [
+        'escapeHtml',
+        'getProjectSlug',
+        'findProjectBySlugOrId',
+        'renderPublicProjectPage',
+        'renderPublicVerifyPage',
+        'renderPublicNotFoundPage',
+      ];
+      for (const fnName of requiredPageExports) {
+        assert.equal(typeof pagesMod[fnName], 'function', `publicPages.mjs must export function ${fnName}()`);
+      }
+
+      // Verify escapeHtml XSS safety
+      assert.equal(
+        pagesMod.escapeHtml(`<script>"'&`),
+        '&lt;script&gt;&quot;&#39;&amp;',
+        'escapeHtml must escape <, >, ", \', and &',
+      );
+
+      // Verify renderPublicProjectPage & renderPublicVerifyPage output & live HTTP routes
+      const liveBoot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
+      const projMeta = pagesMod.findProjectBySlugOrId(liveBoot.state.projects, 'meta');
+      assert.ok(projMeta && projMeta.id === 'proj-meta', 'findProjectBySlugOrId("meta") must resolve proj-meta');
+      const shareHtml = pagesMod.renderPublicProjectPage(projMeta, liveBoot.state, baseUrl);
+      assert.match(shareHtml, /<meta\s+property="og:title"/i);
+      assert.ok(shareHtml.includes(projMeta.ideaHash));
+
+      const liveShare = await fetch(`${baseUrl}/p/meta`);
+      assert.equal(liveShare.status, 200);
+      assert.match(liveShare.headers.get('content-type') || '', /^text\/html/i);
+
+      const liveVerifyOk = await fetch(`${baseUrl}/verify/${projMeta.ideaHash.slice(0, 12)}`);
+      assert.equal(liveVerifyOk.status, 200);
+      assert.ok((await liveVerifyOk.text()).includes('VERIFIED ON PIXELCOMPUTE PROVENANCE CHAIN'));
+
+      const liveVerify404 = await fetch(`${baseUrl}/verify/deadbeefdeadbeef`);
+      assert.equal(liveVerify404.status, 404);
+
+      // 10b. public/js/sound.js runtime import & v1.2 new methods
+      const soundMod = await import('../public/js/sound.js');
+      assert.ok(soundMod.soundFX, 'sound.js must export soundFX singleton');
+      const requiredSoundMethods = [
+        'toggle',
+        'setEnabled',
+        'playClick',
+        'playDispatch',
+        'playCoin',
+        'playVerify',
+        'playReject',
+        'playLaunch',
+        'playSlash',
+        'playApproveFanfare',
+      ];
+      for (const mName of requiredSoundMethods) {
+        assert.equal(typeof soundMod.soundFX[mName], 'function', `soundFX must expose method ${mName}()`);
+      }
+      // Calling muted SFX methods in Node must be safe no-ops
+      soundMod.soundFX.playSlash();
+      soundMod.soundFX.playApproveFanfare();
+
+      // 10c. public/js/pixelEngine.js exposes triggerReviewDecision()
+      const pixelEngineSrc = await fs.readFile(path.join(ROOT_DIR, 'public', 'js', 'pixelEngine.js'), 'utf8');
+      assert.match(pixelEngineSrc, /\btriggerReviewDecision\s*\(/, 'pixelEngine.js must define triggerReviewDecision()');
+
+      return `publicPages.mjs (${requiredPageExports.length} exports + live /p & /verify), sound.js (${requiredSoundMethods.length} methods incl. playSlash/playApproveFanfare) & pixelEngine.triggerReviewDecision verified`;
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));

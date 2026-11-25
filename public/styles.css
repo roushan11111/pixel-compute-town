@@ -1328,14 +1328,48 @@ body[data-theme='day'] .rank-badge.top-3 {
 .shop-card-lead {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   flex: 1;
+  width: 100%;
+}
+
+/* 2-Column Shop Card Typography & Anti-Orphan Wrapping Polish */
+#shop-list .pixel-card {
+  justify-content: space-between;
+  padding: 11px;
+}
+
+#shop-list .card-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+#shop-list .card-head > .badge {
+  order: -1;
+  align-self: flex-start;
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+#shop-list .card-title {
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: 0.1px;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+#shop-list .card-subtitle {
+  font-size: 11.5px;
+  line-height: 1.45;
 }
 
 .shop-skin-preview {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   padding: 2px;
   background: var(--bg-input);
   border: 2px solid var(--border-bright);
@@ -1346,8 +1380,8 @@ body[data-theme='day'] .rank-badge.top-3 {
 }
 
 .shop-skin-preview .hd-portrait {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
 }
 
 .shop-skin-preview.skin-cyber {
@@ -2728,6 +2762,127 @@ body[data-theme='day'] .badge.cooldown-pill {
 }
 
 /* ==========================================================================
+   v1.2: Public Share Links, AI Smart Auto-Split & Ops SQLite Backup Panel
+   ========================================================================== */
+.auto-split-box {
+  padding: 9px 10px;
+  background: rgba(77, 238, 234, 0.06);
+  border: 1px dashed var(--accent-cyan);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body[data-theme='day'] .auto-split-box {
+  background: #f0fdfa;
+  border-color: #0891b2;
+}
+
+.auto-split-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent-cyan);
+}
+
+.auto-split-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.auto-split-input {
+  flex: 1 1 180px;
+  min-width: 150px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.public-share-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ops-metrics-box {
+  margin-top: 8px;
+  padding: 11px;
+  background: var(--bg-input);
+  border: 2px solid var(--accent-cyan);
+  box-shadow: var(--shadow-pixel-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+body[data-theme='day'] .ops-metrics-box {
+  background: #f8fafc;
+  border-color: #0e7490;
+}
+
+.ops-metrics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ops-metrics-title {
+  font-size: 12.5px;
+  font-weight: 900;
+  color: var(--accent-cyan);
+}
+
+.ops-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ops-metric-tile {
+  padding: 7px 9px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-pixel);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ops-metric-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.ops-metric-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.ops-metric-val.healthy {
+  color: var(--accent-green);
+}
+
+.ops-metric-val.warn {
+  color: var(--accent-red);
+}
+
+.ops-metrics-sub {
+  font-size: 11px;
+  color: var(--text-sub);
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-pixel);
+}
+
+/* ==========================================================================
    Responsive Design
    ========================================================================== */
 @media (max-width: 1280px) {
@@ -2770,7 +2925,8 @@ body[data-theme='day'] .badge.cooldown-pill {
   .pay-order-meta,
   .prov-meta-grid,
   .prov-calc-controls,
-  .prov-calc-table {
+  .prov-calc-table,
+  .ops-metrics-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -125,6 +125,10 @@ const FALLBACK_CANVAS_I18N = Object.freeze({
     loungeCoffeeBar: '☕ 咖啡吧台',
     loungeGoldCoffeeBar: '✨ 黃金手沖吧',
     loungeTrophyCase: '🏆 創世成就櫃',
+    trophyTooltipTitle: '🏆 創世成就獎盃櫃',
+    trophyTooltipEmpty: '尚未解鎖獎盃 · 完成任務立即點亮！',
+    trophyTooltipLocked: '尚有 {count} 座待解鎖',
+    trophyTooltipAllUnlocked: '✨ 全 6 座創世獎盃已全數點亮！',
     vaultTitle: '💰 創作者金庫 · 分紅銀行',
     vaultTotalRevenue: '💰 總累積變現',
     vaultPodiumTitle: '🏆 榮耀領獎台',
@@ -132,6 +136,13 @@ const FALLBACK_CANVAS_I18N = Object.freeze({
     vaultStreamCarry: '孵化 10%',
     vaultStreamAds: '霓虹廣告',
     vaultStreamPro: '皮膚 Pro',
+    vaultShareTpl: '即時金額：{amount} · 佔總營收 {pct}%',
+    vaultStreamMeta: {
+      bounty: { title: '⚔️ 現金懸賞 10% 託管抽成', sub: '每筆現金懸賞驗收自動結算' },
+      carry: { title: '🚀 孵化分紅池 10% Carry', sub: '項目上線與後續營收自動入帳' },
+      ads: { title: '📺 像素廣場霓虹廣告位', sub: '$29/位 · 同步點亮小鎮霓虹招牌' },
+      pro: { title: '✨ 像素皮膚與 Pro 會員', sub: '純外觀與效率加成，絕不賣戰力' },
+    },
     townSponsored: '★ 霓虹贊助 ★',
     townPlaza: '⚡ 像素算力廣場 ⚡',
     buildings: {
@@ -199,6 +210,10 @@ const FALLBACK_CANVAS_I18N = Object.freeze({
     loungeCoffeeBar: '☕ 咖啡吧台',
     loungeGoldCoffeeBar: '✨ 黄金手冲吧',
     loungeTrophyCase: '🏆 创始成就柜',
+    trophyTooltipTitle: '🏆 创始成就奖杯柜',
+    trophyTooltipEmpty: '尚未解锁奖杯 · 完成任务立即点亮！',
+    trophyTooltipLocked: '尚有 {count} 座待解锁',
+    trophyTooltipAllUnlocked: '✨ 全 6 座创始奖杯已全部点亮！',
     vaultTitle: '💰 创作者金库 · 分红银行',
     vaultTotalRevenue: '💰 总累计变现',
     vaultPodiumTitle: '🏆 荣耀领奖台',
@@ -206,6 +221,13 @@ const FALLBACK_CANVAS_I18N = Object.freeze({
     vaultStreamCarry: '孵化 10%',
     vaultStreamAds: '霓虹广告',
     vaultStreamPro: '皮肤 Pro',
+    vaultShareTpl: '实时金额：{amount} · 占总营收 {pct}%',
+    vaultStreamMeta: {
+      bounty: { title: '⚔️ 现金悬赏 10% 托管抽成', sub: '每笔现金悬赏验收自动结算' },
+      carry: { title: '🚀 孵化分红池 10% Carry', sub: '项目上线与后续营收自动入账' },
+      ads: { title: '📺 像素广场霓虹广告位', sub: '$29/位 · 同步点亮小镇霓虹招牌' },
+      pro: { title: '✨ 像素皮肤与 Pro 会员', sub: '纯外观与效率加成，绝不卖战力' },
+    },
     townSponsored: '★ 霓虹赞助 ★',
     townPlaza: '⚡ 像素算力广场 ⚡',
     buildings: {
@@ -273,6 +295,10 @@ const FALLBACK_CANVAS_I18N = Object.freeze({
     loungeCoffeeBar: '☕ Coffee Bar',
     loungeGoldCoffeeBar: '✨ Gold Espresso',
     loungeTrophyCase: '🏆 Trophy Case',
+    trophyTooltipTitle: '🏆 Genesis Trophy Case',
+    trophyTooltipEmpty: 'No trophies yet — complete tasks to unlock!',
+    trophyTooltipLocked: '{count} more locked',
+    trophyTooltipAllUnlocked: '✨ All 6 Genesis Trophies Unlocked!',
     vaultTitle: '💰 Creator Vault · Bank',
     vaultTotalRevenue: '💰 Total Revenue',
     vaultPodiumTitle: '🏆 Honor Podium',
@@ -280,6 +306,13 @@ const FALLBACK_CANVAS_I18N = Object.freeze({
     vaultStreamCarry: 'Carry 10%',
     vaultStreamAds: 'Neon Ads',
     vaultStreamPro: 'Skins Pro',
+    vaultShareTpl: 'Live: {amount} · {pct}% of Total',
+    vaultStreamMeta: {
+      bounty: { title: '⚔️ Cash Bounty 10% Escrow', sub: 'Auto-settled on verified cash bounties' },
+      carry: { title: '🚀 Incubator 10% Carry', sub: 'Credited on launch & live product revenue' },
+      ads: { title: '📺 Plaza Neon Billboard Ads', sub: '$29/slot · Lights up the town billboard' },
+      pro: { title: '✨ Pixel Skins & Pro Pass', sub: 'Pure cosmetics & perks — zero pay-to-win' },
+    },
     townSponsored: '★ SPONSORED ★',
     townPlaza: '⚡ TOWN PLAZA ⚡',
     buildings: {
@@ -702,12 +735,14 @@ export class PixelTownEngine {
     this.hoveredBuildingId = null;
     this.hoveredBountyTaskId = null;
     this.hoveredPropId = null;
+    this.pinnedPropId = null;
 
     // Per-frame interactive hitboxes populated during render
     this._frameMonitors = []; // { worker, screenRect, desk, isActive, style }
     this._frameWorkers = []; // { agent, x, y, scale, hideBadge }
     this._frameBountyRects = []; // { task, x, y, w, h }
     this._frameVotePillars = []; // { project, x, y, w, h }
+    this._frameVaultPillars = []; // { key, idx, x, y, w, h, cx, topY, fillH, val, color, hi }
 
     // Visual effects
     this.floatingTexts = [];
@@ -716,12 +751,14 @@ export class PixelTownEngine {
     this.fireworkSparks = [];
     this.dataParticles = [];
     this.steamParticles = [];
+    this.reviewEffects = [];
     this.meteors = [];
     this.nextMeteorIn = 2.8;
     this.launchBannerTimer = 0;
     this.launchBannerText = '';
     this.launchBannerProjectId = null;
     this.ambientFlash = 0;
+    this.ambientFlashColor = '168, 85, 247';
     this.marqueeOffset = 0;
 
     // Deterministic ambient environment arrays
@@ -738,12 +775,27 @@ export class PixelTownEngine {
       { x: 302, y: 7, w: 26, speed: 4.5 },
       { x: 420, y: 11, w: 32, speed: 3.3 },
     ];
-    this.fireflies = Array.from({ length: 14 }, (_, i) => ({
-      baseX: 165 + ((i * 37) % 150),
-      baseY: 96 + ((i * 29) % 116),
-      phase: i * 1.07,
-      speed: 0.75 + (i % 4) * 0.22,
+    this.townFireflies = Array.from({ length: 22 }, (_, i) => ({
+      baseX: 28 + ((i * 67 + 19) % (WORLD_W - 56)),
+      baseY: 44 + ((i * 53 + 13) % (WORLD_H - 72)),
+      ampX: 7 + (i % 4) * 3,
+      ampY: 5 + (i % 3) * 2.5,
+      phase: i * 1.13,
+      speed: 0.55 + (i % 5) * 0.16,
+      blinkSpeed: 1.4 + (i % 4) * 0.45,
+      tint: i % 4 === 0 ? '#67e8f9' : i % 3 === 0 ? '#bef264' : '#fde047',
     }));
+    this.loungeFireflies = Array.from({ length: 16 }, (_, i) => ({
+      baseX: 26 + ((i * 71 + 29) % (WORLD_W - 52)),
+      baseY: 74 + ((i * 41 + 17) % (WORLD_H - 96)),
+      ampX: 6 + (i % 3) * 3,
+      ampY: 4 + (i % 4) * 2,
+      phase: i * 1.37 + 0.5,
+      speed: 0.45 + (i % 4) * 0.14,
+      blinkSpeed: 1.2 + (i % 3) * 0.42,
+      tint: i % 5 === 0 ? '#fbcfe8' : i % 3 === 0 ? '#bef264' : '#fde047',
+    }));
+    this.fireflies = this.townFireflies;
 
     // Bind pointer & resize events
     this._onResize = this._resize.bind(this);
@@ -822,6 +874,7 @@ export class PixelTownEngine {
     this.hoveredBuildingId = null;
     this.hoveredBountyTaskId = null;
     this.hoveredPropId = null;
+    this.pinnedPropId = null;
     this._syncSceneTargets(true);
     this.callbacks.onSceneChange?.(this.scene);
     return this.scene;
@@ -1016,6 +1069,27 @@ export class PixelTownEngine {
     return {
       displayName: ext?.displayName || fbName || entry.displayName || entry.userId || '',
       badge: ext?.badge || entry.badge || '',
+    };
+  }
+
+  _localizeAchievement(ach) {
+    const loc = this.locale || 'zh-TW';
+    if (!ach) return { name: '', icon: '🏆' };
+    let ext = null;
+    try {
+      if (typeof I18N.localizeAchievement === 'function') {
+        ext = I18N.localizeAchievement(ach, loc);
+      }
+    } catch {
+      ext = null;
+    }
+    let name = ext?.name || ext?.title || ach.name || ach.title || ach.id || 'Achievement';
+    if (loc === 'en' && /[\u4e00-\u9fff]/.test(name)) {
+      name = ach.id ? String(ach.id).replace(/^ach-/, '').replace(/-/g, ' ') : 'Genesis Trophy';
+    }
+    return {
+      name,
+      icon: ach.icon || '🏆',
     };
   }
 
@@ -1226,6 +1300,7 @@ export class PixelTownEngine {
       : `${c.launchBannerPrefix}${title}${c.launchBannerSuffix}`;
     this.launchBannerTimer = 6.0;
     this.ambientFlash = 0.72;
+    this.ambientFlashColor = '168, 85, 247';
 
     for (const agent of this.agents.values()) {
       agent.celebrateTimer = 4.0;
@@ -1287,6 +1362,117 @@ export class PixelTownEngine {
     this._syncSceneTargets(false);
     this._setBubble(agent, `> ${truncateText(resolvedMsg, 18)}`, 4.8, 'cli', message ? null : 'cli_default');
     this._spawnDataBurst(agent.x, agent.y - 20, '#4ade80', 10);
+  }
+
+  /**
+   * Dramatic center-stage pixel particle burst + floating banner text for Peer Review Queue decisions.
+   * @param {'reject' | 'approve'} decision
+   * @param {number} [goldAmount=0]
+   */
+  triggerReviewDecision(decision, goldAmount = 0) {
+    const mode = String(decision || '').toLowerCase();
+    const isReject = mode === 'reject' || mode === 'slash' || mode === 'slop';
+    const gold = Math.max(0, Math.round(Number(goldAmount) || 0));
+    const cx = WORLD_W / 2;
+    const cy = Math.round(WORLD_H / 2) - 10;
+
+    if (isReject) {
+      this.ambientFlash = 0.44;
+      this.ambientFlashColor = '239, 68, 68';
+      this.reviewEffects.push({
+        kind: 'reject',
+        x: cx,
+        y: cy,
+        life: 0.65,
+        maxLife: 0.65,
+      });
+
+      // Crimson-gold starburst sparks
+      const slashPalette = ['#ef4444', '#fb7185', '#f59e0b', '#fde047', '#ffffff'];
+      const sparkCount = 30;
+      for (let i = 0; i < sparkCount; i++) {
+        const angle = (Math.PI * 2 * i) / sparkCount + (Math.random() - 0.5) * 0.18;
+        const spd = 42 + Math.random() * 82;
+        this.fireworkSparks.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(angle) * spd,
+          vy: Math.sin(angle) * spd,
+          color: slashPalette[i % slashPalette.length],
+          size: i % 3 === 0 ? 2 : 1,
+          life: 0.65 + Math.random() * 0.45,
+          maxLife: 1.1,
+        });
+      }
+      // Diagonal blade spark trail
+      for (let k = -5; k <= 5; k++) {
+        this.dataParticles.push({
+          x: cx + k * 7,
+          y: cy - k * 4,
+          vx: (Math.random() - 0.5) * 18,
+          vy: (Math.random() - 0.5) * 18 - 10,
+          color: k % 2 === 0 ? '#fde047' : '#ef4444',
+          life: 0.45 + Math.random() * 0.25,
+          maxLife: 0.7,
+        });
+      }
+
+      this._spawnCoins(cx, cy + 8, gold > 0 ? 12 : 8);
+      const text = gold > 0 ? `🚫 SLOP SLASHED +${gold}G!` : '🚫 SLOP SLASHED!';
+      this._spawnFloatingText(cx, cy - 8, text, '#fef08a', {
+        kind: 'review_reject',
+        val: gold,
+        scale: 1.24,
+        life: 2.6,
+        vy: -14,
+        badgeBg: 'rgba(69, 10, 10, 0.92)',
+        badgeBorder: '#ef4444',
+      });
+    } else {
+      this.ambientFlash = 0.4;
+      this.ambientFlashColor = '52, 211, 153';
+      this.reviewEffects.push({
+        kind: 'approve',
+        x: cx,
+        y: cy,
+        life: 0.7,
+        maxLife: 0.7,
+      });
+
+      // Emerald-gold radiant merge sparks
+      const mergePalette = ['#10b981', '#4ade80', '#a7f3d0', '#fde047', '#ffffff'];
+      const sparkCount = 32;
+      for (let i = 0; i < sparkCount; i++) {
+        const angle = (Math.PI * 2 * i) / sparkCount + (Math.random() - 0.5) * 0.2;
+        const spd = 34 + Math.random() * 74;
+        this.fireworkSparks.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(angle) * spd,
+          vy: Math.sin(angle) * spd - 10,
+          color: mergePalette[i % mergePalette.length],
+          size: i % 3 === 0 ? 2 : 1,
+          life: 0.75 + Math.random() * 0.48,
+          maxLife: 1.25,
+        });
+      }
+
+      for (const agent of this.agents.values()) {
+        agent.celebrateTimer = Math.max(agent.celebrateTimer, 1.8);
+      }
+
+      this._spawnCoins(cx, cy + 8, gold > 0 ? 10 : 6);
+      const text = gold > 0 ? `✅ PR MERGED +${gold}G!` : '✅ PR MERGED!';
+      this._spawnFloatingText(cx, cy - 8, text, '#86efac', {
+        kind: 'review_approve',
+        val: gold,
+        scale: 1.24,
+        life: 2.6,
+        vy: -14,
+        badgeBg: 'rgba(5, 46, 22, 0.92)',
+        badgeBorder: '#4ade80',
+      });
+    }
   }
 
   destroy() {
@@ -1511,6 +1697,7 @@ export class PixelTownEngine {
   }
 
   _spawnFloatingText(x, y, text, color, meta = null) {
+    const life = Number(meta?.life ?? 2.0);
     this.floatingTexts.push({
       x,
       y,
@@ -1518,9 +1705,12 @@ export class PixelTownEngine {
       color,
       kind: meta?.kind || null,
       val: meta?.val ?? null,
-      vy: -20,
-      life: 2.0,
-      maxLife: 2.0,
+      scale: Number(meta?.scale ?? 1),
+      badgeBg: meta?.badgeBg || null,
+      badgeBorder: meta?.badgeBorder || null,
+      vy: Number(meta?.vy ?? -20),
+      life,
+      maxLife: life,
     });
   }
 
@@ -1649,10 +1839,18 @@ export class PixelTownEngine {
         if (pointInRect(pt.x, pt.y, vp)) this.hoveredPropId = `vote:${vp.project.id}`;
       }
     } else if (this.scene === 'lounge') {
-      if (pt.x >= 194 && pt.x <= 278 && pt.y >= 8 && pt.y <= 44) this.hoveredPropId = 'trophy_case';
+      if (pt.x >= 192 && pt.x <= 280 && pt.y >= 8 && pt.y <= 56) this.hoveredPropId = 'trophy_case';
       else if (pt.x >= 20 && pt.x <= 90 && pt.y >= 80 && pt.y <= 122) this.hoveredPropId = 'coffee_bar';
     } else if (this.scene === 'vault') {
-      if (pt.x >= 200 && pt.x <= 280 && pt.y >= 4 && pt.y <= 76) this.hoveredPropId = 'vault_door';
+      for (const vp of this._frameVaultPillars) {
+        if (pointInRect(pt.x, pt.y, vp)) {
+          this.hoveredPropId = `vault_pillar:${vp.key}`;
+          break;
+        }
+      }
+      if (!this.hoveredPropId && pt.x >= 200 && pt.x <= 280 && pt.y >= 4 && pt.y <= 76) {
+        this.hoveredPropId = 'vault_door';
+      }
     }
 
     const interactive = Boolean(
@@ -1724,6 +1922,25 @@ export class PixelTownEngine {
           return;
         }
       }
+    }
+    if (this.scene === 'lounge') {
+      if (pt.x >= 192 && pt.x <= 280 && pt.y >= 8 && pt.y <= 56) {
+        this.pinnedPropId = this.pinnedPropId === 'trophy_case' ? null : 'trophy_case';
+        this._spawnDataBurst(236, 26, '#fde047', 12);
+        return;
+      }
+      this.pinnedPropId = null;
+    }
+    if (this.scene === 'vault') {
+      for (const vp of this._frameVaultPillars) {
+        if (pointInRect(pt.x, pt.y, vp)) {
+          const propId = `vault_pillar:${vp.key}`;
+          this.pinnedPropId = this.pinnedPropId === propId ? null : propId;
+          this._spawnDataBurst(vp.cx, 244 - vp.fillH, vp.hi, 12);
+          return;
+        }
+      }
+      this.pinnedPropId = null;
     }
   }
 
@@ -1917,6 +2134,12 @@ export class PixelTownEngine {
       s.life -= dt;
       if (s.life <= 0) this.fireworkSparks.splice(i, 1);
     }
+
+    for (let i = this.reviewEffects.length - 1; i >= 0; i--) {
+      const fx = this.reviewEffects[i];
+      fx.life -= dt;
+      if (fx.life <= 0) this.reviewEffects.splice(i, 1);
+    }
   }
 
   _explodeFirework(x, y, colors) {
@@ -1951,6 +2174,7 @@ export class PixelTownEngine {
     this._frameWorkers = [];
     this._frameBountyRects = [];
     this._frameVotePillars = [];
+    this._frameVaultPillars = [];
 
     // LAYER 1: 480x300 Crisp Pixel Buffer Scene Render
     switch (this.scene) {
@@ -2905,6 +3129,18 @@ export class PixelTownEngine {
 
     // 6-Slot Genesis Achievement Trophy Glass Case (x=196, y=10, 80x32)
     drawTrophyCase(g, 196, 10, this.state.achievements, Math.floor(this.time * 3));
+    if (this.hoveredPropId === 'trophy_case' || this.pinnedPropId === 'trophy_case') {
+      g.strokeStyle = '#fde047';
+      g.lineWidth = 1;
+      g.strokeRect(194.5, 8.5, 83, 35);
+      // Animated corner glints
+      const glint = Math.floor(this.time * 6) % 2 === 0 ? '#ffffff' : '#fde047';
+      g.fillStyle = glint;
+      g.fillRect(194, 8, 2, 2);
+      g.fillRect(276, 8, 2, 2);
+      g.fillRect(194, 42, 2, 2);
+      g.fillRect(276, 42, 2, 2);
+    }
 
     // Cozy Bookshelf & Lounge Sign on Right Wall (x=344..464, y=8..52)
     g.fillStyle = '#3b2416';
@@ -2995,6 +3231,10 @@ export class PixelTownEngine {
       }
     }
     g.restore();
+
+    if (isNight) {
+      this._drawNightFireflies(g, this.loungeFireflies);
+    }
   }
 
   _drawLoungeSofaArea(g, x, y, isNight) {
@@ -3115,6 +3355,11 @@ export class PixelTownEngine {
     }
   }
 
+  _getActiveVaultPillarKey() {
+    const raw = this.hoveredPropId || this.pinnedPropId || '';
+    return raw.startsWith('vault_pillar:') ? raw.slice('vault_pillar:'.length) : null;
+  }
+
   _drawVaultRevenuePillars(g, rev, isNight) {
     const streams = [
       { key: 'bounty', val: Number(rev.bountyFeesUsd ?? 0), color: '#f59e0b', hi: '#fde047' },
@@ -3123,6 +3368,7 @@ export class PixelTownEngine {
       { key: 'pro', val: Number(rev.proSkinsUsd ?? 0), color: '#22d3ee', hi: '#a5f3fc' },
     ];
     const maxVal = Math.max(10, ...streams.map((s) => s.val));
+    const activeKey = this._getActiveVaultPillarKey();
 
     // Console platform base
     g.fillStyle = isNight ? '#09090b' : '#334155';
@@ -3137,25 +3383,60 @@ export class PixelTownEngine {
       const ratio = clamp(st.val / maxVal, 0.08, 1);
       const fillH = Math.max(8, Math.round(maxH * ratio));
       const topY = 244 - maxH;
+      const isActive = activeKey === st.key;
+
+      this._frameVaultPillars.push({
+        key: st.key,
+        idx,
+        x: cx - 18,
+        y: 122,
+        w: 36,
+        h: 146,
+        cx,
+        topY,
+        fillH,
+        val: st.val,
+        color: st.color,
+        hi: st.hi,
+      });
+
+      // Soft additive vertical glow halo behind active hovered/pinned pillar
+      if (isActive) {
+        g.save();
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.24;
+        g.fillStyle = st.hi;
+        g.fillRect(cx - colW / 2 - 4, topY - 4, colW + 8, maxH + 8);
+        g.restore();
+      }
 
       // Glass housing
       g.fillStyle = isNight ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.72)';
       g.fillRect(cx - colW / 2, topY, colW, maxH);
-      g.fillStyle = '#475569';
+      g.fillStyle = isActive ? '#fde047' : '#475569';
       g.fillRect(cx - colW / 2, topY, colW, 2);
-      g.fillRect(cx - colW / 2, topY, 1, maxH);
-      g.fillRect(cx + colW / 2 - 1, topY, 1, maxH);
+      g.fillRect(cx - colW / 2, topY, isActive ? 2 : 1, maxH);
+      g.fillRect(cx + colW / 2 - (isActive ? 2 : 1), topY, isActive ? 2 : 1, maxH);
 
       // Glowing dynamic bar
       const barY = 244 - fillH;
       g.fillStyle = st.color;
       g.fillRect(cx - colW / 2 + 2, barY, colW - 4, fillH);
       g.fillStyle = st.hi;
-      g.fillRect(cx - colW / 2 + 4, barY, 4, fillH);
+      g.fillRect(cx - colW / 2 + 4, barY, isActive ? 7 : 4, fillH);
       // Animated energy scanline inside bar
-      const scanY = 242 - ((Math.floor(this.time * 28 + idx * 19)) % Math.max(4, fillH));
+      const scanY = 242 - ((Math.floor(this.time * (isActive ? 42 : 28) + idx * 19)) % Math.max(4, fillH));
       g.fillStyle = '#ffffff';
       g.fillRect(cx - colW / 2 + 2, scanY, colW - 4, 2);
+
+      // Crisp outer golden selection frame + base LED on active pillar
+      if (isActive) {
+        g.strokeStyle = '#fde047';
+        g.lineWidth = 1;
+        g.strokeRect(cx - colW / 2 - 1.5, topY - 1.5, colW + 3, maxH + 3);
+        g.fillStyle = st.hi;
+        g.fillRect(cx - 10, 246, 20, 2);
+      }
     });
   }
 
@@ -3460,13 +3741,40 @@ export class PixelTownEngine {
       }
       g.restore();
 
-      for (const f of this.fireflies) {
-        const fx = Math.round(f.baseX + Math.sin(this.time * f.speed + f.phase) * 8);
-        const fy = Math.round(f.baseY + Math.cos(this.time * f.speed * 0.8 + f.phase) * 5);
-        g.fillStyle = f.phase % 2 > 1 ? '#67e8f9' : '#fde047';
-        g.fillRect(fx, fy, 1, 1);
-      }
+      this._drawNightFireflies(g, this.townFireflies);
     }
+  }
+
+  /**
+   * Lightweight soft-glowing pixel firefly particles for night ambiance in lounge & town.
+   * Uses pure batched fillRects with additive blending (zero per-particle gradients = zero lag).
+   */
+  _drawNightFireflies(g, list) {
+    if (!list || !list.length) return;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      const t = this.time;
+      const fx = Math.round(f.baseX + Math.sin(t * f.speed + f.phase) * f.ampX);
+      const fy = Math.round(f.baseY + Math.cos(t * f.speed * 0.78 + f.phase * 1.3) * f.ampY);
+      const pulse = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * f.blinkSpeed + f.phase * 2.1));
+
+      // Outer faint 5x5 pixel aura
+      g.globalAlpha = Number((pulse * 0.16).toFixed(2));
+      g.fillStyle = f.tint;
+      g.fillRect(fx - 2, fy - 2, 5, 5);
+
+      // Inner warm 3x3 pixel glow
+      g.globalAlpha = Number((pulse * 0.36).toFixed(2));
+      g.fillRect(fx - 1, fy - 1, 3, 3);
+
+      // Crisp 1x1 bright core
+      g.globalAlpha = Number((pulse * 0.95).toFixed(2));
+      g.fillStyle = '#ffffff';
+      g.fillRect(fx, fy, 1, 1);
+    }
+    g.restore();
   }
 
   // ==========================================================================
@@ -3513,8 +3821,60 @@ export class PixelTownEngine {
     }
     g.globalAlpha = 1;
 
+    // Dramatic center-stage peer review decision pixel effects (slash vs merge halo)
+    for (const fx of this.reviewEffects) {
+      const progress = clamp(1 - fx.life / fx.maxLife, 0, 1);
+      const alpha = clamp(fx.life / fx.maxLife, 0, 1);
+      const cx = Math.round(fx.x);
+      const cy = Math.round(fx.y);
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      if (fx.kind === 'reject') {
+        // Dramatic diagonal pixel laser-slash X + starburst core
+        const reach = Math.round(14 + progress * 34);
+        g.globalAlpha = Number((alpha * 0.92).toFixed(2));
+        for (let step = -reach; step <= reach; step += 2) {
+          const sx1 = cx + step;
+          const sy1 = cy - Math.round(step * 0.58);
+          const sy2 = cy + Math.round(step * 0.58);
+          // Outer crimson slash glow
+          g.fillStyle = '#ef4444';
+          g.fillRect(sx1 - 1, sy1 - 2, 3, 5);
+          g.fillRect(sx1 - 1, sy2 - 1, 3, 3);
+          // Inner gold-white razor core
+          g.fillStyle = Math.abs(step) < reach * 0.55 ? '#ffffff' : '#fde047';
+          g.fillRect(sx1, sy1, 2, 2);
+          g.fillRect(sx1, sy2, 1, 1);
+        }
+        // Starburst impact diamond
+        const coreR = Math.max(2, Math.round((1 - progress) * 10));
+        g.fillStyle = '#fde047';
+        g.fillRect(cx - coreR, cy - 1, coreR * 2, 3);
+        g.fillRect(cx - 1, cy - coreR, 3, coreR * 2);
+      } else {
+        // Expanding emerald-gold radiant ring + pixel glints
+        const r = Math.round(10 + progress * 44);
+        g.globalAlpha = Number((alpha * 0.85).toFixed(2));
+        g.strokeStyle = '#4ade80';
+        g.lineWidth = 2;
+        g.strokeRect(cx - r, cy - Math.round(r * 0.7), r * 2, Math.round(r * 1.4));
+        g.strokeStyle = '#fde047';
+        g.lineWidth = 1;
+        const r2 = Math.max(4, r - 4);
+        g.strokeRect(cx - r2, cy - Math.round(r2 * 0.7), r2 * 2, Math.round(r2 * 1.4));
+        // 4 cardinal emerald-gold sparkles
+        const glintR = Math.round(r * 0.85);
+        g.fillStyle = '#ffffff';
+        g.fillRect(cx - glintR, cy - 1, 3, 3);
+        g.fillRect(cx + glintR - 2, cy - 1, 3, 3);
+        g.fillRect(cx - 1, cy - Math.round(glintR * 0.7), 3, 3);
+        g.fillRect(cx - 1, cy + Math.round(glintR * 0.7) - 2, 3, 3);
+      }
+      g.restore();
+    }
+
     if (this.ambientFlash > 0.01) {
-      g.fillStyle = `rgba(168, 85, 247, ${(this.ambientFlash * 0.24).toFixed(3)})`;
+      g.fillStyle = `rgba(${this.ambientFlashColor || '168, 85, 247'}, ${(this.ambientFlash * 0.24).toFixed(3)})`;
       g.fillRect(0, 0, WORLD_W, WORLD_H);
     }
   }
@@ -3919,22 +4279,24 @@ export class PixelTownEngine {
       );
 
       // 4 Dynamic Revenue Pillar Labels & Live USD Values
+      const activePillarKey = this._getActiveVaultPillarKey();
       const streams = [
-        { label: c.vaultStreamBounty, val: Number(rev.bountyFeesUsd ?? 0), color: '#fde047' },
-        { label: c.vaultStreamCarry, val: Number(rev.incubationCarryUsd ?? 0), color: '#e9d5ff' },
-        { label: c.vaultStreamAds, val: Number(rev.billboardAdsUsd ?? 0), color: '#fbcfe8' },
-        { label: c.vaultStreamPro, val: Number(rev.proSkinsUsd ?? 0), color: '#a5f3fc' },
+        { key: 'bounty', label: c.vaultStreamBounty, val: Number(rev.bountyFeesUsd ?? 0), color: '#fde047' },
+        { key: 'carry', label: c.vaultStreamCarry, val: Number(rev.incubationCarryUsd ?? 0), color: '#e9d5ff' },
+        { key: 'ads', label: c.vaultStreamAds, val: Number(rev.billboardAdsUsd ?? 0), color: '#fbcfe8' },
+        { key: 'pro', label: c.vaultStreamPro, val: Number(rev.proSkinsUsd ?? 0), color: '#a5f3fc' },
       ];
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       streams.forEach((st, idx) => {
         const cx = 36 + idx * 40;
-        ctx.font = `700 ${Math.max(8, Math.round(4.8 * s))}px Consolas, monospace`;
-        ctx.fillStyle = st.color;
+        const isActive = activePillarKey === st.key;
+        ctx.font = `700 ${Math.max(8, Math.round((isActive ? 5.3 : 4.8) * s))}px Consolas, monospace`;
+        ctx.fillStyle = isActive ? '#ffffff' : st.color;
         ctx.fillText(formatUsd(st.val), wx(cx), wy(130));
-        ctx.font = `700 ${Math.max(7.2, Math.round(4.1 * s))}px "Microsoft JhengHei", Consolas, monospace`;
-        ctx.fillStyle = '#f8fafc';
+        ctx.font = `700 ${Math.max(7.2, Math.round((isActive ? 4.4 : 4.1) * s))}px "Microsoft JhengHei", Consolas, monospace`;
+        ctx.fillStyle = isActive ? '#fde047' : '#f8fafc';
         ctx.fillText(st.label, wx(cx), wy(258), 38 * s);
       });
       ctx.restore();
@@ -4080,20 +4442,25 @@ export class PixelTownEngine {
     const s = this.scale;
     const dpr = this.dpr;
 
-    // Floating reward texts (+120G, +35 pts, +$36.00)
+    // Floating reward texts (+120G, +35 pts, +$36.00, 🚫 SLOP SLASHED, ✅ PR MERGED)
     ctx.save();
-    ctx.font = `900 ${Math.round(11 * dpr)}px "Microsoft JhengHei", Consolas, monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const ft of this.floatingTexts) {
       ctx.globalAlpha = clamp(ft.life / 0.7, 0, 1);
       const fx = this.offsetX + ft.x * s;
       const fy = this.offsetY + ft.y * s;
-      ctx.lineWidth = Math.max(2, 2.5 * dpr);
-      ctx.strokeStyle = '#090d1a';
-      ctx.strokeText(ft.text, fx, fy);
-      ctx.fillStyle = ft.color;
-      ctx.fillText(ft.text, fx, fy);
+      const fs = Math.round(11 * dpr * (ft.scale || 1));
+      if (ft.badgeBg) {
+        this._drawPill(ctx, fx, fy, ft.text, ft.badgeBg, ft.badgeBorder || ft.color, fs, ft.color);
+      } else {
+        ctx.font = `900 ${fs}px "Microsoft JhengHei", Consolas, monospace`;
+        ctx.lineWidth = Math.max(2, 2.5 * dpr);
+        ctx.strokeStyle = '#090d1a';
+        ctx.strokeText(ft.text, fx, fy);
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, fx, fy);
+      }
     }
     ctx.restore();
 
@@ -4117,6 +4484,16 @@ export class PixelTownEngine {
   }
 
   _renderHoverInspectorCard(ctx, isNight) {
+    // Scene-specific interactive prop hover/click bubbles (drawn crisp above sprites & nameplates)
+    if (this.scene === 'lounge' && (this.hoveredPropId === 'trophy_case' || this.pinnedPropId === 'trophy_case')) {
+      this._renderTrophyCaseTooltip(ctx, isNight);
+    } else if (this.scene === 'vault') {
+      const activePillarKey = this._getActiveVaultPillarKey();
+      if (activePillarKey) {
+        this._renderVaultPillarTooltip(ctx, this.state.founderRevenue || {}, activePillarKey, isNight);
+      }
+    }
+
     if (!this.hoveredWorkerId) return;
     const a = this.agents.get(this.hoveredWorkerId);
     if (!a) return;
@@ -4185,6 +4562,182 @@ export class PixelTownEngine {
     ctx.fillRect(barX, barY, barW, barH);
     ctx.fillStyle = staminaPct >= 50 ? '#22c55e' : staminaPct >= 25 ? '#f59e0b' : '#ef4444';
     ctx.fillRect(barX + 1, barY + 1, Math.round(((barW - 2) * staminaPct) / 100), barH - 2);
+    ctx.restore();
+  }
+
+  _renderTrophyCaseTooltip(ctx, isNight) {
+    const s = this.scale;
+    const dpr = this.dpr;
+    const c = this._getCanvasI18n();
+    const isEn = this.locale === 'en';
+    const achievements = Array.isArray(this.state.achievements) ? this.state.achievements : [];
+    const total = Math.max(6, achievements.length);
+    const unlockedList = achievements.filter((a) => a && a.unlocked);
+    const unlockedCount = unlockedList.length;
+    const lockedCount = Math.max(0, total - unlockedCount);
+
+    const headerFs = Math.max(9, Math.round(9.2 * dpr));
+    const itemFs = Math.max(8, Math.round(7.8 * dpr));
+    const padX = Math.round(10 * dpr);
+    const padY = Math.round(7 * dpr);
+    const rowH = Math.round(itemFs * 1.55);
+    const rows = unlockedCount > 0 ? Math.ceil(Math.min(6, unlockedCount) / 2) : 1;
+
+    const cardW = Math.min(this.viewRect.w - 16, Math.round(236 * s));
+    const cardH = padY * 2 + Math.round(headerFs * 1.55) + rows * rowH + Math.round(itemFs * 1.45) + Math.round(4 * dpr);
+
+    const anchorX = this.offsetX + 236 * s;
+    const x = Math.round(clamp(anchorX - cardW / 2, this.offsetX + 6, this.offsetX + this.viewRect.w - cardW - 6));
+    const y = Math.round(clamp(this.offsetY + 60 * s, this.offsetY + 6, this.offsetY + this.viewRect.h - cardH - 6));
+
+    ctx.save();
+    // Crisp drop shadow & retro pixel frame
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+    ctx.fillRect(x + 3, y + 3, cardW, cardH);
+    ctx.fillStyle = isNight ? 'rgba(18, 12, 32, 0.96)' : 'rgba(24, 16, 40, 0.94)';
+    ctx.fillRect(x, y, cardW, cardH);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = Math.max(1.5, 1.3 * dpr);
+    ctx.strokeRect(x, y, cardW, cardH);
+
+    // Upward pointer notch toward trophy glass case
+    const tx = clamp(Math.round(anchorX), x + 12, x + cardW - 12);
+    ctx.fillStyle = isNight ? 'rgba(18, 12, 32, 0.96)' : 'rgba(24, 16, 40, 0.94)';
+    ctx.fillRect(tx - 4, y - 4, 8, 5);
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(tx - 4, y - 5, 8, 1.5);
+
+    // Header
+    ctx.font = `800 ${headerFs}px "Microsoft JhengHei", Consolas, monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#fef08a';
+    ctx.fillText(`${c.trophyTooltipTitle} (${unlockedCount}/${total})`, x + padX, y + padY, cardW - padX * 2);
+
+    // Divider line
+    const divY = y + padY + Math.round(headerFs * 1.32);
+    ctx.fillStyle = 'rgba(253, 224, 71, 0.28)';
+    ctx.fillRect(x + padX, divY, cardW - padX * 2, Math.max(1, Math.round(dpr * 0.8)));
+
+    // Body: unlocked achievements list (2-column grid) or friendly empty hint
+    const bodyY = divY + Math.round(4 * dpr);
+    ctx.font = `600 ${itemFs}px "Microsoft JhengHei", Consolas, monospace`;
+    if (unlockedCount === 0) {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText(c.trophyTooltipEmpty, x + padX, bodyY, cardW - padX * 2);
+    } else {
+      const colW = (cardW - padX * 2 - 6 * dpr) / 2;
+      unlockedList.slice(0, 6).forEach((ach, idx) => {
+        const loc = this._localizeAchievement(ach);
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const ix = x + padX + col * (colW + 6 * dpr);
+        const iy = bodyY + row * rowH;
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(
+          `${loc.icon} ${truncateText(loc.name, isEn ? 15 : 9)}`,
+          ix,
+          iy,
+          colW
+        );
+      });
+    }
+
+    // Footer status
+    const footY = bodyY + rows * rowH + Math.round(2 * dpr);
+    ctx.font = `700 ${Math.max(7.5, Math.round(itemFs * 0.94))}px "Microsoft JhengHei", Consolas, monospace`;
+    if (lockedCount > 0) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(`🔒 ${fmtTpl(c.trophyTooltipLocked, { count: lockedCount })}`, x + padX, footY, cardW - padX * 2);
+    } else {
+      ctx.fillStyle = '#4ade80';
+      ctx.fillText(c.trophyTooltipAllUnlocked, x + padX, footY, cardW - padX * 2);
+    }
+    ctx.restore();
+  }
+
+  _renderVaultPillarTooltip(ctx, rev, key, isNight) {
+    const s = this.scale;
+    const dpr = this.dpr;
+    const c = this._getCanvasI18n();
+
+    const valueMap = {
+      bounty: Number(rev.bountyFeesUsd ?? 0),
+      carry: Number(rev.incubationCarryUsd ?? 0),
+      ads: Number(rev.billboardAdsUsd ?? 0),
+      pro: Number(rev.proSkinsUsd ?? 0),
+    };
+    const accentMap = {
+      bounty: '#fde047',
+      carry: '#e9d5ff',
+      ads: '#fbcfe8',
+      pro: '#a5f3fc',
+    };
+    const borderMap = {
+      bounty: '#f59e0b',
+      carry: '#a855f7',
+      ads: '#f472b6',
+      pro: '#22d3ee',
+    };
+    const pillar = this._frameVaultPillars.find((vp) => vp.key === key);
+    const val = valueMap[key] ?? 0;
+    const totalUsd = Number(rev.totalUsd ?? 0);
+    const pct = totalUsd > 0 ? ((val / totalUsd) * 100).toFixed(1) : '0.0';
+    const meta = c.vaultStreamMeta?.[key] || { title: key, sub: '' };
+    const accent = accentMap[key] || '#fde047';
+    const border = borderMap[key] || '#fde047';
+
+    const titleFs = Math.max(8.5, Math.round(8.8 * dpr));
+    const statFs = Math.max(8.5, Math.round(8.6 * dpr));
+    const subFs = Math.max(7.5, Math.round(7.4 * dpr));
+    const padX = Math.round(9 * dpr);
+    const padY = Math.round(6 * dpr);
+
+    const cardW = Math.min(this.viewRect.w - 16, Math.round(188 * s));
+    const cardH = padY * 2 + Math.round(titleFs * 1.45) + Math.round(statFs * 1.45) + Math.round(subFs * 1.35);
+
+    const anchorWorldX = pillar ? pillar.cx : 96;
+    const anchorX = this.offsetX + anchorWorldX * s;
+    const x = Math.round(clamp(anchorX - cardW / 2, this.offsetX + 6, this.offsetX + this.viewRect.w - cardW - 6));
+    const y = Math.round(clamp(this.offsetY + 118 * s - cardH, this.offsetY + 6, this.offsetY + this.viewRect.h - cardH - 6));
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
+    ctx.fillRect(x + 3, y + 3, cardW, cardH);
+    ctx.fillStyle = isNight ? 'rgba(12, 10, 20, 0.96)' : 'rgba(15, 23, 42, 0.94)';
+    ctx.fillRect(x, y, cardW, cardH);
+    ctx.strokeStyle = border;
+    ctx.lineWidth = Math.max(1.5, 1.3 * dpr);
+    ctx.strokeRect(x, y, cardW, cardH);
+
+    // Downward pointer notch aiming at the hovered pillar
+    const tx = clamp(Math.round(anchorX), x + 10, x + cardW - 10);
+    ctx.fillStyle = isNight ? 'rgba(12, 10, 20, 0.96)' : 'rgba(15, 23, 42, 0.94)';
+    ctx.fillRect(tx - 4, y + cardH - 1, 8, 5);
+    ctx.fillStyle = border;
+    ctx.fillRect(tx - 4, y + cardH + 3, 8, 1.5);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    // Line 1: Revenue Stream Full Title
+    ctx.font = `800 ${titleFs}px "Microsoft JhengHei", Consolas, monospace`;
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText(meta.title, x + padX, y + padY, cardW - padX * 2);
+
+    // Line 2: Live USD Amount + Share %
+    const line2Y = y + padY + Math.round(titleFs * 1.45);
+    ctx.font = `800 ${statFs}px Consolas, "Microsoft JhengHei", monospace`;
+    ctx.fillStyle = accent;
+    const shareText = fmtTpl(c.vaultShareTpl, { amount: formatUsd(val), pct });
+    ctx.fillText(shareText, x + padX, line2Y, cardW - padX * 2);
+
+    // Line 3: Breakdown note
+    const line3Y = line2Y + Math.round(statFs * 1.45);
+    ctx.font = `600 ${subFs}px "Microsoft JhengHei", Consolas, monospace`;
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(meta.sub, x + padX, line3Y, cardW - padX * 2);
+
     ctx.restore();
   }
 

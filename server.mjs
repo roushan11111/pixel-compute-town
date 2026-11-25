@@ -1,5 +1,6 @@
-// PixelCompute Town — Zero-Dependency Node.js v1.0 HTTP + REST + SSE Server
+// PixelCompute Town — Zero-Dependency Node.js v1.2 HTTP + REST + SSE + SQLite WAL Server
 
+import crypto from 'node:crypto';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -91,11 +92,17 @@ import {
   handleInstallSh,
 } from './src/server/deviceFlow.mjs';
 import { createSseHub } from './src/server/sse.mjs';
+import {
+  findProjectBySlugOrId,
+  renderPublicNotFoundPage,
+  renderPublicProjectPage,
+  renderPublicVerifyPage,
+} from './src/server/publicPages.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_PUBLIC_DIR = path.join(__dirname, 'public');
-const VERSION = '1.0.0';
+const VERSION = '1.2.0';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -304,6 +311,268 @@ function sendJson(res, statusCode, payload) {
     'Cache-Control': 'no-store',
   });
   res.end(JSON.stringify(payload));
+}
+
+function sendHtml(res, statusCode, html, method = 'GET', cacheControl = 'no-cache') {
+  res.writeHead(statusCode, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': cacheControl,
+  });
+  if (method === 'HEAD') return res.end();
+  return res.end(html);
+}
+
+function getRequestOrigin(req) {
+  const rawProto = typeof req.headers['x-forwarded-proto'] === 'string'
+    ? req.headers['x-forwarded-proto'].split(',')[0].trim().toLowerCase()
+    : 'http';
+  const proto = rawProto === 'https' ? 'https' : 'http';
+  const rawHost = typeof req.headers['x-forwarded-host'] === 'string'
+    ? req.headers['x-forwarded-host'].split(',')[0].trim()
+    : String(req.headers.host || 'localhost:3456').trim();
+  const safeHost = /^[a-z0-9.:-]+$/i.test(rawHost) ? rawHost : 'localhost:3456';
+  return `${proto}://${safeHost}`;
+}
+
+function verifyGitHubWebhookSignature(rawBody, signatureHeader, secret) {
+  if (!secret) return true;
+  if (typeof signatureHeader !== 'string' || !signatureHeader.startsWith('sha256=')) {
+    return false;
+  }
+  const expected = `sha256=${crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')}`;
+  const sigBuf = Buffer.from(signatureHeader.trim(), 'utf8');
+  const expBuf = Buffer.from(expected, 'utf8');
+  if (sigBuf.length !== expBuf.length) return false;
+  return crypto.timingSafeEqual(sigBuf, expBuf);
+}
+
+function normalizeUrlForMatch(raw) {
+  return String(raw || '').trim().toLowerCase().replace(/\/+$/, '');
+}
+
+function buildAutoSplitTasks(project, featureBrief, requestedCount = 3) {
+  const short = project.shortName || project.name;
+  const briefShort = featureBrief.length > 48 ? `${featureBrief.slice(0, 48)}…` : featureBrief;
+  const slug = String(project.id || 'proj').replace(/[^a-z0-9-]/gi, '').slice(0, 16) || 'proj';
+  const suffix = `${Date.now().toString(36).slice(-4)}${Math.random().toString(36).slice(2, 4)}`;
+  const targetCount = Math.max(3, Math.min(6, Math.round(Number(requestedCount) || 3)));
+
+  const baseTasks = [
+    {
+      id: `task-${slug}-core-${suffix}`,
+      projectId: project.id,
+      track: 'guild_bounty',
+      category: 'feature_pr',
+      source: 'auto_split',
+      title: `[核心架構] 實作《${short}》功能：${briefShort}`.slice(0, 120),
+      description: `針對需求「${featureBrief}」設計並實作核心模組、資料流與異常保護，提交可合併 PR 或完整程式碼。`,
+      modelSuggestion: 'Gemini CLI / Claude Code / Codex',
+      promptTemplate: `你是《${project.name}》的核心架構工程師。請針對功能需求「${featureBrief}」在本機工作區實作完整核心邏輯、狀態持久化與邊界處理，並提交可審查程式碼或 GitHub PR（請在 PR 標題/內文加上 Fixes #task-${slug}-core-${suffix} 即可合併自動結算）。`,
+      sampleInput: `Project: ${project.name}\nFeature Brief: ${featureBrief}\nPool: Core (70% anti-dilution protected)`,
+      acceptanceCriteria: [
+        '提供核心模組實作程式碼（含匯出函式與異常處理）或合法 GitHub PR 連結',
+        `完整落地功能需求：${briefShort}`,
+      ],
+      cashBountyUsd: 0,
+      poolBucket: 'core',
+      stakeGold: 25,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: DEFAULT_MIN_REPUTATION,
+      contributionPoints: 70,
+      goldReward: 280,
+      xpReward: 90,
+      progressWeight: 20,
+      tokenCostEst: 18,
+      staminaCost: 22,
+      status: 'open',
+      assignedWorkerId: null,
+      claimedBy: null,
+      claimedAt: null,
+      submittedAt: null,
+      submission: null,
+      verification: null,
+    },
+    {
+      id: `task-${slug}-test-${suffix}`,
+      projectId: project.id,
+      track: 'api_auto',
+      category: 'unit_test',
+      source: 'auto_split',
+      title: `[自動測試] 為「${briefShort}」補齊單元測試與邊界斷言`.slice(0, 120),
+      description: `針對《${short}》新功能「${featureBrief}」使用 Node.js 原生 node:test 補齊正常路徑與錯誤輸入測試。`,
+      modelSuggestion: 'gemini-2.5-flash',
+      promptTemplate: `請使用 Node.js 原生 node:test 與 node:assert/strict，為《${project.name}》新功能「${featureBrief}」撰寫至少 3 個單元測試案例（涵蓋正常行為、空值與異常邊界）。`,
+      sampleInput: `Project: ${project.name}\nFeature: ${featureBrief}\nFramework: node:test + node:assert/strict`,
+      acceptanceCriteria: [
+        '包含標準 test() 與 assert 斷言程式碼',
+        '覆蓋正常流程與異常邊界條件',
+      ],
+      cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
+      contributionPoints: 15,
+      goldReward: 110,
+      xpReward: 35,
+      progressWeight: 10,
+      tokenCostEst: 18000,
+      staminaCost: 12,
+      status: 'open',
+      assignedWorkerId: null,
+      claimedBy: null,
+      claimedAt: null,
+      submittedAt: null,
+      submission: null,
+      verification: null,
+    },
+    {
+      id: `task-${slug}-i18n-${suffix}`,
+      projectId: project.id,
+      track: 'api_auto',
+      category: 'i18n',
+      source: 'auto_split',
+      title: `[多語系/文件] 為「${briefShort}」產出三語 UI 文案與使用指南`.slice(0, 120),
+      description: `為《${short}》新功能「${featureBrief}」產出繁中／簡中／英文結構化 JSON 文案與簡明操作說明。`,
+      modelSuggestion: 'gemini-2.5-flash',
+      promptTemplate: `你是開源產品在地化與技術文件工程師。請為《${project.name}》的新功能「${featureBrief}」輸出合法 JSON 多語系文案，包含 zh-TW、zh-CN、en 三個語系物件，每個物件至少包含 title、description、ctaBtn、helpTip 四個鍵值。只輸出合法 JSON。`,
+      sampleInput: JSON.stringify({
+        project: project.name,
+        featureBrief,
+        locales: ['zh-TW', 'zh-CN', 'en'],
+        keys: ['title', 'description', 'ctaBtn', 'helpTip'],
+      }, null, 2),
+      acceptanceCriteria: [
+        '必須為合法 JSON 格式，包含至少 2 個語系鍵值',
+        '文案自然準確且涵蓋功能操作提示',
+      ],
+      cashBountyUsd: 0,
+      poolBucket: 'peripheral',
+      stakeGold: 0,
+      stakedGold: 0,
+      stakedByUserId: null,
+      minReputation: 0,
+      contributionPoints: 15,
+      goldReward: 100,
+      xpReward: 35,
+      progressWeight: 10,
+      tokenCostEst: 16000,
+      staminaCost: 12,
+      status: 'open',
+      assignedWorkerId: null,
+      claimedBy: null,
+      claimedAt: null,
+      submittedAt: null,
+      submission: null,
+      verification: null,
+    },
+  ];
+
+  if (targetCount > 3) {
+    const extras = [
+      {
+        id: `task-${slug}-hardening-${suffix}`,
+        projectId: project.id,
+        track: 'guild_bounty',
+        category: 'bugfix',
+        source: 'auto_split',
+        title: `[核心加固] 審查「${briefShort}」併發競態與安全防護 PR`.slice(0, 120),
+        description: `檢視「${featureBrief}」的輸入消毒、權限邊界與失敗重試邏輯，提交加固修補 PR。`,
+        modelSuggestion: 'Claude Code / Codex CLI',
+        promptTemplate: `請針對《${project.name}》功能「${featureBrief}」進行安全性與併發健壯性加固，輸出修補程式碼或 GitHub PR 連結。`,
+        sampleInput: `Project: ${project.name}\nFeature: ${featureBrief}\nFocus: Security & Edge Cases`,
+        acceptanceCriteria: ['提供具體修補程式碼或合法 GitHub PR 連結', '涵蓋至少兩項邊界防護'],
+        cashBountyUsd: 0,
+        poolBucket: 'core',
+        stakeGold: 25,
+        stakedGold: 0,
+        stakedByUserId: null,
+        minReputation: DEFAULT_MIN_REPUTATION,
+        contributionPoints: 55,
+        goldReward: 220,
+        xpReward: 75,
+        progressWeight: 15,
+        tokenCostEst: 15,
+        staminaCost: 20,
+        status: 'open',
+        assignedWorkerId: null,
+        claimedBy: null,
+        claimedAt: null,
+        submittedAt: null,
+        submission: null,
+        verification: null,
+      },
+      {
+        id: `task-${slug}-docs-${suffix}`,
+        projectId: project.id,
+        track: 'api_auto',
+        category: 'docs',
+        source: 'auto_split',
+        title: `[文件補齊] 撰寫「${briefShort}」README 範例與 API 規格`.slice(0, 120),
+        description: `補充「${featureBrief}」的 Markdown 快速上手範例與參數對照表。`,
+        modelSuggestion: 'gemini-2.5-flash',
+        promptTemplate: `請以 Markdown 為《${project.name}》功能「${featureBrief}」撰寫簡潔清晰的 API 規格與使用範例。`,
+        sampleInput: `Project: ${project.name}\nFeature: ${featureBrief}`,
+        acceptanceCriteria: ['包含結構化 Markdown 標題與範例程式碼', '無重複佔位符'],
+        cashBountyUsd: 0,
+        poolBucket: 'peripheral',
+        stakeGold: 0,
+        stakedGold: 0,
+        stakedByUserId: null,
+        minReputation: 0,
+        contributionPoints: 15,
+        goldReward: 95,
+        xpReward: 30,
+        progressWeight: 8,
+        tokenCostEst: 14000,
+        staminaCost: 10,
+        status: 'open',
+        assignedWorkerId: null,
+        claimedBy: null,
+        claimedAt: null,
+        submittedAt: null,
+        submission: null,
+        verification: null,
+      },
+      {
+        id: `task-${slug}-spec-${suffix}`,
+        projectId: project.id,
+        track: 'api_auto',
+        category: 'pixel_spec',
+        source: 'auto_split',
+        title: `[像素視覺] 設計「${briefShort}」像素狀態圖示與配色 JSON`.slice(0, 120),
+        description: `為「${featureBrief}」輸出復古像素介面配色與狀態圖示規格 JSON。`,
+        modelSuggestion: 'gemini-2.5-flash',
+        promptTemplate: `請為《${project.name}》功能「${featureBrief}」輸出包含 palette、icons、badges 的標準 JSON 視覺規格。`,
+        sampleInput: `Project: ${project.name}\nFeature: ${featureBrief}`,
+        acceptanceCriteria: ['必須為合法 JSON 結構', '包含具體色碼與狀態圖示定義'],
+        cashBountyUsd: 0,
+        poolBucket: 'peripheral',
+        stakeGold: 0,
+        stakedGold: 0,
+        stakedByUserId: null,
+        minReputation: 0,
+        contributionPoints: 15,
+        goldReward: 95,
+        xpReward: 30,
+        progressWeight: 8,
+        tokenCostEst: 14000,
+        staminaCost: 10,
+        status: 'open',
+        assignedWorkerId: null,
+        claimedBy: null,
+        claimedAt: null,
+        submittedAt: null,
+        submission: null,
+        verification: null,
+      },
+    ];
+    baseTasks.push(...extras.slice(0, targetCount - 3));
+  }
+
+  return baseTasks;
 }
 
 async function readRawBody(req) {
@@ -671,6 +940,7 @@ export function createAppServer(options = {}) {
     ? Number(options.rateLimitWindowMs)
     : 60_000;
   const rateBuckets = new Map();
+  let rateLimitBlockedCount = 0;
 
   function checkWriteRateLimit(req, res) {
     if (rateLimitMax <= 0) return true;
@@ -690,6 +960,7 @@ export function createAppServer(options = {}) {
     res.setHeader('X-RateLimit-Remaining', String(remaining));
 
     if (bucket.count > rateLimitMax) {
+      rateLimitBlockedCount += 1;
       const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
       res.setHeader('Retry-After', String(retryAfterSec));
       sendJson(res, 429, {
@@ -768,12 +1039,60 @@ export function createAppServer(options = {}) {
           ok: true,
           service: 'pixel-compute-town',
           version: VERSION,
+          dbDriver: store.driver,
           uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
           sseClients: sseHub.getClientCount(),
           githubOAuthEnabled: isGitHubOAuthEnabled(),
           googleOAuthEnabled: isGoogleOAuthEnabled(),
           timestamp: new Date().toISOString(),
         });
+      }
+
+      // Production Ops Metrics: GET /api/metrics
+      if (pathname === '/api/metrics' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        const projects = state.projects || [];
+        const tasks = state.tasks || [];
+        const provenance = verifyProvenanceChain(projects);
+        const memoryMb = round2(process.memoryUsage().rss / (1024 * 1024));
+
+        return sendJson(res, 200, {
+          ok: true,
+          version: VERSION,
+          dbDriver: store.driver,
+          uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
+          memoryMb,
+          sseClients: sseHub.getClientCount(),
+          usersCount: Object.keys(state.users || {}).length,
+          projectsCount: projects.length,
+          tasksOpen: tasks.filter((t) => t.status === 'open').length,
+          tasksCompleted: tasks.filter((t) => t.status === 'completed').length,
+          pendingReviewsCount: (state.reviewQueue || []).length,
+          provenanceChainValid: provenance.valid,
+          rateLimitBlockedCount,
+          auditCount: store.getAuditCount(),
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Admin SQLite Backup Export: GET /api/admin/export-backup
+      if (pathname === '/api/admin/export-backup' && method === 'GET') {
+        const state = await store.load();
+        ensureStateSchema(state);
+        const ctx = getActiveUserContext(req, state);
+        if (ctx.user.role !== 'founder') {
+          throw new HttpError(403, '僅限創始鎮長匯出完整系統備份');
+        }
+        store.appendAudit('backup_export', `Founder ${ctx.user.displayName} exported full system backup`);
+        const backup = await store.exportBackup();
+        const dateTag = new Date().toISOString().slice(0, 10);
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': `attachment; filename="pixelcompute-backup-${dateTag}.json"`,
+          'Cache-Control': 'no-store',
+        });
+        return res.end(JSON.stringify({ ok: true, ...backup }, null, 2));
       }
 
       // Public landing page stats
@@ -1023,6 +1342,375 @@ export function createAppServer(options = {}) {
       if (pathname === '/api/webhooks/stripe' && method === 'POST') {
         const rawBody = await readRawBody(req);
         return await handlePaymentWebhook(req, res, 'stripe', rawBody, store, sseHub);
+      }
+
+      // GitHub Webhook Auto-Settlement: POST /api/webhooks/github
+      if (pathname === '/api/webhooks/github' && method === 'POST') {
+        const rawBody = await readRawBody(req);
+        const webhookSecret = options.githubWebhookSecret !== undefined
+          ? String(options.githubWebhookSecret || '')
+          : String(process.env.GITHUB_WEBHOOK_SECRET || '');
+
+        if (webhookSecret) {
+          const sigHeader = req.headers['x-hub-signature-256'];
+          if (!verifyGitHubWebhookSignature(rawBody, sigHeader, webhookSecret)) {
+            store.appendAudit('github_webhook_rejected', 'Rejected GitHub webhook with invalid X-Hub-Signature-256');
+            return sendJson(res, 401, {
+              ok: false,
+              error: 'GitHub Webhook 簽名驗證失敗（無效的 X-Hub-Signature-256）',
+            });
+          }
+        }
+
+        let payload;
+        try {
+          payload = rawBody.trim() ? JSON.parse(rawBody) : {};
+        } catch {
+          throw new HttpError(400, '無效的 GitHub Webhook JSON 內容');
+        }
+
+        const ghEvent = String(req.headers['x-github-event'] || (payload.pull_request ? 'pull_request' : '')).toLowerCase();
+        if (ghEvent === 'ping') {
+          store.appendAudit('github_webhook_ping', `GitHub webhook ping received (zen: ${sanitizeText(payload.zen || '', 60)})`);
+          return sendJson(res, 200, { ok: true, event: 'ping', pong: true });
+        }
+
+        if (ghEvent !== 'pull_request') {
+          return sendJson(res, 200, {
+            ok: true,
+            settled: false,
+            ignored: true,
+            event: ghEvent || 'unknown',
+            reason: '僅處理 pull_request merged 事件',
+          });
+        }
+
+        const pr = payload.pull_request || {};
+        if (payload.action !== 'closed' || pr.merged !== true) {
+          return sendJson(res, 200, {
+            ok: true,
+            settled: false,
+            ignored: true,
+            action: payload.action || null,
+            merged: Boolean(pr.merged),
+            reason: 'PR 尚未合併（需 action=closed 且 merged=true）',
+          });
+        }
+
+        const prTitle = sanitizeText(pr.title || '', 200);
+        const prBody = sanitizeText(pr.body || '', 4000, { multiline: true });
+        const prUrl = sanitizeText(pr.html_url || '', 240);
+        const prNumber = Number(pr.number) || null;
+        const prAuthor = sanitizeText(pr.user?.login || payload.sender?.login || 'github-contributor', 64);
+
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+
+          // 1) Match task by explicit `task-<id>` reference in PR title or body (e.g. "Fixes #task-meta-pr")
+          const searchText = `${prTitle}\n${prBody}`;
+          const taskIdMatches = [...searchText.matchAll(/\b(task-[a-z0-9][a-z0-9_-]*)/gi)].map((m) => m[1].toLowerCase());
+          let task = null;
+          for (const candidateId of taskIdMatches) {
+            const found = (s.tasks || []).find((t) => String(t.id || '').toLowerCase() === candidateId);
+            if (found) {
+              task = found;
+              break;
+            }
+          }
+
+          // 2) Fallback: match by claimed/submitted PR URL on tasks or reviewQueue
+          const normPrUrl = normalizeUrlForMatch(prUrl);
+          if (!task && normPrUrl) {
+            task = (s.tasks || []).find((t) => (
+              normalizeUrlForMatch(t.submission?.prUrl) === normPrUrl
+              || normalizeUrlForMatch(t.prUrl) === normPrUrl
+              || normalizeUrlForMatch(t.claimedPrUrl) === normPrUrl
+            )) || null;
+          }
+          if (!task && normPrUrl) {
+            const matchedReview = (s.reviewQueue || []).find(
+              (item) => normalizeUrlForMatch(item.prUrl) === normPrUrl,
+            );
+            if (matchedReview) {
+              task = (s.tasks || []).find((t) => t.id === matchedReview.taskId) || null;
+            }
+          }
+
+          if (!task) {
+            return { settled: false, matched: false };
+          }
+          if (task.status === 'completed') {
+            return { settled: false, matched: true, alreadyCompleted: true, task };
+          }
+
+          // Remove any pending peer-review queue item for this task since PR is merged on GitHub
+          const pendingIdx = (s.reviewQueue || []).findIndex((item) => item.taskId === task.id);
+          let pendingReviewItem = null;
+          if (pendingIdx !== -1) {
+            pendingReviewItem = s.reviewQueue.splice(pendingIdx, 1)[0];
+          }
+
+          // Resolve contributor user: staker/claimer/submitter -> GitHub username match -> founder fallback
+          let targetUser = null;
+          const preferredUserIds = [
+            task.stakedByUserId,
+            task.claimedBy,
+            task.submission?.submittedByUserId,
+            pendingReviewItem?.submittedByUserId,
+          ].filter(Boolean);
+          for (const uidCandidate of preferredUserIds) {
+            if (s.users[uidCandidate]) {
+              targetUser = s.users[uidCandidate];
+              break;
+            }
+          }
+          if (!targetUser && prAuthor) {
+            const lowerAuthor = prAuthor.toLowerCase();
+            targetUser = Object.values(s.users).find(
+              (u) => u && (
+                String(u.username || '').toLowerCase() === lowerAuthor
+                || String(u.displayName || '').toLowerCase() === lowerAuthor
+              ),
+            ) || null;
+          }
+          if (!targetUser) {
+            targetUser = s.users[FOUNDER_USER_ID];
+          }
+
+          let worker = null;
+          if (task.assignedWorkerId) {
+            const foundWorker = findWorkerAcrossUsers(s, task.assignedWorkerId);
+            if (foundWorker) {
+              worker = foundWorker.worker;
+            }
+          }
+
+          const now = new Date().toISOString();
+          const poolBucket = 'core';
+          const contributionPoints = Number(task.contributionPoints || 60);
+          const gold = Number(task.goldReward || 240);
+          const xp = Number(task.xpReward || 80);
+          const bountyGrossUsd = round2(task.cashBountyUsd || 0);
+          const platformFeeUsd = round2(bountyGrossUsd * (PLATFORM_BOUNTY_FEE_PCT / 100));
+          const bountyNetUsd = round2(bountyGrossUsd - platformFeeUsd);
+
+          // Refund frozen stake gold in full
+          let refundedStakeGold = 0;
+          const stakeAmt = Number(task.stakedGold || pendingReviewItem?.stakeGold || 0);
+          if (stakeAmt > 0) {
+            refundedStakeGold = stakeAmt;
+            const staker = (task.stakedByUserId && s.users[task.stakedByUserId]) || targetUser;
+            if (staker) {
+              staker.gold += refundedStakeGold;
+            }
+          }
+
+          const verification = {
+            passed: true,
+            score: 100,
+            reason: `GitHub PR #${prNumber || '?'} 合併事件自動驗收通過`,
+            checks: ['github_pr_merged', webhookSecret ? 'hmac_sha256_verified' : 'webhook_unauthenticated_dev'],
+          };
+
+          task.status = 'completed';
+          task.poolBucket = poolBucket;
+          task.submittedAt = now;
+          task.stakedGold = 0;
+          task.stakedByUserId = null;
+          task.verification = verification;
+          task.submission = {
+            content: prBody || prTitle || `Merged GitHub PR #${prNumber || '?'}`,
+            prUrl: prUrl || task.submission?.prUrl || null,
+            notes: `由 GitHub Webhook PR #${prNumber || '?'} (${prAuthor}) 合併自動結算`,
+            executionMode: 'github_webhook',
+            tokensUsed: task.tokenCostEst || 0,
+            submittedBy: targetUser.displayName,
+            submittedByUserId: targetUser.id,
+            submittedAt: now,
+            githubAuthor: prAuthor,
+            githubPrNumber: prNumber,
+          };
+
+          targetUser.gold += gold;
+          targetUser.usdBalance = round2((targetUser.usdBalance || 0) + bountyNetUsd);
+          targetUser.completedTasks += 1;
+          targetUser.totalContribution += contributionPoints;
+          targetUser.reputation += 2;
+
+          if (platformFeeUsd > 0) {
+            addFounderRevenueEntry(s, {
+              stream: 'bounty_fee',
+              label: `GitHub PR 合併自動結算懸賞《${task.title.slice(0, 22)}》10% 平臺費`,
+              amountUsd: platformFeeUsd,
+              projectId: task.projectId,
+              taskId: task.id,
+            });
+          }
+
+          let leveledUp = false;
+          if (worker) {
+            worker.slopStrikes = 0;
+            worker.cooldownUntil = null;
+            worker.stamina = Math.max(0, worker.stamina - (task.staminaCost || 0));
+            worker.xp += xp;
+            while (worker.xp >= worker.xpToNext) {
+              worker.xp -= worker.xpToNext;
+              worker.level += 1;
+              worker.xpToNext = Math.round(worker.xpToNext * 1.35);
+              worker.maxStamina = Math.min(150, worker.maxStamina + 5);
+              leveledUp = true;
+            }
+            worker.completedCount += 1;
+            worker.earnedGold += gold;
+            worker.earnedPoints += contributionPoints;
+            worker.status = 'idle';
+            worker.currentTaskId = null;
+            worker.currentProjectId = null;
+            worker.currentZone = 'lounge';
+            worker.lastMessage = `GitHub PR #${prNumber || '?'} 已合併！自動結算 +${gold}G / +${contributionPoints} 核心點！`;
+          }
+
+          const proj = (s.projects || []).find((p) => p.id === task.projectId) || null;
+          if (proj) {
+            ensureProjectBuckets(proj);
+            proj.progressPct = Math.min(100, (proj.progressPct || 0) + (task.progressWeight || 20));
+            proj.contributions = proj.contributions || {};
+            proj.contributorNames = proj.contributorNames || {};
+            proj.contributions[targetUser.id] = (proj.contributions[targetUser.id] || 0) + contributionPoints;
+            proj.bucketPoints.core[targetUser.id] = (proj.bucketPoints.core[targetUser.id] || 0) + contributionPoints;
+            proj.contributorNames[targetUser.id] = targetUser.displayName;
+            if (!Array.isArray(proj.coBuilders)) proj.coBuilders = [];
+            if (!proj.coBuilders.some((b) => b.userId === targetUser.id)) {
+              proj.coBuilders.push({
+                userId: targetUser.id,
+                username: targetUser.username || targetUser.id,
+                displayName: targetUser.displayName,
+                joinedAt: now,
+              });
+            }
+          }
+
+          s.contributionLedger.unshift({
+            id: uid('contrib'),
+            timestamp: now,
+            projectId: task.projectId,
+            projectName: proj?.name || task.projectId,
+            taskId: task.id,
+            taskTitle: task.title,
+            userId: targetUser.id,
+            userName: targetUser.displayName,
+            workerId: worker?.id || null,
+            workerName: worker?.name || `GitHub PR #${prNumber || '?'}`,
+            poolBucket,
+            points: contributionPoints,
+            gold,
+            bountyGrossUsd,
+            bountyNetUsd,
+            platformFeeUsd,
+            verificationScore: 100,
+          });
+          if (s.contributionLedger.length > 100) {
+            s.contributionLedger.length = 100;
+          }
+
+          syncUserLeaderboard(s, targetUser);
+
+          const bountyText = bountyGrossUsd > 0
+            ? `、實得懸賞 $${bountyNetUsd}（平臺費 $${platformFeeUsd}）`
+            : '';
+          pushActivity(s, {
+            type: 'github_webhook_settled',
+            icon: '🔀',
+            message: `GitHub PR #${prNumber || '?'} 合併觸發自動結算：《${task.title}》→ ${targetUser.displayName} 獲得 +${gold}G、+${contributionPoints} 核心點${refundedStakeGold > 0 ? `、退還押金 ${refundedStakeGold}G` : ''}${bountyText}`,
+            workerId: worker?.id || null,
+            projectId: task.projectId,
+            taskId: task.id,
+          });
+
+          const achCandidates = ['first_blood'];
+          const completedTracks = new Set(
+            s.tasks
+              .filter((t) => t.status === 'completed' && (!t.submission?.submittedByUserId || t.submission.submittedByUserId === targetUser.id))
+              .map((t) => t.track),
+          );
+          if (completedTracks.has('api_auto') && completedTracks.has('guild_bounty')) {
+            achCandidates.push('dual_track_master');
+          }
+          const unlockedAchievements = unlockAchievements(s, targetUser, achCandidates);
+
+          return {
+            settled: true,
+            matched: true,
+            task,
+            worker,
+            project: proj,
+            verification,
+            rewards: {
+              gold,
+              contributionPoints,
+              poolBucket,
+              refundedStakeGold,
+              xp,
+              bountyGrossUsd,
+              bountyNetUsd,
+              platformFeeUsd,
+              reputationDelta: 2,
+              leveledUp,
+            },
+            unlockedAchievements,
+            user: targetUser,
+          };
+        });
+
+        if (!result.matched) {
+          return sendJson(res, 200, {
+            ok: true,
+            settled: false,
+            reason: 'PR 標題、內文或連結中未匹配到對應的 PixelCompute Town 任務 ID',
+          });
+        }
+        if (result.alreadyCompleted) {
+          return sendJson(res, 200, {
+            ok: true,
+            settled: false,
+            alreadyCompleted: true,
+            taskId: result.task.id,
+            task: result.task,
+          });
+        }
+
+        store.appendAudit(
+          'github_webhook_settled',
+          `PR #${prNumber || '?'} (${prAuthor}) auto-settled ${result.task.id}: +${result.rewards.contributionPoints} core pts, +${result.rewards.gold}G, refunded ${result.rewards.refundedStakeGold}G, fee $${result.rewards.platformFeeUsd}`,
+        );
+
+        sseHub.broadcast('task_completed', {
+          source: 'github_webhook',
+          task: result.task,
+          worker: result.worker,
+          project: result.project,
+          verification: result.verification,
+          rewards: result.rewards,
+        });
+        broadcastAchievements(sseHub, result.unlockedAchievements || [], result.user);
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+
+        return sendJson(res, 200, {
+          ok: true,
+          settled: true,
+          taskId: result.task.id,
+          task: result.task,
+          project: result.project,
+          worker: result.worker,
+          rewards: result.rewards,
+          pr: {
+            number: prNumber,
+            url: prUrl || null,
+            title: prTitle,
+            author: prAuthor,
+          },
+          unlockedAchievements: result.unlockedAchievements || [],
+        });
       }
       if (pathname === '/api/wallet/bind' && method === 'POST') {
         const body = await parseJsonBody(req);
@@ -1363,6 +2051,10 @@ export function createAppServer(options = {}) {
           return { project: newProj, userId: user.id };
         });
 
+        store.appendAudit(
+          'project_proposed',
+          `Proposed project ${result.project.id} "${result.project.name}" (#${result.project.ideaHash.slice(0, 12)})`,
+        );
         sseHub.broadcast('project_updated', { action: 'proposed', project: result.project });
         sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
         return sendJson(res, 201, {
@@ -1592,6 +2284,10 @@ export function createAppServer(options = {}) {
           return { project: proj, dividend, unlockedAchievements, user };
         });
 
+        store.appendAudit(
+          'project_launched',
+          `Launched ${result.project.id} "${result.project.shortName}" with $${result.dividend.grossRevenueUsd} revenue`,
+        );
         sseHub.broadcast('project_launched', {
           project: result.project,
           dividend: result.dividend,
@@ -1605,6 +2301,72 @@ export function createAppServer(options = {}) {
           founderRevenue: state.founderRevenue,
           unlockedAchievements: result.unlockedAchievements,
           state: projectClientState(state, result.user.id),
+        });
+      }
+
+      // Projects: POST /api/projects/:id/auto-split (70/30 Anti-Dilution Smart Task Split)
+      const autoSplitMatch = pathname.match(/^\/api\/projects\/([^/]+)\/auto-split$/);
+      if (autoSplitMatch && method === 'POST') {
+        const projectId = decodeURIComponent(autoSplitMatch[1]);
+        const body = await parseJsonBody(req);
+        const featureBrief = sanitizeText(body.featureBrief || body.brief || body.description || '', 280);
+        if (featureBrief.length < 2) {
+          throw new HttpError(400, '請輸入至少 2 個字的功能需求描述（featureBrief）');
+        }
+        const count = body.count !== undefined ? Number(body.count) : 3;
+
+        const { state, result } = await store.mutate((s) => {
+          ensureStateSchema(s);
+          const ctx = getActiveUserContext(req, s);
+          const user = ctx.user;
+          const proj = s.projects.find((p) => p.id === projectId);
+          if (!proj) {
+            throw new HttpError(404, `找不到項目：${projectId}`);
+          }
+
+          const generatedTasks = buildAutoSplitTasks(proj, featureBrief, count);
+          s.tasks.push(...generatedTasks);
+
+          const coreCount = generatedTasks.filter((t) => t.poolBucket === 'core').length;
+          const peripheralCount = generatedTasks.filter((t) => t.poolBucket === 'peripheral').length;
+
+          pushActivity(s, {
+            type: 'auto_split',
+            icon: '⚡',
+            message: `${user.displayName} 為《${proj.shortName || proj.name}》智慧拆單「${featureBrief.slice(0, 36)}」：生成 ${coreCount} 張核心池工會大單 (70%) ＋ ${peripheralCount} 張週邊池 API 微任務 (≤30%)！`,
+            projectId: proj.id,
+          });
+
+          return {
+            project: proj,
+            tasks: generatedTasks,
+            breakdown: { core: coreCount, peripheral: peripheralCount },
+            userId: user.id,
+          };
+        });
+
+        store.appendAudit(
+          'project_auto_split',
+          `Auto-split "${featureBrief.slice(0, 80)}" on ${result.project.id}: ${result.breakdown.core} core + ${result.breakdown.peripheral} peripheral tasks`,
+        );
+
+        sseHub.broadcast('tasks_imported', {
+          source: 'auto_split',
+          project: result.project,
+          featureBrief,
+          tasks: result.tasks,
+          breakdown: result.breakdown,
+        });
+        sseHub.broadcast('state_sync', { updatedAt: state.updatedAt });
+
+        return sendJson(res, 200, {
+          ok: true,
+          project: result.project,
+          featureBrief,
+          tasks: result.tasks,
+          createdCount: result.tasks.length,
+          breakdown: result.breakdown,
+          state: projectClientState(state, result.userId),
         });
       }
 
@@ -2637,6 +3399,10 @@ export function createAppServer(options = {}) {
           };
         });
 
+        store.appendAudit(
+          `review_${result.decision}`,
+          `Reviewer ${result.reviewer.displayName} ${result.decision}d ${result.review.id} (${result.review.taskId})`,
+        );
         sseHub.broadcast('review_decided', {
           decision: result.decision,
           review: result.review,
@@ -3055,13 +3821,84 @@ export function createAppServer(options = {}) {
         return sendJson(res, 404, { ok: false, error: `未知的 API 路徑：${method} ${pathname}` });
       }
 
-      // Serve static pages & assets from public/
+      // Serve public SSR pages & static assets from public/
       if (method !== 'GET' && method !== 'HEAD') {
         res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
         return res.end('Method Not Allowed');
       }
 
       const decodedPath = decodeURIComponent(pathname);
+      const requestOrigin = getRequestOrigin(req);
+
+      // Public Project Share Page: GET /p/:slug (also matches project.id)
+      const publicProjMatch = decodedPath.match(/^\/p\/([^/]+)\/?$/);
+      if (publicProjMatch) {
+        const slugParam = publicProjMatch[1].trim();
+        const state = await store.load();
+        ensureStateSchema(state);
+        const proj = findProjectBySlugOrId(state.projects, slugParam);
+        if (!proj) {
+          const notFoundHtml = renderPublicNotFoundPage(
+            '找不到該公開項目',
+            `查無對應「${slugParam}」的公開共建項目，請確認連結是否正確。`,
+            requestOrigin,
+          );
+          return sendHtml(res, 404, notFoundHtml, method, 'no-store');
+        }
+        const html = renderPublicProjectPage(proj, state, requestOrigin);
+        return sendHtml(res, 200, html, method, 'public, max-age=30');
+      }
+
+      // Public Cryptographic Provenance Verification Page: GET /verify/:hash
+      const publicVerifyMatch = decodedPath.match(/^\/verify\/([^/]+)\/?$/);
+      if (publicVerifyMatch) {
+        const rawHash = publicVerifyMatch[1].trim().toLowerCase();
+        const state = await store.load();
+        ensureStateSchema(state);
+        const chain = verifyProvenanceChain(state.projects);
+        const validFormat = /^[a-f0-9]{8,64}$/.test(rawHash);
+        const exact = validFormat ? chain.records.find((r) => r.ideaHash === rawHash) : null;
+        const matched = exact || (validFormat
+          ? chain.records.find((r) => r.ideaHash && r.ideaHash.startsWith(rawHash))
+          : null);
+        const project = matched
+          ? (state.projects || []).find((p) => p.id === matched.projectId) || null
+          : null;
+
+        if (!matched || !matched.verified) {
+          const failHtml = renderPublicVerifyPage(
+            {
+              verified: false,
+              found: Boolean(matched),
+              queriedHash: rawHash,
+              chainValid: chain.valid,
+              chainLength: chain.chainLength,
+              record: matched || null,
+              project,
+              error: matched
+                ? '該創意溯源區塊驗證失敗：雜湊指紋與內容不符（資料可能已遭竄改）。'
+                : '未在 PixelCompute 原創創意溯源鏈上找到對應此指紋的紀錄。',
+            },
+            requestOrigin,
+          );
+          return sendHtml(res, 404, failHtml, method, 'no-store');
+        }
+
+        const okHtml = renderPublicVerifyPage(
+          {
+            verified: true,
+            found: true,
+            queriedHash: rawHash,
+            chainValid: chain.valid,
+            chainLength: chain.chainLength,
+            record: matched,
+            project,
+          },
+          requestOrigin,
+        );
+        return sendHtml(res, 200, okHtml, method, 'public, max-age=60');
+      }
+
       if (decodedPath === '/') {
         return await serveStaticFile(res, method, 'landing.html', 'index.html');
       }
@@ -3096,7 +3933,18 @@ export function createAppServer(options = {}) {
   const originalClose = server.close.bind(server);
   server.close = (cb) => {
     sseHub.closeAll();
-    return originalClose(cb);
+    return originalClose((err) => {
+      try {
+        if (typeof store.close === 'function') {
+          store.close();
+        }
+      } catch {
+        // ignore sqlite close error during shutdown
+      }
+      if (typeof cb === 'function') {
+        cb(err);
+      }
+    });
   };
 
   return server;

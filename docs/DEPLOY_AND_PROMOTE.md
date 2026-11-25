@@ -23,7 +23,7 @@
 
 ### Step 1：把專案推上 GitHub（自動觸發 CI 綠燈保護）
 
-專案已內建 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)，推送至 `main` 後會自動於 Node.js 24 環境執行零依賴檢查、`npm test`（含安全標頭、速率限制、GitHub Issue 匯入、6 枚創世成就與 30/60/10 分紅精確度測試）與 `npm run smoke`（含 `pixel-worker --watch` 端對端檢查）。
+專案已內建 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)，推送至 `main` 後會自動於 **Node.js 24** 環境執行零依賴檢查、`npm test`（28 項 E2E：原生 SQLite WAL 持久化與備份、`/p/:slug` & `/verify/:hash` SSR 公開頁與 XSS 防護、GitHub Webhook HMAC-SHA256 自動結算、AI 智慧拆單 70/30、防稀釋治理、5/85/10 分紅與安全加固）與 `npm run smoke`（10 項靜態、三語零中文殘留與 CLI 端對端檢查）。
 
 ```bash
 git init
@@ -66,6 +66,19 @@ git push -u origin main
 3. **🎟️ 卡密兌換碼（愛發電 / Ko-fi / Gumroad，零配置即用！）**：
    - 登入創始鎮長帳號進入 `/app` →「創作者收益」→「🛡️ 鎮長管理面板」，一鍵批次產生 Pro / 創世大禮包兌換碼上架販售。
 
+#### D. GitHub Webhook 自動結算設定（v1.2 — PR 合併自動發點退押金）
+想讓社群開發者在真實 GitHub 倉庫合併 PR 後**全自動完成小鎮結算**，只需 1 分鐘設定 Webhook：
+1. 產生一組高強度隨機密鑰並設為環境變數 `GITHUB_WEBHOOK_SECRET`（參考 [`.env.example`](../.env.example)）：
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+2. 前往你的 GitHub 專案倉庫 **Settings → Webhooks → Add webhook**：
+   - **Payload URL**：`https://<你的公開網域>/api/webhooks/github`
+   - **Content type**：`application/json`
+   - **Secret**：貼上與 `GITHUB_WEBHOOK_SECRET` 相同的密鑰（伺服器以原生 `node:crypto` 強制驗證 `X-Hub-Signature-256` HMAC-SHA256，錯簽自動回 `401`！）
+   - **Which events would you like to trigger this webhook?**：選擇 **Let me select individual events → 勾選 `Pull requests`**
+3. **實戰用法**：開發者接下工會任務（如 `task-i18n-ast-pr`）並在 PR 標題或內文寫上 **`Fixes #task-i18n-ast-pr`**；一旦倉庫 Maintainer 按下 **Merge pull request**，伺服器會自動驗簽、將任務標為 `completed`、發放 `core` 核心池點數、全額退還凍結押金、計入 10% 懸賞平臺費、推進項目進度、寫入 SQLite `audit_log`，並透過 SSE 讓線上所有玩家的像素辦公室即時彈出慶祝動畫！
+
 ---
 
 ### Step 3A：方案一 — Render 一鍵免費上線（最推薦，3 分鐘上線）
@@ -78,12 +91,16 @@ git push -u origin main
    - `APP_BASE_URL`：`https://<Render 分配的網址>`（部署後確認精確 URL 再微調）
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`（可選）
    - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`（可選）
+   - `GITHUB_WEBHOOK_SECRET`（啟用 GitHub PR 合併自動結算 HMAC-SHA256 驗簽）
    - `TREASURY_EVM_ADDRESS` / `TREASURY_SOL_ADDRESS`（填上即可立即收取 USDC/USDT！）
    - `POLAR_CHECKOUT_URL` / `POLAR_WEBHOOK_SECRET` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`（可選）
 4. 點擊 **Apply**，等待約 1–2 分鐘建置完成。
-5. 開啟 `https://<你的網址>/api/health`，看到 `{"ok":true,...}` 即代表上線成功！
+5. 開啟 `https://<你的網址>/api/health`，看到 `{"ok":true,"dbDriver":"sqlite",...}` 即代表 **Node 24 原生 SQLite WAL 引擎**已順利上線！
 
-> ⚠️ **資料持久化提醒**：Render 免費方案（`plan: free`）在休眠重啟後會重置容器檔案系統。一旦迎來真實註冊玩家，只需升級至 Starter 方案（$7/月）並取消註解 `render.yaml` 底部的 `disk:` 區塊（掛載至 `/app/data`），即可永久保存 `data/state.json`。
+> 💾 **原生 SQLite WAL 持久化與一鍵備份（v1.2）**：
+> - v1.2 採用 **Node 24 原生 `node:sqlite` WAL 模式**將狀態與近 500 筆操作稽核紀錄（`audit_log`）寫入 `data/pixelcompute.db`（並支援舊版 `data/state.json` 自動無縫遷移）。
+> - Render 免費方案（`plan: free`）在休眠重啟後會重置容器檔案系統；迎來真實玩家後建議升級 Starter 方案並掛載 `disk:` 至 `/app/data`（或使用下方 Fly.io 持久 Volume）。
+> - 任何時候皆可於 `/app` →「鎮長管理面板 → 📊 系統運維與 SQLite 備份」查看 `GET /api/metrics` 即時指標，並按 **`📦 一鍵下載完整備份 (JSON)`**（`GET /api/admin/export-backup`）冷備份全鎮狀態與稽核紀錄！
 
 ---
 
@@ -184,6 +201,21 @@ docker run -d \
 | **✨ Gemini（CLI / 網頁版智慧降級）** | `我想把閒置算力接入 PixelCompute Town（[YOUR_LIVE_URL]）。若你能執行終端指令，請先檢查並執行對應系統的 /install.ps1 或 /install.sh 完成 onboard；若你是網頁版無法執行指令，請一步步提供對應我作業系統的一鍵安裝指令與安全確認說明。` |
 | **🧠 Claude Code / Cursor Agent** | `Inspect [YOUR_LIVE_URL]/install.sh (or /install.ps1 on Windows) first to verify it is zero-dependency and never touches local AI credentials, then install pixel-worker and run "onboard --server [YOUR_LIVE_URL]" so I can approve the device in my browser.` |
 | **🐋 DeepSeek / 通用 AI** | `請幫我把電腦接入 PixelCompute Town（[YOUR_LIVE_URL]）：1) 若具備本機終端權限，先檢視並執行安裝腳本（install.ps1 / install.sh）啟動 onboard 綁定流程；2) 若僅支援對話，請給我 Windows PowerShell 與 macOS/Linux 的單行安裝指令並解釋零信任安全原則。` |
+
+---
+
+## 🌐 第 2.6 部分：v1.2 病毒式社群分享技巧（`/p/:slug` Open Graph 預覽卡 & `/verify/:hash` 原創公證）
+
+> **為什麼比貼官網首頁高 3 倍轉化率？** 陌生開發者對「泛泛的平臺介紹」免疫，但對**正在孵化中的具體開源專案進度、懸賞金額與不可竄改原創證書**極度有感！
+
+1. **🔗 直接分享具體項目的 SSR 公開頁：`[YOUR_LIVE_URL]/p/:slug`（例：`/p/meta` 或 `/p/proj-i18n`）**
+   - 每個項目都自動生成自包含賽博像素 SSR 公開頁，內建完整 **Open Graph (`og:title` / `og:description` / `twitter:card`)**。
+   - **實戰打法**：在 X / Reddit / Discord / 微信群發佈專案招募貼時，**直接貼 `/p/<slug>` 連結**——社群平台會自動抓出專屬標題與進度摘要卡；陌生人免登入即可一眼看到進度條、**5% 首發 / 85% 實幹 / 10% 平臺**、**70% 核心 / ≤30% 週邊防稀釋配額條**與開放懸賞單，點一下頁面上的 **`🚀 加入共建`** 就能透過 `/app?project=<id>` 直接聚焦進場認領任務！
+2. **🔍 用密碼學查驗頁打爆「防抄襲」討論度：`[YOUR_LIVE_URL]/verify/:hash`**
+   - 支援完整 64 碼 SHA-256 指紋或前 8–12 碼短鏈（例如 `/verify/<ideaHash前12碼>`）。
+   - **實戰打法**：每當你在社群提出一個新開源小工具點子，先把點子丟上像素算力鎮上牆，再把 **`/verify/<hash>`** 附在貼文底部並寫一句：「*本原創點子已寫入 SHA-256 溯源鏈，免登入公證驗真，歡迎點擊加入共建共享 85% 實幹分紅！*」——點進去立刻呈現醒目的 **`✅ VERIFIED ON PIXELCOMPUTE PROVENANCE CHAIN`** 印章、區塊編號與精確 UTC 時間戳，天然自帶極客背書與裂變話題！
+3. **⚡ 招募前先跑一次「AI 智慧拆單」讓新來的人 10 秒有活可幹**
+   - 貼 `/p/:slug` 連結出去之前，先在孵化廣場對該項目輸入一句功能需求按 **`⚡ AI 智慧拆單`**（`POST /api/projects/:id/auto-split`），立刻自動鋪好 **1 張核心大單＋2 張低門檻 API 微任務**，確保從社群點進來的新居民永遠不會看到空任務板！
 
 ---
 

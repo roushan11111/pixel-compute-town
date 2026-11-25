@@ -591,6 +591,36 @@ export const DICTIONARY = Object.freeze({
     'toast.reviewRefreshed': '🔄 已同步最新實幹審閱佇列',
     'toast.guildQueuedForReview': '⚖️ 已過機器硬門檻！進入實幹審閱佇列（AI 盲審 {score}/100），可立即在上方審閱合併！',
     'toast.adminPeerReviewChanged': '⚖️ 全局強制實幹審閱已切換為：{state}',
+
+    // v1.2 Public Share Links, AI Smart Auto-Split & Ops SQLite Backup
+    'incubator.publicPageBtn': '🔗 公開項目頁',
+    'incubator.publicVerifyBtn': '🔍 公開查驗',
+    'incubator.autoSplitTitle': '⚡ AI 智慧拆單（70/30 防稀釋）',
+    'incubator.autoSplitBadge': '1 核心大單 + 2 週邊微任務',
+    'incubator.autoSplitPlaceholder': '輸入一句功能需求（例：實作 WebSocket 即時通知中心）...',
+    'incubator.autoSplitBtn': '⚡ 智慧拆單',
+    'incubator.autoSplitWorking': '⏳ 拆單中...',
+    'toast.autoSplitNeedBrief': '請先輸入一句功能需求描述再進行智慧拆單！',
+    'toast.autoSplitOk': '⚡ 已為《{name}》自動拆出 {count} 張任務（1 核心大單＋2 週邊微任務）！',
+    'toast.autoSplitFailed': '智慧拆單失敗：{err}',
+    'ops.sectionTitle': '📊 系統運維與 SQLite 備份',
+    'ops.refreshBtn': '🔄 刷新指標',
+    'ops.exportBtn': '📦 一鍵下載完整備份 (JSON)',
+    'ops.exportingBtn': '⏳ 匯出中...',
+    'ops.memoryLabel': '記憶體佔用',
+    'ops.uptimeLabel': '運行時長',
+    'ops.chainLabel': '溯源哈希鏈',
+    'ops.sseLabel': '即時連線 / 待審',
+    'ops.driverSqlite': 'SQLite WAL',
+    'ops.driverJson': 'JSON 降級引擎',
+    'ops.chainHealthy': '✅ 完整無竄改',
+    'ops.chainInvalid': '⚠️ 校驗異常',
+    'ops.loading': '正在載入系統運維指標...',
+    'ops.extraSummary': '版本 {version} ｜ 用戶 {users} ｜ 項目 {projects} ｜ 任務 {open} 開放 / {done} 完工 ｜ 限流攔截 {blocked}',
+    'ops.unavailable': '暫無法取得 /api/metrics 指標（點擊刷新重試）',
+    'toast.metricsRefreshed': '📊 已同步最新系統運維與資料庫指標',
+    'toast.backupDownloaded': '📦 已下載完整 SQLite 狀態與稽核備份：{filename}',
+    'toast.backupFailed': '備份匯出失敗：{err}',
   },
 
   'zh-CN': {
@@ -1160,6 +1190,36 @@ export const DICTIONARY = Object.freeze({
     'toast.reviewRefreshed': '🔄 已同步最新实干审阅队列',
     'toast.guildQueuedForReview': '⚖️ 已过机器硬门槛！进入实干审阅队列（AI 盲审 {score}/100），可立即在上方审阅合并！',
     'toast.adminPeerReviewChanged': '⚖️ 全局强制实干审阅已切换为：{state}',
+
+    // v1.2 Public Share Links, AI Smart Auto-Split & Ops SQLite Backup
+    'incubator.publicPageBtn': '🔗 公开项目页',
+    'incubator.publicVerifyBtn': '🔍 公开查验',
+    'incubator.autoSplitTitle': '⚡ AI 智能拆单（70/30 防稀释）',
+    'incubator.autoSplitBadge': '1 核心大单 + 2 周边微任务',
+    'incubator.autoSplitPlaceholder': '输入一句功能需求（例：实现 WebSocket 实时通知中心）...',
+    'incubator.autoSplitBtn': '⚡ 智能拆单',
+    'incubator.autoSplitWorking': '⏳ 拆单中...',
+    'toast.autoSplitNeedBrief': '请先输入一句功能需求描述再进行智能拆单！',
+    'toast.autoSplitOk': '⚡ 已为《{name}》自动拆出 {count} 张任务（1 核心大单＋2 周边微任务）！',
+    'toast.autoSplitFailed': '智能拆单失败：{err}',
+    'ops.sectionTitle': '📊 系统运维与 SQLite 备份',
+    'ops.refreshBtn': '🔄 刷新指标',
+    'ops.exportBtn': '📦 一键下载完整备份 (JSON)',
+    'ops.exportingBtn': '⏳ 导出中...',
+    'ops.memoryLabel': '内存占用',
+    'ops.uptimeLabel': '运行时长',
+    'ops.chainLabel': '溯源哈希链',
+    'ops.sseLabel': '实时连接 / 待审',
+    'ops.driverSqlite': 'SQLite WAL',
+    'ops.driverJson': 'JSON 降级引擎',
+    'ops.chainHealthy': '✅ 完整无篡改',
+    'ops.chainInvalid': '⚠️ 校验异常',
+    'ops.loading': '正在加载系统运维指标...',
+    'ops.extraSummary': '版本 {version} ｜ 用户 {users} ｜ 项目 {projects} ｜ 任务 {open} 开放 / {done} 完工 ｜ 限流拦截 {blocked}',
+    'ops.unavailable': '暂无法获取 /api/metrics 指标（点击刷新重试）',
+    'toast.metricsRefreshed': '📊 已同步最新系统运维与数据库指标',
+    'toast.backupDownloaded': '📦 已下载完整 SQLite 状态与审计备份：{filename}',
+    'toast.backupFailed': '备份导出失败：{err}',
   },
 
   en: {
@@ -1729,6 +1789,36 @@ export const DICTIONARY = Object.freeze({
     'toast.reviewRefreshed': '🔄 Peer review queue synced',
     'toast.guildQueuedForReview': '⚖️ Passed CI hard gate! Queued for Peer Review (AI Blind Review {score}/100) — review it above!',
     'toast.adminPeerReviewChanged': '⚖️ Global Peer Review Required set to: {state}',
+
+    // v1.2 Public Share Links, AI Smart Auto-Split & Ops SQLite Backup
+    'incubator.publicPageBtn': '🔗 Public Project Page',
+    'incubator.publicVerifyBtn': '🔍 Public Verify',
+    'incubator.autoSplitTitle': '⚡ AI Smart Auto-Split (70/30 Anti-Dilution)',
+    'incubator.autoSplitBadge': '1 Core Bounty + 2 Peripheral Micro-Tasks',
+    'incubator.autoSplitPlaceholder': 'Describe a feature (e.g. Add WebSocket live notifications)...',
+    'incubator.autoSplitBtn': '⚡ Auto-Split',
+    'incubator.autoSplitWorking': '⏳ Splitting...',
+    'toast.autoSplitNeedBrief': 'Please enter a brief feature description before auto-splitting!',
+    'toast.autoSplitOk': '⚡ Auto-split {count} balanced tasks for "{name}" (1 Core + 2 Peripheral)!',
+    'toast.autoSplitFailed': 'Auto-split failed: {err}',
+    'ops.sectionTitle': '📊 System Ops & SQLite Backup',
+    'ops.refreshBtn': '🔄 Refresh',
+    'ops.exportBtn': '📦 Download Full Backup (JSON)',
+    'ops.exportingBtn': '⏳ Exporting...',
+    'ops.memoryLabel': 'Memory (RSS)',
+    'ops.uptimeLabel': 'Server Uptime',
+    'ops.chainLabel': 'Provenance Chain',
+    'ops.sseLabel': 'SSE Clients / Reviews',
+    'ops.driverSqlite': 'SQLite WAL',
+    'ops.driverJson': 'JSON Fallback',
+    'ops.chainHealthy': '✅ Intact',
+    'ops.chainInvalid': '⚠️ Check Failed',
+    'ops.loading': 'Loading live system metrics...',
+    'ops.extraSummary': 'v{version} | Users {users} | Projects {projects} | Tasks {open} open / {done} done | Rate-limited {blocked}',
+    'ops.unavailable': 'Unable to reach /api/metrics (click Refresh to retry)',
+    'toast.metricsRefreshed': '📊 Live system & database metrics refreshed',
+    'toast.backupDownloaded': '📦 Downloaded full SQLite state & audit backup: {filename}',
+    'toast.backupFailed': 'Backup export failed: {err}',
   },
 });
 
@@ -2495,6 +2585,70 @@ export function localizeTask(task, locale) {
     }
   }
 
+  // 3b. Match v1.2 AI Smart Auto-Split task templates (70/30 anti-dilution)
+  const asCore = title.match(/^\[核心架構\] 實作《(.+?)》功能：(.+)$/);
+  if (asCore) {
+    const [, pName, brief] = asCore;
+    if (loc === 'zh-CN') {
+      return {
+        title: `[核心架构] 实现《${pName}》功能：${brief}`,
+        description: `针对需求「${brief}」设计并实现核心模块、数据流与异常保护，提交可合并 PR 或完整代码。`,
+        acceptanceCriteria: ['提供核心模块实现代码（含导出函数与异常处理）或合法 GitHub PR 链接', `完整落地功能需求：${brief}`],
+        modelSuggestion: task.modelSuggestion || 'Gemini CLI / Claude Code / Codex',
+      };
+    }
+    if (loc === 'en') {
+      return {
+        title: `[Core Arch] Implement ${pName} Feature: ${brief}`,
+        description: `Design and implement the core module, data flow, and error guards for "${brief}" with a mergeable PR or reviewable code.`,
+        acceptanceCriteria: ['Provide core module code (exports & error handling) or a valid GitHub PR URL', `Fully delivers feature brief: ${brief}`],
+        modelSuggestion: task.modelSuggestion || 'Gemini CLI / Claude Code / Codex',
+      };
+    }
+  }
+
+  const asTest = title.match(/^\[自動測試\] 為「(.+?)」補齊單元測試與邊界斷言$/);
+  if (asTest) {
+    const brief = asTest[1];
+    if (loc === 'zh-CN') {
+      return {
+        title: `[自动测试] 为「${brief}」补齐单元测试与边界断言`,
+        description: `针对新功能「${brief}」使用 Node.js 原生 node:test 补齐正常路径与错误输入测试。`,
+        acceptanceCriteria: ['包含标准 test() 与 assert 断言代码', '覆盖正常流程与异常边界条件'],
+        modelSuggestion: task.modelSuggestion || 'gemini-2.5-flash',
+      };
+    }
+    if (loc === 'en') {
+      return {
+        title: `[Auto Tests] Add Unit & Edge-Case Assertions for "${brief}"`,
+        description: `Write zero-dependency node:test & assert unit tests covering happy paths and invalid inputs for "${brief}".`,
+        acceptanceCriteria: ['Includes standard test() and assert assertions', 'Covers both normal flows and edge-case errors'],
+        modelSuggestion: task.modelSuggestion || 'gemini-2.5-flash',
+      };
+    }
+  }
+
+  const asI18n = title.match(/^\[多語系\/文件\] 為「(.+?)」產出三語 UI 文案與使用指南$/);
+  if (asI18n) {
+    const brief = asI18n[1];
+    if (loc === 'zh-CN') {
+      return {
+        title: `[多语言/文档] 为「${brief}」产出三语 UI 文案与使用指南`,
+        description: `为新功能「${brief}」产出繁中／简中／英文结构化 JSON 文案与简明操作说明。`,
+        acceptanceCriteria: ['必须为合法 JSON 格式，包含至少 2 个语言键值', '文案自然准确且涵盖功能操作提示'],
+        modelSuggestion: task.modelSuggestion || 'gemini-2.5-flash',
+      };
+    }
+    if (loc === 'en') {
+      return {
+        title: `[i18n / Docs] Produce Trilingual UI Copy & Guide for "${brief}"`,
+        description: `Generate structured zh-TW / zh-CN / en JSON copy and concise usage guidance for "${brief}".`,
+        acceptanceCriteria: ['Valid JSON containing at least 2 locale keys', 'Natural, accurate copy covering usage tips'],
+        modelSuggestion: task.modelSuggestion || 'gemini-2.5-flash',
+      };
+    }
+  }
+
   // Generic GitHub imported description & criteria
   const ghDesc = description.match(/^自 GitHub 倉庫 (.+) 匯入的開放 Issue #(\d+)。$/);
   if (ghDesc) {
@@ -3062,6 +3216,15 @@ export function localizeFeedMessage(msg, locale) {
     return loc === 'zh-CN'
       ? `自 GitHub 仓库【${m[1]}】导入 ${m[2]} 张任务卡至《${m[3]}》`
       : `Imported ${m[2]} tasks from GitHub repo [${m[1]}] into "${m[3]}"`;
+  }
+
+  // Pattern 15b: v1.2 AI Smart Auto-Split
+  m = s.match(/^(.+?) 為《(.+?)》智慧拆單「(.+?)」：生成 (\d+) 張核心池工會大單 \(70%\) ＋ (\d+) 張週邊池 API 微任務/);
+  if (m) {
+    const uName = translateKnownName(m[1], loc);
+    return loc === 'zh-CN'
+      ? `${uName} 为《${m[2]}》智能拆单「${m[3]}」：生成 ${m[4]} 张核心池工会大单 (70%) ＋ ${m[5]} 张周边池 API 微任务 (≤30%)！`
+      : `${uName} auto-split "${m[3]}" on "${m[2]}": spawned ${m[4]} Core Bounty (70%) + ${m[5]} Peripheral API tasks (<=30%)!`;
   }
 
   // Pattern 16: CLI heartbeat

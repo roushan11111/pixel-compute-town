@@ -165,6 +165,44 @@ class RetroSoundFX {
     this._tone(1567.98, 0.72, 0.12, 'triangle', 0.22); // G6
     this._tone(2093.0, 0.80, 0.18, 'triangle', 0.2); // C7
   }
+
+  /**
+   * Dramatic two-stage 8-bit sound: laser blade slash + crisp gold coins dropping into bag!
+   * Used when rejecting AI slop and slashing the submitter's sincerity stake.
+   */
+  playSlash() {
+    // Stage 1: Crisp cyber laser/blade slash (0.00s - 0.15s)
+    this._tone(1480.0, 0.0, 0.115, 'sawtooth', 0.34, 155.0);
+    this._tone(880.0, 0.0, 0.095, 'square', 0.28, 110.0);
+    this._tone(1975.53, 0.015, 0.055, 'triangle', 0.3, 660.0); // metallic glint
+    this._tone(155.0, 0.045, 0.085, 'triangle', 0.36, 55.0); // punchy impact thump
+
+    // Stage 2: Crisp gold coins dropping into bag (0.16s - 0.54s)
+    this._tone(987.77, 0.16, 0.065, 'square', 0.32); // B5
+    this._tone(1318.51, 0.215, 0.085, 'square', 0.35); // E6
+    this._tone(1318.51, 0.215, 0.085, 'triangle', 0.22);
+    this._tone(1567.98, 0.285, 0.12, 'square', 0.34); // G6
+    this._tone(1975.53, 0.345, 0.19, 'triangle', 0.3); // B6 sparkle tail
+  }
+
+  /**
+   * Bright 4-note 8-bit victory horn arpeggio for approving quality PRs & earning review reward!
+   */
+  playApproveFanfare() {
+    const notes = [
+      { f: 523.25, t: 0.0, d: 0.09 }, // C5
+      { f: 659.25, t: 0.085, d: 0.09 }, // E5
+      { f: 783.99, t: 0.17, d: 0.09 }, // G5
+      { f: 1046.5, t: 0.255, d: 0.3 }, // C6 triumphant peak
+    ];
+    for (const note of notes) {
+      this._tone(note.f, note.t, note.d, 'square', 0.33);
+      this._tone(note.f * 0.5, note.t, note.d + 0.03, 'triangle', 0.26);
+    }
+    // Bright harmonic triad shimmer on peak note
+    this._tone(1318.51, 0.295, 0.22, 'triangle', 0.22); // E6
+    this._tone(1567.98, 0.335, 0.24, 'triangle', 0.18); // G6
+  }
 }
 
 export const soundFX = new RetroSoundFX();

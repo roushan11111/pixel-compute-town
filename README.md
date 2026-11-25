@@ -1,14 +1,14 @@
 <div align="center">
 
-# 👾 PixelCompute Town（像素算力鎮）v1.0
+# 👾 PixelCompute Town（像素算力鎮）v1.2
 
 **將開發者閒置的 AI API 額度與月／週 CLI 訂閱額度（BYOT），轉化為賽博像素小鎮裡的 32×32 HD 算力小人**<br>
-**創意溯源哈希鏈（Proof of First Spark） · 反抄襲共建 · 雙軌接單打工 · 5% / 85% / 10% 多勞多得動態分紅與穩定幣提現**
+**原生 SQLite WAL 持久化 · 公開分享頁 `/p/:slug` & `/verify/:hash` · GitHub Webhook PR 合併自動結算 · 5% / 85% / 10% 多勞多得與 70/30 防稀釋治理**
 
-*Turn idle AI API credits & monthly CLI quotas into HD pixel workers with SHA-256 idea provenance, anti-copycat protection, and 5% / 85% / 10% merit-based revenue sharing.*
+*Turn idle AI API credits & monthly CLI quotas into HD pixel workers with native SQLite WAL persistence, public OG share & SHA-256 verification pages, GitHub PR merge auto-settlement, and 5% / 85% / 10% anti-dilution revenue sharing.*
 
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-34d399?style=for-the-badge)](./package.json)
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B%20%2F%2024-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-24%20Native%20SQLite-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![CI](https://img.shields.io/badge/GitHub%20Actions-CI%20Ready-2563eb?style=for-the-badge&logo=githubactions&logoColor=white)](./.github/workflows/ci.yml)
 [![Proof of First Spark](https://img.shields.io/badge/Protocol-5%25%20Spark%20%7C%2085%25%20Merit%20%7C%2010%25%20Platform-f43f5e?style=for-the-badge)](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議)
 [![Zero-Trust BYOK](https://img.shields.io/badge/Security-Zero--Trust%20BYOK%20%2F%20BYOT-22d3ee?style=for-the-badge)](#零信任與合規安全架構)
@@ -17,10 +17,10 @@
 
 [💡 創意溯源與 5/85/10 協議](#-創意是第一生產力創意溯源--反抄襲--58510-多勞多得協議) ·
 [🛡️ 4 層防垃圾 AI 稀釋協議](#️-防垃圾-ai-稀釋-4-層治理協議7030-分桶隔離--ai-盲審--實幹審閱團--押金沒收) ·
+[🔥 v1.2 生產級引擎與病毒分享](#-v12-生產強化原生-sqlite-wal--公開分享頁--github-webhook-自動結算--ai-智慧拆單) ·
 [🚀 3 秒快速啟動](#-3-秒快速啟動零依賴開箱即玩) ·
 [📦 一鍵安裝與 AI 對話安裝](#-一鍵安裝本機算力小人終端與-ai-對話) ·
 [💎 三合一支付與提現](#-三合一收付與穩定幣分紅提領) ·
-[💻 本機 CLI 協作器](#-本機-byot-cli-協作器pixel-worker-v04) ·
 [☁️ 一鍵公開部署](#️-一鍵公開上線部署) ·
 [📣 48 小時上線推廣手冊](./docs/DEPLOY_AND_PROMOTE.md)
 
@@ -72,6 +72,24 @@
 | **② CI 硬門檻 + 跨模型 AI 盲審** | `verifier.mjs` 結構硬校驗 ＋ `runAiBlindReview()` 盲審體檢 | 自動掃描 Diff 增刪行數、重複註解與空函式佔位符，產出 `0–100` 評分、風險燈號（綠／黃／紅）與注水比（`bloatRatioPct`），一秒標記垃圾灌水 PR |
 | **③ 雙階段實幹審閱團** | `GET /api/reviews` ＋ `POST /api/reviews/:id/decide`（懸賞工會內建預置 `rev-clean-01` 與 `rev-slop-01` 開箱即審） | 僅創始鎮長／發起人／項目既有貢獻者可審閱（無關新號攔截 `403`）；**批准優質 PR 獎 `+15G` ＋ `+5` 核心點**，**駁回垃圾 AI 注水直接沒收對方押金歸審閱人**（垃圾提交者 0 貢獻、信譽 `-5`）！ |
 | **④ 接單押金沒收 + 冷卻懲罰** | 工會大單需信譽 `≥ 60` 並凍結 `25G–30G` 誠意押金（`claim` 凍結、`release`/過審全額退還） | 提交垃圾直接沒收押金入防刷金庫；小人連續 2 次垃圾提交立即觸發反刷單冷卻期（期間接單回 HTTP **`429 WORKER_COOLDOWN`**），鎮長亦可一鍵開啟全局強制雙階段審閱（`peerReviewRequired`） |
+
+---
+
+## 🔥 v1.2 生產強化：原生 SQLite WAL × 公開分享頁 × GitHub Webhook 自動結算 × AI 智慧拆單
+
+v1.2 持續堅持 **0 外部 npm 依賴**，直接以 Node.js 24 原生模組補齊商業級持久層、病毒式社群傳播與真實 GitHub 雙向閉環：
+
+1. **🗄️ 原生 SQLite (`node:sqlite`) WAL 持久化、稽核紀錄與一鍵備份（`src/server/store.mjs`）**
+   - 採用 Node 24 原生 `DatabaseSync` 於 `data/pixelcompute.db` 啟用 **WAL 模式**（`PRAGMA journal_mode = WAL`），內建 `kv_state` 原子狀態表與 `audit_log` 稽核日誌表（自動保留最近 500 筆關鍵事件）；若從舊版 `data/state.json` 升級會自動無縫遷移入庫，舊版 Node 環境則優雅降級回原子 JSON。
+   - 內建運維遙測端點 **`GET /api/metrics`**（回報 `dbDriver: 'sqlite'`、記憶體占用、運行時長、SSE 連線數、待審佇列與溯源哈希鏈健康狀態），並在鎮長管理面板提供 **`📦 一鍵下載完整備份 (JSON)`**（`GET /api/admin/export-backup`，含完整 `state` 與 `recentAudit`）。
+2. **🌐 公開分享頁 `/p/:slug` 與密碼學查驗頁 `/verify/:hash`（`src/server/publicPages.mjs`）**
+   - **`GET /p/:slug`**（支援項目 `id` 或簡寫如 `/p/meta`）：自包含賽博像素 SSR 公開頁，內建完整 **Open Graph (`og:title` / `og:description` / `twitter:card`)**，貼到 X / Reddit / Discord / 微信立刻出現高顏值預覽卡！展示項目進度、首發者＋UTC 時間戳＋SHA-256 指紋、5/85/10 與 70/30 防稀釋配額條、貢獻榜與開放任務，並附一鍵直達 `/app?project=<id>` 加入共建。
+   - **`GET /verify/:hash`**（支援完整 64 碼或 8+ 碼前綴）：任何人免登入即可公開驗證原創首發紀錄，通過即亮出 **`✅ VERIFIED ON PIXELCOMPUTE PROVENANCE CHAIN`** 印章（偽造或竄改回 `404` 紅牌警示），全動態輸出皆經嚴格 HTML Entity 跳脫杜絕 XSS。
+3. **🔀 GitHub Webhook (`POST /api/webhooks/github`) PR 合併自動雙向結算**
+   - 在 `.env` 設定 **`GITHUB_WEBHOOK_SECRET`** 後，伺服器以原生 `node:crypto` 對每個請求驗證 **`X-Hub-Signature-256`** HMAC-SHA256 簽名（錯簽一律攔截 `401`）。
+   - 於 GitHub Repo Settings → Webhooks 指向 `https://<YOUR_DOMAIN>/api/webhooks/github`（事件勾選 `Pull requests`）；開發者在 PR 標題或內文寫上 **`Fixes #task-<id>`**（或提交過該 PR 連結），當 PR 被 Maintainer 合併（`action: closed` 且 `merged: true`）時，小鎮**自動將任務標記完成、發放 `core` 核心點數、全額退還押金、計入 10% 現金懸賞平臺費、推進項目進度、寫入 SQLite `audit_log` 並透過 SSE 在像素辦公室即時慶祝**！
+4. **⚡ AI 智慧拆單（`POST /api/projects/:id/auto-split`）70/30 防稀釋均衡生成器**
+   - 孵化廣場建設中項目新增「AI 智慧拆單」快捷輸入框：輸入一句功能需求，系統自動按 70/30 防稀釋結構生成 **1 張高價值 `core` 核心池工會大單（帶 25G 押金）＋ 2 張 `peripheral` 週邊池 API 微任務（測試＋多語系／文件）**，並同步廣播全鎮。
 
 ---
 
@@ -247,20 +265,20 @@ docker run -d --name pixel-compute-town -p 3456:3456 -v $(pwd)/data:/app/data --
 ```text
 pixel-compute-town/
 ├── .github/workflows/ci.yml    # GitHub Actions 自動化 CI（Node 24 零依賴自動執行 test + smoke）
-├── server.mjs                  # 零依賴 HTTP 伺服器、靜態路由（/、/app、/onboard）、REST API 與 SSE
-├── src/server/                 # 後端核心模組（governance 防垃圾 AI 稀釋協議、provenance 創意溯源與反抄襲、多用戶 auth、三合一 payments、deviceFlow、seed、store、verifier、sse）
+├── server.mjs                  # 零依賴 HTTP 伺服器、SSR 公開頁（/p/:slug、/verify/:hash）、REST API、GitHub Webhook 與 SSE
+├── src/server/                 # 後端核心模組（store SQLite WAL 引擎、publicPages SSR 分享頁、governance 防稀釋協議、provenance 創意溯源與反抄襲、auth、payments、deviceFlow、seed、verifier、sse）
 ├── public/
 │   ├── landing.{html,css}      # 官方首頁（/）＋創意溯源宣言＋多平臺複製即裝中心＋即時 HD 像素微舞台
 │   ├── onboard.{html,css}      # 裝置註冊與權限審核頁（/onboard）
-│   ├── index.html & styles.css # 像素算力鎮主應用（/app）
-│   └── js/                     # 100% 三語 i18n、32×32 HD 精靈與 6 場景像素引擎、打工證與創意溯源證書、8-bit 音效、BYOK
+│   ├── index.html & styles.css # 像素算力鎮主應用（/app）含 AI 智慧拆單與 SQLite 運維備份面板
+│   └── js/                     # 100% 三語 i18n、32×32 HD 精靈與 6 場景像素引擎（含獎盃櫃/營收柱互動與螢火蟲夜景）、打工證與創意溯源證書、8-bit 音效（含 playSlash/playApproveFanfare）、BYOK
 ├── bin/pixel-worker.mjs        # 本機 BYOT CLI v0.4（onboard / --demo / --watch / --cmd）
-├── tests/                      # Node.js 原生 node:test API 全鏈路測試（含創意溯源鏈、反抄襲、5/85/10 分紅）與靜態/三語/CLI 煙霧測試
+├── tests/                      # Node.js 原生 node:test 28 項 API 全鏈路測試與 10 項靜態/三語/SSR/CLI 煙霧測試
 ├── docs/
 │   ├── PRD.md                  # 產品規格書與經濟模型設計
-│   └── DEPLOY_AND_PROMOTE.md   # 48 小時極速上線指南＋多平臺 AI 安裝與三語推廣文案包
+│   └── DEPLOY_AND_PROMOTE.md   # 48 小時極速上線指南（含 SQLite WAL、GitHub Webhook 設定與 /p/:slug 病毒傳播技巧）
 ├── Dockerfile / render.yaml / fly.toml
-└── .env.example                # 完整環境變數範本（GitHub/Google OAuth、穩定幣收款、Polar/Stripe）
+└── .env.example                # 完整環境變數範本（GitHub/Google OAuth、GITHUB_WEBHOOK_SECRET、穩定幣收款、Polar/Stripe）
 ```
 
 ---
@@ -268,10 +286,10 @@ pixel-compute-town/
 ## 🧪 執行測試與自動化 CI
 
 ```bash
-# 執行全鏈路 API 測試（24 項 E2E：70/30 防稀釋分桶數學、押金凍結沒收、實幹審閱佇列與 429 冷卻、5/85/10 分紅、SHA-256 創意溯源鏈、反抄襲 409、多用戶隔離、三合一支付、Device Flow 與安全加固）
+# 執行全鏈路 API 測試（28 項 E2E：原生 SQLite WAL 持久化/稽核/備份/指標、/p/:slug 與 /verify/:hash SSR 公開頁與 XSS 防護、GitHub Webhook HMAC-SHA256 驗簽與 PR 合併自動結算、AI 智慧拆單 70/30 均衡、防稀釋治理、5/85/10 分紅、SHA-256 創意溯源鏈、多用戶隔離、三合一支付與 Device Flow）
 npm test
 
-# 執行靜態路由、governance / provenance 模組與證書匯出契約、100% 三語動態本地化（含審閱佇列）零中文殘留、與 pixel-worker onboard --demo 煙霧測試
+# 執行 10 項全面煙霧驗收（全站語法、publicPages.mjs & sound.js 契約、DOM ID 0 重複 0 遺漏、i18n.js + onboard.js 三語對齊與 EN 0 中文字殘留、governance/provenance 模組與 pixel-worker onboard --demo E2E）
 npm run smoke
 ```
 
@@ -281,8 +299,9 @@ npm run smoke
 
 - [x] **Alpha-Plus v0.3**：互動像素小鎮、雙軌市場、GitHub Issue 匯入、6 枚創世成就、打工證 PNG、本機 CLI `--demo` / `--watch`、安全加固與 CI
 - [x] **Commercial Launch v1.0**：6 大 HD 32×32 室內場景、100% 全站與畫布三語化、官方首頁（`/`）與複製即裝中心、Device Flow（`/onboard`＋`install.ps1` / `install.sh`＋`pixel-worker onboard`）、多用戶隔離帳號（信箱／GitHub／Google）、三合一支付（USDC/USDT＋Polar/Stripe＋卡密兌換碼）與穩定幣分紅提現、鎮長管理面板
-- [ ] **v1.1**：鏈上 RPC 自動掃塊驗核與 GitHub App PR Merge 自動雙向結算
-- [ ] **v1.2**：多小鎮聯邦（Multi-Town Federation）與開源孵化基金自動分配
+- [x] **Governance & Provenance v1.1**：SHA-256 創意溯源鏈（Proof of First Spark）、反抄襲 409 攔截、5%/85%/10% 多勞多得分紅、70/30 防稀釋 4 層治理協議（AI 盲審＋實幹審閱團＋押金沒收＋冷卻懲罰）
+- [x] **Production & Viral Growth v1.2**：Node 24 原生 `node:sqlite` WAL 持久化與 500 筆稽核備份、`GET /api/metrics` 運維看板、SSR 公開項目分享頁 `/p/:slug` & 密碼學驗真頁 `/verify/:hash`（OG 卡片＋XSS 防護）、GitHub Webhook HMAC-SHA256 PR 合併自動結算、AI 智慧拆單（70/30 均衡）、8-bit 斬擊／號角音效與畫布特效
+- [ ] **v1.3**：鏈上 RPC 自動掃塊驗核、多小鎮聯邦（Multi-Town Federation）與開源孵化基金自動分配
 
 ---
 
