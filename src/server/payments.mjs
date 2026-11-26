@@ -228,6 +228,9 @@ export function isStripeEnabled() {
 
 export function getAfdianStoreUrl(productId = null) {
   const map = {
+    'team-indie-monthly': 'AFDIAN_TEAM_INDIE_URL',
+    'team-studio-monthly': 'AFDIAN_TEAM_STUDIO_URL',
+    'tip-coffee': 'AFDIAN_TIP_URL',
     'shop-pro-pass': 'AFDIAN_PRO_URL',
     'shop-genesis-pack': 'AFDIAN_GENESIS_URL',
     'billboard-ad': 'AFDIAN_BILLBOARD_URL',
@@ -249,6 +252,9 @@ export function getPaymentConfig() {
     redeemStoreUrl: afdianStoreUrl,
     afdianUrls: {
       default: afdianStoreUrl,
+      'team-indie-monthly': getAfdianStoreUrl('team-indie-monthly'),
+      'team-studio-monthly': getAfdianStoreUrl('team-studio-monthly'),
+      'tip-coffee': getAfdianStoreUrl('tip-coffee'),
       'shop-pro-pass': getAfdianStoreUrl('shop-pro-pass'),
       'shop-genesis-pack': getAfdianStoreUrl('shop-genesis-pack'),
       'billboard-ad': getAfdianStoreUrl('billboard-ad'),
@@ -1322,6 +1328,7 @@ export async function handleAfdianWebhook(req, res, rawBody, store, sseHub) {
 
   const outTradeNo = sanitizeText(String(afOrder.out_trade_no || ''), 64) || uid('afd');
   const remark = sanitizeText(String(afOrder.remark || ''), 160);
+  const planId = sanitizeText(String(afOrder.plan_id || ''), 64);
   const planTitle = sanitizeText(String(afOrder.plan_title || afOrder.sku_detail?.[0]?.name || ''), 80);
   const cnyAmount = Number(afOrder.total_amount || afOrder.show_amount || 0);
   const usdEstimate = cnyAmount > 0 ? round2(cnyAmount / 7.2) : 0;
@@ -1338,10 +1345,35 @@ export async function handleAfdianWebhook(req, res, rawBody, store, sseHub) {
       return;
     }
 
-    // Determine product from planTitle or remark
+    // Determine product from Afdian plan_id, planTitle, remark, or CNY amount (¥20 tip / ¥65 Indie / ¥138 Studio)
     const titleLower = `${planTitle} ${remark}`.toLowerCase();
-    let product = PAYMENT_PRODUCTS['shop-pro-pass'];
-    if (titleLower.includes('billboard') || titleLower.includes('廣告') || titleLower.includes('广告')) {
+    let product = PAYMENT_PRODUCTS['tip-coffee'];
+    if (
+      planId === 'f0b04878e94811f1b3a15254001e7c00' ||
+      titleLower.includes('studio') ||
+      titleLower.includes('商业') ||
+      titleLower.includes('商業') ||
+      cnyAmount >= 120
+    ) {
+      product = PAYMENT_PRODUCTS['team-studio-monthly'];
+    } else if (
+      planId === 'e8825c04e94811f1b5e45254001e7c00' ||
+      titleLower.includes('indie') ||
+      titleLower.includes('私有') ||
+      titleLower.includes('团队') ||
+      titleLower.includes('團隊') ||
+      (cnyAmount >= 60 && cnyAmount < 120)
+    ) {
+      product = PAYMENT_PRODUCTS['team-indie-monthly'];
+    } else if (
+      planId === '5024d4f8e8eb11f1b23152540025c377' ||
+      titleLower.includes('咖啡') ||
+      titleLower.includes('coffee') ||
+      titleLower.includes('打赏') ||
+      titleLower.includes('打賞')
+    ) {
+      product = PAYMENT_PRODUCTS['tip-coffee'];
+    } else if (titleLower.includes('billboard') || titleLower.includes('廣告') || titleLower.includes('广告')) {
       product = PAYMENT_PRODUCTS['billboard-ad'];
     } else if (titleLower.includes('pack') || titleLower.includes('skin') || titleLower.includes('禮包') || titleLower.includes('礼包')) {
       product = PAYMENT_PRODUCTS['shop-genesis-pack'];
