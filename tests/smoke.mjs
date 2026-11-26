@@ -724,6 +724,7 @@ async function main() {
         'docs/USER_GUIDE.md',
         'docs/WHITEPAPER.md',
         'README.md',
+        'README.zh.md',
       ];
       for (const rel of requiredFiles) {
         const stat = await fs.stat(path.join(ROOT_DIR, rel));
@@ -748,15 +749,25 @@ async function main() {
       assert.match(readme, /install\.sh/);
       assert.match(readme, /onboard/);
       assert.match(readme, /Proof of First Spark/);
-      assert.match(readme, /5%.*85%.*10%/);
+      assert.match(readme, /5%.*95%.*0%/);
       assert.match(readme, /70\/30|70%.*30%/);
-      assert.match(readme, /AI 盲審/);
-      assert.match(readme, /實幹審閱/);
-      assert.match(readme, /押金/);
+      assert.match(readme, /Spec Contract/i);
+      assert.match(readme, /FILE_SCOPE_LOCKED/);
+      assert.match(readme, /3-Line/i);
+      assert.match(readme, /AGPL-3\.0/);
       assert.match(readme, /SQLite/i);
       assert.match(readme, /\/p\/:slug/);
       assert.match(readme, /\/verify\/:hash/);
       assert.match(readme, /GITHUB_WEBHOOK_SECRET/);
+
+      const readmeZh = await fs.readFile(path.join(ROOT_DIR, 'README.zh.md'), 'utf8');
+      assert.match(readmeZh, /README\.md/);
+      assert.match(readmeZh, /5%.*95%.*0%/);
+      assert.match(readmeZh, /規格契約/);
+      assert.match(readmeZh, /AI 盲審/);
+      assert.match(readmeZh, /實幹審閱/);
+      assert.match(readmeZh, /押金/);
+      assert.match(readmeZh, /AGPL-3\.0/);
 
       const deployDoc = await fs.readFile(path.join(ROOT_DIR, 'docs', 'DEPLOY_AND_PROMOTE.md'), 'utf8');
       assert.match(deployDoc, /SQLite/i);
